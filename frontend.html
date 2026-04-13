@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marina One</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0a0e1a;--surface:#111827;--surface2:#1a2235;--surface3:#232f45;--border:#2a3a55;--accent:#3b82f6;--accent2:#6366f1;--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--radius:12px;--shadow:0 4px 24px rgba(0,0,0,.4)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+/* LAYOUT */
+#app{display:flex;height:100vh}
+#sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:.3s;flex-shrink:0;overflow-y:auto}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#content{flex:1;overflow-y:auto;padding:24px}
+/* SIDEBAR */
+.sidebar-logo{padding:20px 16px;border-bottom:1px solid var(--border)}
+.sidebar-logo h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sidebar-logo p{font-size:11px;color:var(--text3);margin-top:2px}
+.sidebar-nav{padding:12px 8px;flex:1}
+.nav-section{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding:16px 8px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:13.5px;color:var(--text2);transition:.15s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:linear-gradient(135deg,rgba(59,130,246,.2),rgba(99,102,241,.2));color:var(--accent);font-weight:600}
+.nav-item .icon{font-size:16px;width:20px;text-align:center}
+.nav-badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px}
+/* TOPBAR */
+.topbar-title{font-size:16px;font-weight:600}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.btn{padding:7px 14px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:500;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#2563eb}
+.btn-success{background:var(--success);color:#fff}.btn-success:hover{background:#059669}
+.btn-warning{background:var(--warning);color:#fff}.btn-warning:hover{background:#d97706}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:#dc2626}
+.btn-ghost{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}.btn-ghost:hover{background:var(--surface3);color:var(--text)}
+.btn-sm{padding:5px 10px;font-size:12px}
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600;color:var(--text)}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:1fr 1fr 1fr}
+.g4{grid-template-columns:repeat(4,1fr)}
+/* KPI */
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.kpi-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.kpi-value{font-size:26px;font-weight:700;color:var(--text);line-height:1}
+.kpi-sub{font-size:12px;color:var(--text3);margin-top:4px}
+.kpi-icon{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:36px;opacity:.15}
+.kpi.green::before{background:linear-gradient(90deg,var(--success),#34d399)}
+.kpi.yellow::before{background:linear-gradient(90deg,var(--warning),#fcd34d)}
+.kpi.red::before{background:linear-gradient(90deg,var(--danger),#f87171)}
+.kpi.purple::before{background:linear-gradient(90deg,var(--accent2),#a78bfa)}
+/* TABLE */
+.table-wrap{overflow-x:auto;border-radius:var(--radius)}
+table{width:100%;border-collapse:collapse}
+th{background:var(--surface2);padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:11px 14px;font-size:13px;border-bottom:1px solid rgba(42,58,85,.5);color:var(--text2)}
+tr:hover td{background:rgba(26,34,53,.5);color:var(--text)}
+tr:last-child td{border-bottom:none}
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-success{background:rgba(16,185,129,.15);color:#34d399}
+.badge-warning{background:rgba(245,158,11,.15);color:#fbbf24}
+.badge-danger{background:rgba(239,68,68,.15);color:#f87171}
+.badge-info{background:rgba(59,130,246,.15);color:#60a5fa}
+.badge-purple{background:rgba(99,102,241,.15);color:#a78bfa}
+.badge-gray{background:rgba(100,116,139,.15);color:#94a3b8}
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow)}
+.modal-lg{max-width:800px}
+.modal-title{font-size:18px;font-weight:700;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+/* FORMS */
+.form-row{display:grid;gap:14px;margin-bottom:14px}
+.form-row.cols2{grid-template-columns:1fr 1fr}
+.form-row.cols3{grid-template-columns:1fr 1fr 1fr}
+.form-group{display:flex;flex-direction:column;gap:5px}
+label{font-size:12px;font-weight:600;color:var(--text3)}
+input,select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;transition:.15s;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+select option{background:var(--surface)}
+textarea{resize:vertical;min-height:72px}
+.form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+/* LOGIN */
+#login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px;width:380px;box-shadow:var(--shadow)}
+.login-logo{text-align:center;margin-bottom:32px}
+.login-logo h1{font-size:28px;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.login-logo p{color:var(--text3);font-size:13px;margin-top:4px}
+.login-card .form-group{margin-bottom:16px}
+.login-error{background:rgba(239,68,68,.15);border:1px solid var(--danger);border-radius:8px;padding:10px 14px;font-size:13px;color:#f87171;margin-bottom:16px;display:none}
+/* QUEUE */
+.queue-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:14px;transition:.15s}
+.queue-card:hover{border-color:var(--accent);background:var(--surface3)}
+.queue-priority{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.queue-priority.high{background:var(--warning);box-shadow:0 0 8px var(--warning)}
+.queue-priority.normal{background:var(--text3)}
+.queue-info{flex:1}
+.queue-vessel{font-size:14px;font-weight:600;color:var(--text)}
+.queue-detail{font-size:12px;color:var(--text3);margin-top:2px}
+.queue-actions{display:flex;gap:6px}
+/* PROGRESS BAR */
+.progress-bar{background:var(--surface3);border-radius:20px;height:8px;overflow:hidden}
+.progress-fill{height:100%;border-radius:20px;transition:width .5s;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.progress-fill.green{background:linear-gradient(90deg,var(--success),#34d399)}
+.progress-fill.yellow{background:linear-gradient(90deg,var(--warning),#fcd34d)}
+.progress-fill.red{background:linear-gradient(90deg,var(--danger),#f87171)}
+/* SPOTS GRID */
+.spots-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:8px}
+.spot{border-radius:8px;padding:8px 4px;text-align:center;font-size:11px;font-weight:600;cursor:pointer;transition:.15s;border:2px solid transparent}
+.spot.available{background:rgba(16,185,129,.12);color:var(--success);border-color:rgba(16,185,129,.3)}
+.spot.occupied{background:rgba(59,130,246,.12);color:var(--accent);border-color:rgba(59,130,246,.3)}
+.spot.maintenance{background:rgba(245,158,11,.12);color:var(--warning);border-color:rgba(245,158,11,.3)}
+.spot:hover{transform:scale(1.05);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+/* ALERT ITEMS */
+.alert-item{display:flex;align-items:flex-start;gap:12px;padding:14px;background:var(--surface2);border-radius:10px;margin-bottom:8px;border-left:3px solid transparent}
+.alert-item.info{border-color:var(--accent)}
+.alert-item.warning{border-color:var(--warning)}
+.alert-item.error{border-color:var(--danger)}
+.alert-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.alert-content{flex:1}
+.alert-msg{font-size:13px;color:var(--text)}
+.alert-meta{font-size:11px;color:var(--text3);margin-top:3px}
+/* TABS */
+.tabs{display:flex;gap:4px;background:var(--surface2);padding:4px;border-radius:10px;margin-bottom:20px;width:fit-content}
+.tab{padding:7px 16px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--text3);transition:.15s}
+.tab.active{background:var(--surface);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.3)}
+/* SEARCH */
+.search-bar{display:flex;gap:10px;margin-bottom:18px;align-items:center}
+.search-bar input{flex:1;max-width:320px}
+/* TIER BADGES */
+.tier-vip{background:linear-gradient(135deg,#ffd700,#ffaa00);color:#000;font-weight:800;padding:2px 8px;border-radius:20px;font-size:11px}
+.tier-gold{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.tier-silver{background:rgba(148,163,184,.2);color:#94a3b8;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.tier-standard{background:rgba(100,116,139,.15);color:#64748b;padding:2px 8px;border-radius:20px;font-size:11px}
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:20px}
+/* STATUS DOTS */
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.dot-green{background:var(--success)}
+.dot-yellow{background:var(--warning)}
+.dot-red{background:var(--danger)}
+.dot-blue{background:var(--accent)}
+.dot-gray{background:var(--text3)}
+/* PDV */
+.pdv-grid{display:grid;grid-template-columns:1fr 360px;gap:16px;height:calc(100vh - 160px)}
+.pdv-items{overflow-y:auto}
+.pdv-cart{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column}
+.cart-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.cart-total{padding:16px;border-top:1px solid var(--border);margin-top:auto}
+.item-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.store-item-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:.15s}
+.store-item-card:hover{border-color:var(--accent);background:var(--surface3)}
+.store-item-name{font-size:13px;font-weight:600;margin-bottom:4px}
+.store-item-cat{font-size:10px;color:var(--text3);margin-bottom:8px}
+.store-item-price{font-size:15px;font-weight:700;color:var(--success)}
+.store-item-stock{font-size:11px;color:var(--text3)}
+/* RESPONSIVE */
+@media(max-width:768px){
+  #sidebar{position:fixed;z-index:100;left:-240px}.sidebar-open #sidebar{left:0}
+  .g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}
+  .pdv-grid{grid-template-columns:1fr}
+}
+.hidden{display:none!important}
+.flex{display:flex}.items-center{align-items:center}.justify-between{justify-content:space-between}.gap-2{gap:8px}.gap-3{gap:12px}.mt-1{margin-top:4px}.mb-2{margin-bottom:8px}.text-sm{font-size:13px}.text-xs{font-size:11px}.font-bold{font-weight:700}.text-success{color:var(--success)}.text-danger{color:var(--danger)}.text-warning{color:var(--warning)}.text-muted{color:var(--text3)}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin:60px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div style="font-size:48px;margin-bottom:8px">⚓</div>
+      <h1>Marina One</h1>
+      <p>Sistema de Gestão de Marina</p>
+    </div>
+    <div id="login-error" class="login-error"></div>
+    <div class="form-group"><label>E-mail</label><input id="login-email" type="email" value="admin@marina.com"></div>
+    <div class="form-group"><label>Senha</label><input id="login-pass" type="password" value="marina123"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;padding:11px" onclick="doLogin()">Entrar</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none">
+  <!-- SIDEBAR -->
+  <nav id="sidebar">
+    <div class="sidebar-logo">
+      <h1>⚓ Marina One</h1>
+      <p>Gestão Integrada</p>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Principal</div>
+      <button class="nav-item active" onclick="nav('dashboard')" data-page="dashboard"><span class="icon">🏠</span>Dashboard</button>
+      <button class="nav-item" onclick="nav('queue')" data-page="queue"><span class="icon">📋</span>Fila de Operações<span class="nav-badge" id="queue-badge" style="display:none"></span></button>
+      <div class="nav-section">Gestão</div>
+      <button class="nav-item" onclick="nav('clients')" data-page="clients"><span class="icon">👤</span>Clientes</button>
+      <button class="nav-item" onclick="nav('vessels')" data-page="vessels"><span class="icon">🛥️</span>Embarcações</button>
+      <button class="nav-item" onclick="nav('spots')" data-page="spots"><span class="icon">🅿️</span>Vagas</button>
+      <button class="nav-item" onclick="nav('contracts')" data-page="contracts"><span class="icon">📄</span>Contratos</button>
+      <div class="nav-section">Operações</div>
+      <button class="nav-item" onclick="nav('financial')" data-page="financial"><span class="icon">💰</span>Financeiro</button>
+      <button class="nav-item" onclick="nav('store')" data-page="store"><span class="icon">🏪</span>Loja / PDV</button>
+      <button class="nav-item" onclick="nav('maintenance')" data-page="maintenance"><span class="icon">🔧</span>Manutenção</button>
+      <div class="nav-section">Análise</div>
+      <button class="nav-item" onclick="nav('analytics')" data-page="analytics"><span class="icon">📊</span>Analytics</button>
+      <button class="nav-item" onclick="nav('alerts')" data-page="alerts"><span class="icon">🔔</span>Alertas<span class="nav-badge" id="alerts-badge" style="display:none"></span></button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="topbar">
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('app').classList.toggle('sidebar-open')">☰</button>
+        <span class="topbar-title" id="page-title">Dashboard</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-ghost btn-sm" onclick="refreshPage()">↻ Atualizar</button>
+        <span id="topbar-user" style="font-size:13px;color:var(--text3)"></span>
+        <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
+      </div>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div id="modal-root"></div>
+
+<script>
+const API = 'http://localhost:3000/api';
+let token = localStorage.getItem('mo_token') || '';
+let currentUser = null;
+let currentPage = 'dashboard';
+let pageCharts = {};
+
+// ── AUTH ──────────────────────────────────────────────
+async function api(method, path, body) {
+  const r = await fetch(API + path, {
+    method, headers: {'Content-Type':'application/json','Authorization':'Bearer '+token},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (r.status === 401) { logout(); return; }
+  return r.json();
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value;
+  const pass = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-error');
+  err.style.display = 'none';
+  try {
+    const r = await fetch(API+'/auth/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.error||'Erro ao entrar'; err.style.display='block'; return; }
+    token = d.token;
+    currentUser = d.user;
+    localStorage.setItem('mo_token', token);
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('topbar-user').textContent = currentUser.name;
+    nav('dashboard');
+    setInterval(refreshBadges, 30000);
+    refreshBadges();
+  } catch(e) { err.textContent = 'Erro de conexão com o servidor'; err.style.display='block'; }
+}
+
+function logout() {
+  localStorage.removeItem('mo_token');
+  location.reload();
+}
+
+// Auto-login if token exists
+async function tryAutoLogin() {
+  if (!token) return;
+  try {
+    const r = await fetch(API+'/auth/me', {headers:{'Authorization':'Bearer '+token}});
+    if (!r.ok) { localStorage.removeItem('mo_token'); return; }
+    currentUser = await r.json();
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('topbar-user').textContent = currentUser.name;
+    nav('dashboard');
+    setInterval(refreshBadges, 30000);
+    refreshBadges();
+  } catch(e) {}
+}
+
+async function refreshBadges() {
+  const alerts = await api('GET', '/alerts?unread=1');
+  const queue = await api('GET', '/queue');
+  if (alerts) {
+    const b = document.getElementById('alerts-badge');
+    if (alerts.length > 0) { b.textContent = alerts.length; b.style.display=''; }
+    else b.style.display='none';
+  }
+  if (queue) {
+    const b = document.getElementById('queue-badge');
+    if (queue.length > 0) { b.textContent = queue.length; b.style.display=''; }
+    else b.style.display='none';
+  }
+}
+
+// ── NAV ──────────────────────────────────────────────
+const pageTitles = {dashboard:'Dashboard',queue:'Fila de Operações',clients:'Clientes',vessels:'Embarcações',spots:'Vagas',contracts:'Contratos',financial:'Financeiro',store:'Loja / PDV',maintenance:'Manutenção',analytics:'Analytics',alerts:'Alertas'};
+
+function nav(page) {
+  currentPage = page;
+  document.getElementById('page-title').textContent = pageTitles[page]||page;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page===page));
+  Object.values(pageCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  pageCharts = {};
+  const c = document.getElementById('content');
+  c.innerHTML = '<div class="spinner"></div>';
+  pages[page]();
+}
+
+function refreshPage() { nav(currentPage); }
+
+// ── HELPERS ──────────────────────────────────────────
+const fmt = n => n == null ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
+const fmtNum = n => n == null ? '—' : new Intl.NumberFormat('pt-BR').format(n);
+const fmtDate = s => { if(!s) return '—'; const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('pt-BR'); };
+const fmtDT = s => { if(!s) return '—'; return new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+const tierBadge = t => {
+  if(t==='vip') return '<span class="tier-vip">VIP</span>';
+  if(t==='gold') return '<span class="tier-gold">GOLD</span>';
+  if(t==='silver') return '<span class="tier-silver">SILVER</span>';
+  return '<span class="tier-standard">STD</span>';
+};
+const statusBadge = (s, map) => {
+  const m = {
+    active:'badge-success',paid:'badge-success',completed:'badge-success',available:'badge-success',
+    waiting:'badge-warning',in_progress:'badge-info',open:'badge-info',pending:'badge-warning',
+    overdue:'badge-danger',cancelled:'badge-gray',maintenance:'badge-warning',occupied:'badge-info',
+    ...(map||{})
+  };
+  const labels = {active:'Ativo',paid:'Pago',completed:'Concluído',available:'Disponível',waiting:'Aguardando',
+    in_progress:'Em andamento',open:'Aberto',pending:'Pendente',overdue:'Vencido',cancelled:'Cancelado',
+    maintenance:'Manutenção',occupied:'Ocupado'};
+  return `<span class="badge ${m[s]||'badge-gray'}">${labels[s]||s}</span>`;
+};
+const priorityBadge = p => {
+  const m={urgent:'badge-danger',high:'badge-warning',normal:'badge-info',low:'badge-gray'};
+  const l={urgent:'Urgente',high:'Alta',normal:'Normal',low:'Baixa'};
+  return `<span class="badge ${m[p]||'badge-gray'}">${l[p]||p}</span>`;
+};
+const opBadge = t => {
+  const m={descida:'badge-info',subida:'badge-success',atracacao:'badge-purple'};
+  const l={descida:'⬇ Descida',subida:'⬆ Subida',atracacao:'⚓ Atracação'};
+  return `<span class="badge ${m[t]||'badge-gray'}">${l[t]||t}</span>`;
+};
+
+function setContent(html) { document.getElementById('content').innerHTML = html; }
+
+function modal(html) {
+  document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="closeModal(event)">${html}</div>`;
+}
+function closeModal(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('modal-root').innerHTML = '';
+}
+function closeModalForce() { document.getElementById('modal-root').innerHTML = ''; }
+
+async function toast(msg, type='success') {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--${type==='error'?'danger':type==='warn'?'warning':'success'});border-radius:10px;padding:12px 18px;font-size:13px;z-index:9999;box-shadow:var(--shadow);color:var(--text);max-width:320px`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ── PAGE: DASHBOARD ───────────────────────────────────
+pages = {};
+pages.dashboard = async () => {
+  const kpis = await api('GET', '/analytics/kpis');
+  const rev = await api('GET', '/analytics/revenue-chart');
+  const topClients = await api('GET', '/analytics/top-clients');
+  const queue = await api('GET', '/queue');
+  if (!kpis) return;
+
+  setContent(`
+  <div class="grid g4 mb-2">
+    <div class="kpi green"><div class="kpi-label">Ocupação Total</div><div class="kpi-value">${kpis.ocupacao_total}%</div><div class="kpi-sub">${kpis.vagas_ocupadas}/${kpis.vagas_total} vagas</div><span class="kpi-icon">🅿️</span></div>
+    <div class="kpi"><div class="kpi-label">Receita do Mês</div><div class="kpi-value" style="font-size:20px">${fmt(kpis.receita_mes)}</div><div class="kpi-sub">Loja: ${fmt(kpis.receita_loja)}</div><span class="kpi-icon">💰</span></div>
+    <div class="kpi red"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:20px">${fmt(kpis.inadimplencia)}</div><div class="kpi-sub">${kpis.taxa_inadimplencia}% da carteira</div><span class="kpi-icon">⚠️</span></div>
+    <div class="kpi yellow"><div class="kpi-label">Fila Aguardando</div><div class="kpi-value">${kpis.queue_aguardando}</div><div class="kpi-sub">${kpis.queue_hoje} operações hoje</div><span class="kpi-icon">📋</span></div>
+  </div>
+  <div class="grid g4 mb-2">
+    <div class="kpi purple"><div class="kpi-label">Clientes Ativos</div><div class="kpi-value">${kpis.total_clientes}</div><div class="kpi-sub">${kpis.vip_count} VIP/Gold</div><span class="kpi-icon">👤</span></div>
+    <div class="kpi"><div class="kpi-label">Embarcações</div><div class="kpi-value">${kpis.total_vessels}</div><div class="kpi-sub">${kpis.contratos_ativos} contratos ativos</div><span class="kpi-icon">🛥️</span></div>
+    <div class="kpi yellow"><div class="kpi-label">OS em Aberto</div><div class="kpi-value">${kpis.os_abertas}</div><div class="kpi-sub">${kpis.os_urgentes} urgentes</div><span class="kpi-icon">🔧</span></div>
+    <div class="kpi"><div class="kpi-label">SLA Médio (min)</div><div class="kpi-value">${kpis.sla_avg_min}</div><div class="kpi-sub">Tempo médio atendimento</div><span class="kpi-icon">⏱️</span></div>
+  </div>
+  <div class="grid g2 mb-2">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Ocupação de Vagas</div></div>
+      <div class="mb-2">
+        <div class="flex justify-between text-xs mb-1"><span>Seca (${kpis.vagas_seca_ocupadas}/${kpis.vagas_seca_total})</span><span>${kpis.ocupacao_seca}%</span></div>
+        <div class="progress-bar"><div class="progress-fill ${kpis.ocupacao_seca>85?'red':kpis.ocupacao_seca>60?'yellow':'green'}" style="width:${kpis.ocupacao_seca}%"></div></div>
+      </div>
+      <div>
+        <div class="flex justify-between text-xs mb-1"><span>Molhada (${kpis.vagas_molhada_ocupadas}/${kpis.vagas_molhada_total})</span><span>${kpis.ocupacao_molhada}%</span></div>
+        <div class="progress-bar"><div class="progress-fill ${kpis.ocupacao_molhada>85?'red':kpis.ocupacao_molhada>60?'yellow':'green'}" style="width:${kpis.ocupacao_molhada}%"></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:16px">
+        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:12px"><div style="font-size:20px;font-weight:700;color:var(--success)">${kpis.vagas_total - kpis.vagas_ocupadas}</div><div class="text-xs text-muted">Disponíveis</div></div>
+        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:12px"><div style="font-size:20px;font-weight:700;color:var(--accent)">${kpis.vagas_ocupadas}</div><div class="text-xs text-muted">Ocupadas</div></div>
+        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:12px"><div style="font-size:20px;font-weight:700;color:var(--text)">${kpis.vagas_total}</div><div class="text-xs text-muted">Total</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Receita Mensal</div></div>
+      <canvas id="rev-chart" height="180"></canvas>
+    </div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Fila Ativa</div><button class="btn btn-ghost btn-sm" onclick="nav('queue')">Ver Tudo</button></div>
+      <div id="dash-queue">${queue && queue.length ? queue.slice(0,5).map(q=>`
+        <div class="queue-card">
+          <div class="queue-priority ${q.priority?'high':'normal'}"></div>
+          <div class="queue-info">
+            <div class="queue-vessel">${q.vessel_name} ${tierBadge(q.client_tier)}</div>
+            <div class="queue-detail">${opBadge(q.operation_type)} · ${q.client_name} · ${fmtDT(q.requested_at)}</div>
+          </div>
+          ${statusBadge(q.status)}
+        </div>`).join('') : '<div class="empty-state"><div class="icon">✅</div><p>Fila vazia</p></div>'}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Top Clientes (LTV)</div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Cliente</th><th>Tier</th><th>LTV</th><th>Embarcações</th></tr></thead>
+        <tbody>${(topClients||[]).slice(0,6).map(c=>`<tr><td>${c.name}</td><td>${tierBadge(c.tier)}</td><td class="text-success font-bold">${fmt(c.ltv)}</td><td>${c.vessels}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+  </div>`);
+
+  if (rev && rev.length) {
+    pageCharts.rev = new Chart(document.getElementById('rev-chart'), {
+      type: 'bar',
+      data: {
+        labels: rev.map(r => r.month),
+        datasets: [{label:'Receita',data:rev.map(r=>r.total),backgroundColor:'rgba(59,130,246,.6)',borderColor:'#3b82f6',borderWidth:2,borderRadius:6}]
+      },
+      options: {responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.5)'}},x:{grid:{display:false}}}}
+    });
+  }
+};
+
+// ── PAGE: QUEUE ───────────────────────────────────────
+pages.queue = async () => {
+  const queue = await api('GET', '/queue');
+  const vessels = await api('GET', '/vessels');
+  setContent(`
+  <div class="flex justify-between mb-2">
+    <div class="tabs">
+      <div class="tab active" onclick="filterQueue('active',this)">Ativa</div>
+      <div class="tab" onclick="filterQueue('history',this)">Histórico</div>
+    </div>
+    <button class="btn btn-primary" onclick="openQueueModal(${JSON.stringify(vessels||[]).replace(/"/g,'&quot;')})">+ Nova Operação</button>
+  </div>
+  <div id="queue-list">${renderQueue(queue||[])}</div>`);
+};
+
+function renderQueue(queue) {
+  if (!queue.length) return '<div class="empty-state"><div class="icon">📋</div><p>Sem operações na fila</p></div>';
+  return queue.map(q => `
+  <div class="queue-card" id="qcard-${q.id}">
+    <div class="queue-priority ${q.priority?'high':'normal'}"></div>
+    <div style="flex:1">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="font-bold">${q.vessel_name}</span>
+        ${tierBadge(q.client_tier)}
+        ${opBadge(q.operation_type)}
+        ${statusBadge(q.status)}
+      </div>
+      <div class="text-xs text-muted">
+        ${q.client_name} · Solicitado: ${fmtDT(q.requested_at)}
+        ${q.started_at ? ' · Iniciado: '+fmtDT(q.started_at) : ''}
+        ${q.completed_at ? ' · Concluído: '+fmtDT(q.completed_at) : ''}
+        ${q.operator ? ' · Op: '+q.operator : ''}
+        ${q.notes ? ' · '+q.notes : ''}
+      </div>
+    </div>
+    <div class="flex gap-2">
+      ${q.status==='waiting' ? `<button class="btn btn-warning btn-sm" onclick="updateQueue(${q.id},'in_progress')">▶ Iniciar</button>` : ''}
+      ${q.status==='in_progress' ? `<button class="btn btn-success btn-sm" onclick="updateQueue(${q.id},'completed')">✓ Concluir</button>` : ''}
+      ${!['completed','cancelled'].includes(q.status) ? `<button class="btn btn-danger btn-sm" onclick="updateQueue(${q.id},'cancelled')">✕</button>` : ''}
+    </div>
+  </div>`).join('');
+}
+
+async function filterQueue(type, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  let data;
+  if (type==='active') data = await api('GET','/queue');
+  else data = await api('GET','/queue/history');
+  document.getElementById('queue-list').innerHTML = renderQueue(data||[]);
+}
+
+async function updateQueue(id, status) {
+  await api('PUT', `/queue/${id}`, {status});
+  toast(`Operação ${status==='completed'?'concluída':status==='in_progress'?'iniciada':'cancelada'}`);
+  pages.queue();
+}
+
+function openQueueModal(vessels) {
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Nova Operação na Fila</div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Embarcação</label>
+        <select id="q-vessel">
+          ${(typeof vessels==='string'?JSON.parse(vessels):vessels).map(v=>`<option value="${v.id}">${v.name} - ${v.client_name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label>Operação</label>
+        <select id="q-type"><option value="descida">⬇ Descida (seco → água)</option><option value="subida">⬆ Subida (água → seco)</option><option value="atracacao">⚓ Atracação</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label>Observações</label><input id="q-notes" placeholder="Opcional..."></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitQueue()">Adicionar à Fila</button>
+    </div>
+  </div>`);
+}
+
+async function submitQueue() {
+  const vessel_id = document.getElementById('q-vessel').value;
+  const operation_type = document.getElementById('q-type').value;
+  const notes = document.getElementById('q-notes').value;
+  const r = await api('POST','/queue',{vessel_id:parseInt(vessel_id),operation_type,notes});
+  if (r && r.id) { toast('Operação adicionada à fila'); closeModalForce(); pages.queue(); }
+}
+
+// ── PAGE: CLIENTS ─────────────────────────────────────
+pages.clients = async () => {
+  const clients = await api('GET', '/clients');
+  setContent(`
+  <div class="flex justify-between mb-2">
+    <div class="search-bar">
+      <input id="client-search" placeholder="Buscar por nome, e-mail, CPF..." oninput="searchClients()" style="max-width:280px">
+      <select id="client-tier" onchange="searchClients()">
+        <option value="">Todos os tiers</option>
+        <option value="vip">VIP</option><option value="gold">Gold</option>
+        <option value="silver">Silver</option><option value="standard">Standard</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="openClientModal()">+ Novo Cliente</button>
+  </div>
+  <div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>Cliente</th><th>Tier</th><th>Contato</th><th>Embarcações</th><th>LTV</th><th>Ações</th></tr></thead>
+    <tbody id="clients-tbody">${renderClientsRows(clients||[])}</tbody>
+  </table></div></div>`);
+};
+
+function renderClientsRows(clients) {
+  if (!clients.length) return '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Nenhum cliente encontrado</td></tr>';
+  return clients.map(c=>`<tr>
+    <td><div class="font-bold">${c.name}</div><div class="text-xs text-muted">${c.cpf||'—'}</div></td>
+    <td>${tierBadge(c.tier)}</td>
+    <td><div>${c.email||'—'}</div><div class="text-xs text-muted">${c.phone||''}</div></td>
+    <td>${c.vessel_count||0}</td>
+    <td class="text-success font-bold">${fmt(c.ltv)}</td>
+    <td><div class="flex gap-2">
+      <button class="btn btn-ghost btn-sm" onclick="viewClient(${c.id})">👁 Ver</button>
+      <button class="btn btn-ghost btn-sm" onclick="openClientModal(${c.id})">✏️</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+async function searchClients() {
+  const search = document.getElementById('client-search').value;
+  const tier = document.getElementById('client-tier').value;
+  const q = new URLSearchParams();
+  if (search) q.set('search',search);
+  if (tier) q.set('tier',tier);
+  const data = await api('GET','/clients?'+q.toString());
+  document.getElementById('clients-tbody').innerHTML = renderClientsRows(data||[]);
+}
+
+async function viewClient(id) {
+  const c = await api('GET',`/clients/${id}`);
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">👤 ${c.name} ${tierBadge(c.tier)}</div>
+    <div class="grid g2 mb-2">
+      <div class="card"><b>E-mail:</b> ${c.email||'—'}<br><b>Fone:</b> ${c.phone||'—'}<br><b>CPF:</b> ${c.cpf||'—'}<br><b>Endereço:</b> ${c.address||'—'}</div>
+      <div class="card"><b>LTV:</b> <span class="text-success font-bold">${fmt(c.ltv)}</span><br><b>Embarcações:</b> ${c.vessel_count||0}<br><b>Contratos:</b> ${(c.contracts||[]).length}<br><b>Desde:</b> ${fmtDate(c.created_at)}</div>
+    </div>
+    <div class="card mb-2">
+      <div class="card-title mb-1">Embarcações</div>
+      ${(c.vessels||[]).map(v=>`<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)"><span>${v.name} (${v.type||'—'})</span><span class="text-xs text-muted">${v.registration||'—'}</span></div>`).join('')||'Nenhuma'}
+    </div>
+    <div class="card">
+      <div class="card-title mb-1">Últimas Cobranças</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead>
+        <tbody>${(c.charges||[]).map(ch=>`<tr><td>${ch.description}</td><td>${fmt(ch.amount)}</td><td>${fmtDate(ch.due_date)}</td><td>${statusBadge(ch.status)}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--text3)">Sem cobranças</td></tr>'}</tbody>
+      </table></div>
+    </div>
+    <div class="form-actions"><button class="btn btn-ghost" onclick="closeModalForce()">Fechar</button></div>
+  </div>`);
+}
+
+async function openClientModal(id=null) {
+  let c = id ? await api('GET',`/clients/${id}`) : {};
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">${id?'Editar':'Novo'} Cliente</div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Nome *</label><input id="cm-name" value="${c.name||''}"></div>
+      <div class="form-group"><label>Tier</label>
+        <select id="cm-tier">
+          ${['standard','silver','gold','vip'].map(t=>`<option value="${t}" ${c.tier===t?'selected':''}>${t.toUpperCase()}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>E-mail</label><input id="cm-email" type="email" value="${c.email||''}"></div>
+      <div class="form-group"><label>Telefone</label><input id="cm-phone" value="${c.phone||''}"></div>
+    </div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>CPF</label><input id="cm-cpf" value="${c.cpf||''}"></div>
+      <div class="form-group"><label>Endereço</label><input id="cm-address" value="${c.address||''}"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="cm-notes">${c.notes||''}</textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveClient(${id||'null'})">Salvar</button>
+    </div>
+  </div>`);
+}
+
+async function saveClient(id) {
+  const body = {name:document.getElementById('cm-name').value,email:document.getElementById('cm-email').value,phone:document.getElementById('cm-phone').value,cpf:document.getElementById('cm-cpf').value,tier:document.getElementById('cm-tier').value,address:document.getElementById('cm-address').value,notes:document.getElementById('cm-notes').value};
+  if (!body.name) { toast('Nome obrigatório','error'); return; }
+  if (id) await api('PUT',`/clients/${id}`,body); else await api('POST','/clients',body);
+  toast('Cliente salvo!'); closeModalForce(); pages.clients();
+}
+
+// ── PAGE: VESSELS ─────────────────────────────────────
+pages.vessels = async () => {
+  const vessels = await api('GET', '/vessels');
+  const clients = await api('GET', '/clients');
+  setContent(`
+  <div class="flex justify-between mb-2">
+    <input id="vessel-search" placeholder="Buscar embarcação, registro, cliente..." oninput="searchVessels()" style="max-width:320px">
+    <button class="btn btn-primary" onclick="openVesselModal(null,${JSON.stringify(clients||[]).replace(/"/g,'&quot;')})">+ Nova Embarcação</button>
+  </div>
+  <div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>Embarcação</th><th>Tipo</th><th>Cliente</th><th>Vaga</th><th>Registro</th><th>Ano</th><th>Ações</th></tr></thead>
+    <tbody id="vessels-tbody">${renderVesselsRows(vessels||[])}</tbody>
+  </table></div></div>`);
+};
+
+function renderVesselsRows(vessels) {
+  if (!vessels.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
+  return vessels.map(v=>`<tr>
+    <td><div class="font-bold">${v.name}</div><div class="text-xs text-muted">${v.model||''} ${v.manufacturer||''}</div></td>
+    <td><span class="badge badge-info">${v.type||'—'}</span></td>
+    <td>${v.client_name} ${tierBadge(v.client_tier)}</td>
+    <td>${v.spot_number?`<span class="badge badge-success">${v.spot_number}</span>`:'<span class="badge badge-gray">—</span>'}</td>
+    <td>${v.registration||'—'}</td>
+    <td>${v.year||'—'}</td>
+    <td><div class="flex gap-2">
+      <button class="btn btn-ghost btn-sm" onclick="viewVessel(${v.id})">👁</button>
+      <button class="btn btn-ghost btn-sm" onclick="openVesselModal(${v.id})">✏️</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+async function searchVessels() {
+  const search = document.getElementById('vessel-search').value;
+  const data = await api('GET',`/vessels${search?'?search='+encodeURIComponent(search):''}`);
+  document.getElementById('vessels-tbody').innerHTML = renderVesselsRows(data||[]);
+}
+
+async function viewVessel(id) {
+  const v = await api('GET', `/vessels/${id}`);
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">🛥️ ${v.name}</div>
+    <div class="grid g2 mb-2">
+      <div class="card">
+        <b>Tipo:</b> ${v.type||'—'} · <b>Ano:</b> ${v.year||'—'}<br>
+        <b>Modelo:</b> ${v.model||'—'} ${v.manufacturer||''}<br>
+        <b>Motor:</b> ${v.engine||'—'}<br>
+        <b>Comprimento:</b> ${v.length||'—'}m · <b>Boca:</b> ${v.beam||'—'}m · <b>Calado:</b> ${v.draft||'—'}m<br>
+        <b>Registro:</b> ${v.registration||'—'}
+      </div>
+      <div class="card">
+        <b>Proprietário:</b> ${v.client_name}<br>
+        <b>Contrato:</b> ${v.contract?statusBadge(v.contract.status)+' '+v.contract.type+' — Vaga '+v.contract.spot_number:'Sem contrato ativo'}<br>
+        ${v.notes?'<b>Obs:</b> '+v.notes:''}
+      </div>
+    </div>
+    <div class="card mb-2">
+      <div class="card-title mb-1">Histórico de Operações</div>
+      ${(v.history||[]).map(op=>`<div class="flex justify-between items-center" style="padding:7px 0;border-bottom:1px solid var(--border)">${opBadge(op.operation_type)} ${statusBadge(op.status)}<span class="text-xs text-muted">${fmtDT(op.requested_at)}</span></div>`).join('')||'<p class="text-muted text-sm">Sem histórico</p>'}
+    </div>
+    <div class="form-actions"><button class="btn btn-ghost" onclick="closeModalForce()">Fechar</button></div>
+  </div>`);
+}
+
+async function openVesselModal(id=null, clientsArg=null) {
+  const clients = clientsArg || await api('GET','/clients');
+  let v = id ? await api('GET',`/vessels/${id}`) : {};
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">${id?'Editar':'Nova'} Embarcação</div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Nome *</label><input id="vm-name" value="${v.name||''}"></div>
+      <div class="form-group"><label>Proprietário *</label>
+        <select id="vm-client">${(typeof clients==='string'?JSON.parse(clients):clients).map(c=>`<option value="${c.id}" ${v.client_id==c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-row cols3">
+      <div class="form-group"><label>Tipo</label>
+        <select id="vm-type">${['lancha','veleiro','jetski','catamarã','iate','barco a remo','outro'].map(t=>`<option ${v.type===t?'selected':''}>${t}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Modelo</label><input id="vm-model" value="${v.model||''}"></div>
+      <div class="form-group"><label>Fabricante</label><input id="vm-manufacturer" value="${v.manufacturer||''}"></div>
+    </div>
+    <div class="form-row cols3">
+      <div class="form-group"><label>Comprimento (m)</label><input id="vm-length" type="number" step=".1" value="${v.length||''}"></div>
+      <div class="form-group"><label>Boca (m)</label><input id="vm-beam" type="number" step=".1" value="${v.beam||''}"></div>
+      <div class="form-group"><label>Calado (m)</label><input id="vm-draft" type="number" step=".1" value="${v.draft||''}"></div>
+    </div>
+    <div class="form-row cols3">
+      <div class="form-group"><label>Ano</label><input id="vm-year" type="number" value="${v.year||''}"></div>
+      <div class="form-group"><label>Registro</label><input id="vm-registration" value="${v.registration||''}"></div>
+      <div class="form-group"><label>Motor</label><input id="vm-engine" value="${v.engine||''}"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="vm-notes">${v.notes||''}</textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveVessel(${id||'null'})">Salvar</button>
+    </div>
+  </div>`);
+}
+
+async function saveVessel(id) {
+  const body = {name:document.getElementById('vm-name').value,client_id:parseInt(document.getElementById('vm-client').value),type:document.getElementById('vm-type').value,model:document.getElementById('vm-model').value,manufacturer:document.getElementById('vm-manufacturer').value,length:parseFloat(document.getElementById('vm-length').value)||null,beam:parseFloat(document.getElementById('vm-beam').value)||null,draft:parseFloat(document.getElementById('vm-draft').value)||null,year:parseInt(document.getElementById('vm-year').value)||null,registration:document.getElementById('vm-registration').value,engine:document.getElementById('vm-engine').value,notes:document.getElementById('vm-notes').value};
+  if (!body.name) { toast('Nome obrigatório','error'); return; }
+  if (id) await api('PUT',`/vessels/${id}`,body); else await api('POST','/vessels',body);
+  toast('Embarcação salva!'); closeModalForce(); pages.vessels();
+}
+
+// ── PAGE: SPOTS ─────────────────────────────────────
+pages.spots = async () => {
+  const summary = await api('GET', '/spots/summary');
+  const spots = await api('GET', '/spots');
+  const seca = (spots||[]).filter(s=>s.type==='seca');
+  const molhada = (spots||[]).filter(s=>s.type==='molhada');
+  setContent(`
+  <div class="grid g4 mb-2">
+    <div class="kpi green"><div class="kpi-label">Secas Disponíveis</div><div class="kpi-value">${summary.seca.available}</div><div class="kpi-sub">de ${summary.seca.total} vagas</div></div>
+    <div class="kpi"><div class="kpi-label">Secas Ocupadas</div><div class="kpi-value">${summary.seca.occupied}</div><div class="kpi-sub">${Math.round(summary.seca.occupied/summary.seca.total*100)||0}% ocupação</div></div>
+    <div class="kpi green"><div class="kpi-label">Molhadas Disponíveis</div><div class="kpi-value">${summary.molhada.available}</div><div class="kpi-sub">de ${summary.molhada.total} vagas</div></div>
+    <div class="kpi"><div class="kpi-label">Molhadas Ocupadas</div><div class="kpi-value">${summary.molhada.occupied}</div><div class="kpi-sub">${Math.round(summary.molhada.occupied/summary.molhada.total*100)||0}% ocupação</div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-header"><div class="card-title">🏗️ Vagas Secas (${summary.seca.total})</div>
+        <div class="flex gap-2 text-xs"><span><span class="dot dot-green"></span>Livre</span><span><span class="dot dot-blue"></span>Ocup.</span><span><span class="dot dot-yellow"></span>Manutenção</span></div>
+      </div>
+      <div class="spots-grid">${seca.map(s=>`<div class="spot ${s.status}" title="${s.vessel_name||s.status}" onclick="spotDetail(${s.id},${JSON.stringify(s).replace(/"/g,'&quot;')})">${s.number}</div>`).join('')}</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">🌊 Vagas Molhadas (${summary.molhada.total})</div></div>
+      <div class="spots-grid">${molhada.map(s=>`<div class="spot ${s.status}" title="${s.vessel_name||s.status}" onclick="spotDetail(${s.id},${JSON.stringify(s).replace(/"/g,'&quot;')})">${s.number}</div>`).join('')}</div>
+    </div>
+  </div>`);
+};
+
+function spotDetail(id, spot) {
+  if (typeof spot === 'string') spot = JSON.parse(spot);
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Vaga ${spot.number} (${spot.type})</div>
+    <div class="mb-2">Status: ${statusBadge(spot.status)}</div>
+    ${spot.vessel_name ? `<p class="text-sm mb-2"><b>Embarcação:</b> ${spot.vessel_name}<br><b>Proprietário:</b> ${spot.client_name||'—'}</p>` : ''}
+    <div class="form-group"><label>Alterar Status</label>
+      <select id="spot-status">
+        <option value="available" ${spot.status==='available'?'selected':''}>Disponível</option>
+        <option value="occupied" ${spot.status==='occupied'?'selected':''}>Ocupado</option>
+        <option value="maintenance" ${spot.status==='maintenance'?'selected':''}>Manutenção</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="updateSpot(${id})">Salvar</button>
+    </div>
+  </div>`);
+}
+
+async function updateSpot(id) {
+  const status = document.getElementById('spot-status').value;
+  await api('PUT',`/spots/${id}`,{status});
+  toast('Vaga atualizada'); closeModalForce(); pages.spots();
+}
+
+// ── PAGE: CONTRACTS ───────────────────────────────────
+pages.contracts = async () => {
+  const contracts = await api('GET', '/contracts');
+  setContent(`
+  <div class="flex justify-between mb-2">
+    <div class="tabs">
+      <div class="tab active" onclick="filterContracts('',this)">Todos</div>
+      <div class="tab" onclick="filterContracts('active',this)">Ativos</div>
+      <div class="tab" onclick="filterContracts('cancelled',this)">Cancelados</div>
+    </div>
+    <button class="btn btn-primary" onclick="openContractModal()">+ Novo Contrato</button>
+  </div>
+  <div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>Cliente</th><th>Embarcação</th><th>Tipo</th><th>Vaga</th><th>Mensal</th><th>Vigência</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody id="contracts-tbody">${renderContractRows(contracts||[])}</tbody>
+  </table></div></div>`);
+};
+
+function renderContractRows(contracts) {
+  if (!contracts.length) return '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum contrato</td></tr>';
+  return contracts.map(c=>`<tr>
+    <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
+    <td>${c.vessel_name}</td>
+    <td><span class="badge ${c.type==='molhada'?'badge-info':'badge-success'}">${c.type}</span></td>
+    <td>${c.spot_number||'—'}</td>
+    <td class="font-bold text-success">${fmt(c.monthly_value)}</td>
+    <td>${fmtDate(c.start_date)} → ${c.end_date?fmtDate(c.end_date):'Indeterminado'}</td>
+    <td>${statusBadge(c.status)}</td>
+    <td><div class="flex gap-2">
+      ${c.status==='active'?`<button class="btn btn-danger btn-sm" onclick="cancelContract(${c.id})">Cancelar</button>`:''}
+    </div></td>
+  </tr>`).join('');
+}
+
+async function filterContracts(status, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const data = await api('GET',`/contracts${status?'?status='+status:''}`);
+  document.getElementById('contracts-tbody').innerHTML = renderContractRows(data||[]);
+}
+
+async function cancelContract(id) {
+  if (!confirm('Cancelar este contrato?')) return;
+  await api('PUT',`/contracts/${id}`,{status:'cancelled'});
+  toast('Contrato cancelado'); pages.contracts();
+}
+
+async function openContractModal() {
+  const clients = await api('GET','/clients');
+  const vessels = await api('GET','/vessels');
+  const spots = await api('GET','/spots?status=available');
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">Novo Contrato</div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Cliente *</label>
+        <select id="ct-client" onchange="filterVesselsByClient(this.value)">${(clients||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Embarcação *</label>
+        <select id="ct-vessel">${(vessels||[]).map(v=>`<option value="${v.id}">${v.name}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-row cols3">
+      <div class="form-group"><label>Tipo *</label>
+        <select id="ct-type"><option value="seca">Armazenagem Seca</option><option value="molhada">Armazenagem Molhada</option></select>
+      </div>
+      <div class="form-group"><label>Vaga</label>
+        <select id="ct-spot"><option value="">Sem vaga específica</option>${(spots||[]).map(s=>`<option value="${s.id}">${s.number} (${s.type})</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Valor Mensal (R$) *</label><input id="ct-value" type="number" step=".01" placeholder="0.00"></div>
+    </div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Início *</label><input id="ct-start" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="form-group"><label>Término (opcional)</label><input id="ct-end" type="date"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="ct-notes"></textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveContract()">Salvar Contrato</button>
+    </div>
+  </div>`);
+}
+
+async function saveContract() {
+  const body = {client_id:parseInt(document.getElementById('ct-client').value),vessel_id:parseInt(document.getElementById('ct-vessel').value),spot_id:document.getElementById('ct-spot').value?parseInt(document.getElementById('ct-spot').value):null,type:document.getElementById('ct-type').value,start_date:document.getElementById('ct-start').value,end_date:document.getElementById('ct-end').value||null,monthly_value:parseFloat(document.getElementById('ct-value').value),notes:document.getElementById('ct-notes').value};
+  if (!body.monthly_value) { toast('Valor obrigatório','error'); return; }
+  await api('POST','/contracts',body);
+  toast('Contrato criado!'); closeModalForce(); pages.contracts();
+}
+
+// ── PAGE: FINANCIAL ───────────────────────────────────
+pages.financial = async () => {
+  const summary = await api('GET','/financial/summary');
+  const charges = await api('GET','/financial/charges');
+  setContent(`
+  <div class="grid g4 mb-2">
+    <div class="kpi green"><div class="kpi-label">Receita do Mês</div><div class="kpi-value" style="font-size:20px">${fmt(summary.total_paid_month)}</div><span class="kpi-icon">💰</span></div>
+    <div class="kpi yellow"><div class="kpi-label">A Receber</div><div class="kpi-value" style="font-size:20px">${fmt(summary.total_pending)}</div><span class="kpi-icon">📅</span></div>
+    <div class="kpi red"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:20px">${fmt(summary.total_overdue)}</div><div class="kpi-sub">${summary.count_overdue} cobranças</div><span class="kpi-icon">⚠️</span></div>
+    <div class="kpi"><div class="kpi-label">Receita Prevista</div><div class="kpi-value" style="font-size:20px">${fmt((summary.total_pending||0)+(summary.total_paid_month||0))}</div><span class="kpi-icon">📈</span></div>
+  </div>
+  <div class="flex justify-between mb-2">
+    <div class="tabs">
+      <div class="tab active" onclick="filterCharges('',this)">Todas</div>
+      <div class="tab" onclick="filterCharges('pending',this)">Pendentes</div>
+      <div class="tab" onclick="filterCharges('overdue',this)">Vencidas</div>
+      <div class="tab" onclick="filterCharges('paid',this)">Pagas</div>
+    </div>
+    <button class="btn btn-primary" onclick="openChargeModal()">+ Nova Cobrança</button>
+  </div>
+  <div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody id="charges-tbody">${renderChargeRows(charges||[])}</tbody>
+  </table></div></div>`);
+};
+
+function renderChargeRows(charges) {
+  if (!charges.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma cobrança</td></tr>';
+  return charges.map(c=>`<tr>
+    <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
+    <td>${c.description}</td>
+    <td class="font-bold">${fmt(c.amount)}</td>
+    <td>${fmtDate(c.due_date)}</td>
+    <td>${c.paid_date?fmtDate(c.paid_date):'—'} ${c.payment_method?'<span class="badge badge-gray">'+c.payment_method+'</span>':''}</td>
+    <td>${statusBadge(c.status)}</td>
+    <td><div class="flex gap-2">
+      ${c.status!=='paid'?`<button class="btn btn-success btn-sm" onclick="markPaid(${c.id})">✓ Pago</button>`:''}
+    </div></td>
+  </tr>`).join('');
+}
+
+async function filterCharges(status, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const data = await api('GET',`/financial/charges${status?'?status='+status:''}`);
+  document.getElementById('charges-tbody').innerHTML = renderChargeRows(data||[]);
+}
+
+async function markPaid(id) {
+  const method = prompt('Forma de pagamento (pix, dinheiro, cartao, transferencia):','pix');
+  if (!method) return;
+  await api('PUT',`/financial/charges/${id}`,{status:'paid',payment_method:method});
+  toast('Pagamento registrado!'); pages.financial();
+}
+
+async function openChargeModal() {
+  const clients = await api('GET','/clients');
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Nova Cobrança</div>
+    <div class="form-group mb-2"><label>Cliente *</label>
+      <select id="ch-client">${(clients||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
+    </div>
+    <div class="form-group mb-2"><label>Descrição *</label><input id="ch-desc" placeholder="Ex: Mensalidade, serviço avulso..."></div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Valor (R$) *</label><input id="ch-amount" type="number" step=".01"></div>
+      <div class="form-group"><label>Vencimento *</label><input id="ch-due" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="ch-notes"></textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveCharge()">Salvar</button>
+    </div>
+  </div>`);
+}
+
+async function saveCharge() {
+  const body = {client_id:parseInt(document.getElementById('ch-client').value),description:document.getElementById('ch-desc').value,amount:parseFloat(document.getElementById('ch-amount').value),due_date:document.getElementById('ch-due').value,notes:document.getElementById('ch-notes').value};
+  if (!body.description||!body.amount||!body.due_date) { toast('Preencha todos os campos obrigatórios','error'); return; }
+  await api('POST','/financial/charges',body);
+  toast('Cobrança criada!'); closeModalForce(); pages.financial();
+}
+
+// ── PAGE: STORE ───────────────────────────────────────
+let cart = [];
+pages.store = async () => {
+  cart = [];
+  setContent(`
+  <div class="tabs">
+    <div class="tab active" onclick="showStoreTab('pdv',this)">🛒 PDV</div>
+    <div class="tab" onclick="showStoreTab('items',this)">📦 Estoque</div>
+    <div class="tab" onclick="showStoreTab('orders',this)">📋 Pedidos</div>
+    <div class="tab" onclick="showStoreTab('pix',this)">💳 Config PIX</div>
+  </div>
+  <div id="store-content"></div>`);
+  showStoreTab('pdv', document.querySelector('.tab.active'));
+};
+
+async function showStoreTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  if (tab==='pdv') await renderPDV();
+  else if (tab==='items') await renderStoreItems();
+  else if (tab==='orders') await renderOrders();
+  else if (tab==='pix') await renderPixConfig();
+}
+
+async function renderPDV() {
+  const items = await api('GET','/store/items');
+  const clients = await api('GET','/clients');
+  const vessels = await api('GET','/vessels');
+  document.getElementById('store-content').innerHTML = `
+  <div class="pdv-grid">
+    <div class="pdv-items">
+      <div class="flex gap-2 mb-2">
+        <input id="pdv-search" placeholder="Buscar produto..." oninput="filterPDVItems()" style="flex:1">
+        <select id="pdv-cat" onchange="filterPDVItems()">
+          <option value="">Todas categorias</option>
+          ${[...new Set((items||[]).map(i=>i.category))].map(c=>`<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="item-grid" id="pdv-items-grid">
+        ${(items||[]).map(item=>`
+        <div class="store-item-card" onclick="addToCart(${item.id},'${item.name.replace(/'/g,"\\'")}',${item.price},${item.stock})">
+          <div class="store-item-name">${item.name}</div>
+          <div class="store-item-cat">${item.category}</div>
+          <div class="store-item-price">${fmt(item.price)}</div>
+          <div class="store-item-stock ${item.stock<=item.min_stock?'text-danger':'text-muted'}">Estoque: ${item.stock} ${item.unit}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="pdv-cart">
+      <div style="padding:14px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px">🛒 Carrinho</div>
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+        <div class="form-group"><label>Cliente</label>
+          <select id="pdv-client"><option value="">Sem cliente</option>${(clients||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
+        </div>
+        <div class="form-group"><label>Embarcação</label>
+          <select id="pdv-vessel"><option value="">Sem embarcação</option>${(vessels||[]).map(v=>`<option value="${v.id}">${v.name}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div id="cart-items" style="flex:1;overflow-y:auto"></div>
+      <div class="cart-total">
+        <div class="flex justify-between font-bold" style="margin-bottom:12px;font-size:16px">
+          <span>Total:</span><span id="cart-total-val" class="text-success">R$ 0,00</span>
+        </div>
+        <div class="form-group mb-2"><label>Pagamento</label>
+          <select id="pdv-payment"><option value="dinheiro">Dinheiro</option><option value="pix">PIX / QR Code</option><option value="cartao">Cartão</option><option value="ficha">Conta do cliente</option></select>
+        </div>
+        <button class="btn btn-success" style="width:100%" onclick="finalizeSale()">✓ Finalizar Venda</button>
+        <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:6px" onclick="cart=[];renderCartItems()">Limpar</button>
+      </div>
+    </div>
+  </div>`;
+  renderCartItems();
+}
+
+function addToCart(id, name, price, stock) {
+  const existing = cart.find(i=>i.item_id===id);
+  if (existing) {
+    if (existing.qty < stock) existing.qty++;
+    else { toast('Estoque insuficiente','error'); return; }
+  } else {
+    cart.push({item_id:id,name,price,qty:1});
+  }
+  renderCartItems();
+}
+
+function renderCartItems() {
+  const el = document.getElementById('cart-items');
+  const total = document.getElementById('cart-total-val');
+  if (!el) return;
+  if (!cart.length) { el.innerHTML = '<div class="empty-state" style="padding:30px"><div class="icon">🛒</div><p>Carrinho vazio</p></div>'; }
+  else {
+    el.innerHTML = cart.map((item,i)=>`
+    <div class="cart-item">
+      <div style="flex:1"><div class="font-bold text-sm">${item.name}</div><div class="text-xs text-muted">${fmt(item.price)} × ${item.qty}</div></div>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost btn-sm" onclick="cartQty(${i},-1)">−</button>
+        <span>${item.qty}</span>
+        <button class="btn btn-ghost btn-sm" onclick="cartQty(${i},1)">+</button>
+        <span class="text-success font-bold" style="min-width:70px;text-align:right">${fmt(item.price*item.qty)}</span>
+      </div>
+    </div>`).join('');
+  }
+  const t = cart.reduce((s,i)=>s+i.price*i.qty,0);
+  if (total) total.textContent = fmt(t);
+}
+
+function cartQty(idx, delta) {
+  cart[idx].qty += delta;
+  if (cart[idx].qty <= 0) cart.splice(idx,1);
+  renderCartItems();
+}
+
+async function finalizeSale() {
+  if (!cart.length) { toast('Carrinho vazio','error'); return; }
+  const payment = document.getElementById('pdv-payment').value;
+  const client_id = document.getElementById('pdv-client').value;
+  const vessel_id = document.getElementById('pdv-vessel').value;
+  if (payment==='pix') {
+    const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
+    const pix = await api('POST','/store/pix-qrcode',{amount:total});
+    if (pix && pix.payload) {
+      modal(`<div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-title">💳 Pagamento PIX</div>
+        <div style="text-align:center;padding:20px">
+          <div style="font-size:28px;font-weight:700;color:var(--success);margin-bottom:12px">${fmt(total)}</div>
+          <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px;word-break:break-all;font-family:monospace;font-size:11px;color:var(--text2)">${pix.payload}</div>
+          <p class="text-xs text-muted">Copie o código acima ou escaneie o QR Code no app do banco</p>
+          <div style="margin-top:12px;font-size:11px;color:var(--text3)">TXID: ${pix.txid}</div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+          <button class="btn btn-success" onclick="closeModalForce();confirmSale()">✓ Confirmar Pagamento</button>
+        </div>
+      </div>`);
+      return;
+    }
+  }
+  await confirmSale();
+}
+
+async function confirmSale() {
+  const payment = document.getElementById('pdv-payment')?.value || 'dinheiro';
+  const client_id = document.getElementById('pdv-client')?.value;
+  const vessel_id = document.getElementById('pdv-vessel')?.value;
+  const r = await api('POST','/store/orders',{items:cart,client_id:client_id?parseInt(client_id):null,vessel_id:vessel_id?parseInt(vessel_id):null,payment_method:payment,status:'paid'});
+  if (r && r.id) { toast(`Venda finalizada! Total: ${fmt(r.total)}`); cart=[]; pages.store(); }
+}
+
+async function renderStoreItems() {
+  const items = await api('GET','/store/items');
+  document.getElementById('store-content').innerHTML = `
+  <div class="flex justify-between mb-2">
+    <span class="text-sm text-muted">${items.length} itens em estoque</span>
+    <button class="btn btn-primary" onclick="openItemModal()">+ Novo Item</button>
+  </div>
+  <div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>Item</th><th>Categoria</th><th>Preço</th><th>Custo</th><th>Estoque</th><th>Mín.</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody>${(items||[]).map(i=>`<tr>
+      <td class="font-bold">${i.name}</td>
+      <td><span class="badge badge-gray">${i.category}</span></td>
+      <td class="text-success font-bold">${fmt(i.price)}</td>
+      <td>${fmt(i.cost)}</td>
+      <td class="${i.stock<=i.min_stock?'text-danger font-bold':''}">${i.stock} ${i.unit}</td>
+      <td>${i.min_stock}</td>
+      <td>${i.stock<=i.min_stock?'<span class="badge badge-danger">Baixo</span>':'<span class="badge badge-success">OK</span>'}</td>
+      <td><div class="flex gap-2">
+        <button class="btn btn-ghost btn-sm" onclick="openItemModal(${i.id})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem(${i.id})">🗑</button>
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div></div>`;
+}
+
+async function openItemModal(id=null) {
+  let item = id ? (await api('GET','/store/items')).find(i=>i.id===id) : {};
+  if (!item) item = {};
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">${id?'Editar':'Novo'} Item</div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Nome *</label><input id="im-name" value="${item.name||''}"></div>
+      <div class="form-group"><label>Categoria</label>
+        <select id="im-cat">${['manutencao','equipamento','bebida','alimento','limpeza','outros'].map(c=>`<option value="${c}" ${item.category===c?'selected':''}>${c}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-row cols3">
+      <div class="form-group"><label>Preço (R$) *</label><input id="im-price" type="number" step=".01" value="${item.price||''}"></div>
+      <div class="form-group"><label>Custo (R$)</label><input id="im-cost" type="number" step=".01" value="${item.cost||0}"></div>
+      <div class="form-group"><label>Unidade</label><input id="im-unit" value="${item.unit||'un'}"></div>
+    </div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Estoque Atual</label><input id="im-stock" type="number" value="${item.stock||0}"></div>
+      <div class="form-group"><label>Estoque Mínimo</label><input id="im-min" type="number" value="${item.min_stock||5}"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveItem(${id||'null'})">Salvar</button>
+    </div>
+  </div>`);
+}
+
+async function saveItem(id) {
+  const body = {name:document.getElementById('im-name').value,category:document.getElementById('im-cat').value,price:parseFloat(document.getElementById('im-price').value),cost:parseFloat(document.getElementById('im-cost').value)||0,unit:document.getElementById('im-unit').value,stock:parseInt(document.getElementById('im-stock').value)||0,min_stock:parseInt(document.getElementById('im-min').value)||5};
+  if (!body.name||!body.price) { toast('Nome e preço obrigatórios','error'); return; }
+  if (id) await api('PUT',`/store/items/${id}`,body); else await api('POST','/store/items',body);
+  toast('Item salvo!'); closeModalForce(); showStoreTab('items', document.querySelectorAll('.tab')[1]);
+}
+
+async function deleteItem(id) {
+  if (!confirm('Remover este item?')) return;
+  await api('DELETE',`/store/items/${id}`);
+  toast('Item removido'); showStoreTab('items', document.querySelectorAll('.tab')[1]);
+}
+
+async function renderOrders() {
+  const orders = await api('GET','/store/orders');
+  document.getElementById('store-content').innerHTML = `
+  <div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>Data</th><th>Cliente</th><th>Embarcação</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Status</th></tr></thead>
+    <tbody>${(orders||[]).map(o=>`<tr>
+      <td>${fmtDT(o.created_at)}</td>
+      <td>${o.client_name||'—'}</td>
+      <td>${o.vessel_name||'—'}</td>
+      <td>${Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):o.items}</td>
+      <td class="text-success font-bold">${fmt(o.total)}</td>
+      <td>${o.payment_method?`<span class="badge badge-gray">${o.payment_method}</span>`:'—'}</td>
+      <td>${statusBadge(o.status)}</td>
+    </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Sem pedidos</td></tr>'}
+    </tbody>
+  </table></div></div>`;
+}
+
+async function renderPixConfig() {
+  const cfg = await api('GET','/store/pix-config');
+  document.getElementById('store-content').innerHTML = `
+  <div class="card" style="max-width:500px">
+    <div class="card-title mb-2">💳 Configuração PIX</div>
+    <div class="form-group mb-2"><label>Chave PIX *</label><input id="pix-key" value="${cfg?.key||''}"></div>
+    <div class="form-group mb-2"><label>Tipo de Chave</label>
+      <select id="pix-type">
+        ${['cpf','cnpj','email','telefone','aleatoria'].map(t=>`<option value="${t}" ${cfg?.key_type===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group mb-2"><label>Nome do Recebedor *</label><input id="pix-name" value="${cfg?.merchant_name||''}"></div>
+    <div class="form-group mb-2"><label>Cidade *</label><input id="pix-city" value="${cfg?.city||''}"></div>
+    <div class="form-actions"><button class="btn btn-primary" onclick="savePixConfig()">💾 Salvar Configuração PIX</button></div>
+  </div>`;
+}
+
+async function savePixConfig() {
+  const body = {key:document.getElementById('pix-key').value,key_type:document.getElementById('pix-type').value,merchant_name:document.getElementById('pix-name').value,city:document.getElementById('pix-city').value};
+  if (!body.key||!body.merchant_name) { toast('Preencha todos os campos','error'); return; }
+  await api('POST','/store/pix-config',body);
+  toast('Configuração PIX salva!');
+}
+
+function filterPDVItems() {
+  const search = document.getElementById('pdv-search')?.value?.toLowerCase()||'';
+  const cat = document.getElementById('pdv-cat')?.value||'';
+  document.querySelectorAll('.store-item-card').forEach(card=>{
+    const name = card.querySelector('.store-item-name').textContent.toLowerCase();
+    const c = card.querySelector('.store-item-cat').textContent;
+    card.style.display = (name.includes(search)&&(!cat||c===cat))?'':'none';
+  });
+}
+
+// ── PAGE: MAINTENANCE ─────────────────────────────────
+pages.maintenance = async () => {
+  const items = await api('GET','/maintenance');
+  const vessels = await api('GET','/vessels');
+  const counts = {open:0,in_progress:0,completed:0,urgent:0};
+  (items||[]).forEach(m=>{
+    if (m.status==='open') counts.open++;
+    if (m.status==='in_progress') counts.in_progress++;
+    if (m.status==='completed') counts.completed++;
+    if (m.priority==='urgent') counts.urgent++;
+  });
+  setContent(`
+  <div class="grid g4 mb-2">
+    <div class="kpi"><div class="kpi-label">OS Abertas</div><div class="kpi-value">${counts.open}</div></div>
+    <div class="kpi yellow"><div class="kpi-label">Em Andamento</div><div class="kpi-value">${counts.in_progress}</div></div>
+    <div class="kpi green"><div class="kpi-label">Concluídas</div><div class="kpi-value">${counts.completed}</div></div>
+    <div class="kpi red"><div class="kpi-label">Urgentes</div><div class="kpi-value">${counts.urgent}</div></div>
+  </div>
+  <div class="flex justify-between mb-2">
+    <div class="tabs">
+      <div class="tab active" onclick="filterMaintenance('',this)">Todas</div>
+      <div class="tab" onclick="filterMaintenance('open',this)">Abertas</div>
+      <div class="tab" onclick="filterMaintenance('in_progress',this)">Em Andamento</div>
+      <div class="tab" onclick="filterMaintenance('completed',this)">Concluídas</div>
+    </div>
+    <button class="btn btn-primary" onclick="openMaintenanceModal(null,${JSON.stringify(vessels||[]).replace(/"/g,'&quot;')})">+ Nova OS</button>
+  </div>
+  <div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>OS</th><th>Embarcação</th><th>Tipo</th><th>Descrição</th><th>Prioridade</th><th>Agendado</th><th>Custo</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody id="maint-tbody">${renderMaintenanceRows(items||[])}</tbody>
+  </table></div></div>`);
+};
+
+function renderMaintenanceRows(items) {
+  if (!items.length) return '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhuma OS encontrada</td></tr>';
+  return items.map(m=>`<tr>
+    <td class="font-bold text-xs">${m.os_number}</td>
+    <td>${m.vessel_name||'—'}</td>
+    <td><span class="badge ${m.type==='corretiva'?'badge-danger':'badge-info'}">${m.type}</span></td>
+    <td>${m.description}</td>
+    <td>${priorityBadge(m.priority)}</td>
+    <td>${fmtDate(m.scheduled_date)}</td>
+    <td>${fmt(m.cost)}</td>
+    <td>${statusBadge(m.status)}</td>
+    <td><div class="flex gap-2">
+      <button class="btn btn-ghost btn-sm" onclick="openMaintenanceModal(${m.id})">✏️</button>
+      ${m.status!=='completed'?`<button class="btn btn-success btn-sm" onclick="completeMaintenance(${m.id})">✓</button>`:''}
+    </div></td>
+  </tr>`).join('');
+}
+
+async function filterMaintenance(status, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const data = await api('GET',`/maintenance${status?'?status='+status:''}`);
+  document.getElementById('maint-tbody').innerHTML = renderMaintenanceRows(data||[]);
+}
+
+async function completeMaintenance(id) {
+  await api('PUT',`/maintenance/${id}`,{status:'completed'});
+  toast('OS concluída!'); pages.maintenance();
+}
+
+async function openMaintenanceModal(id=null, vesselsArg=null) {
+  const vessels = vesselsArg || await api('GET','/vessels');
+  let m = id ? (await api('GET','/maintenance')).find(x=>x.id===id) : {};
+  if (!m) m = {};
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">${id?'Editar OS':'Nova OS de Manutenção'}</div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Embarcação</label>
+        <select id="mm-vessel"><option value="">Sem embarcação</option>${(typeof vessels==='string'?JSON.parse(vessels):vessels).map(v=>`<option value="${v.id}" ${m.vessel_id==v.id?'selected':''}>${v.name}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Tipo *</label>
+        <select id="mm-type"><option value="preventiva" ${m.type==='preventiva'?'selected':''}>Preventiva</option><option value="corretiva" ${m.type==='corretiva'?'selected':''}>Corretiva</option></select>
+      </div>
+    </div>
+    <div class="form-group mb-2"><label>Descrição *</label><textarea id="mm-desc">${m.description||''}</textarea></div>
+    <div class="form-row cols3">
+      <div class="form-group"><label>Prioridade</label>
+        <select id="mm-priority">${['low','normal','high','urgent'].map(p=>`<option value="${p}" ${m.priority===p?'selected':''}>${{low:'Baixa',normal:'Normal',high:'Alta',urgent:'Urgente'}[p]}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Agendado para</label><input id="mm-date" type="date" value="${m.scheduled_date||''}"></div>
+      <div class="form-group"><label>Técnico</label><input id="mm-tech" value="${m.technician||''}"></div>
+    </div>
+    <div class="form-row cols3">
+      <div class="form-group"><label>Horas Estimadas</label><input id="mm-hours" type="number" step=".5" value="${m.estimated_hours||''}"></div>
+      <div class="form-group"><label>Custo (R$)</label><input id="mm-cost" type="number" step=".01" value="${m.cost||0}"></div>
+      <div class="form-group"><label>Status</label>
+        <select id="mm-status">${['open','in_progress','completed','cancelled'].map(s=>`<option value="${s}" ${m.status===s?'selected':''}>${{open:'Aberto',in_progress:'Em andamento',completed:'Concluído',cancelled:'Cancelado'}[s]}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="mm-notes">${m.notes||''}</textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveMaintenance(${id||'null'})">Salvar OS</button>
+    </div>
+  </div>`);
+}
+
+async function saveMaintenance(id) {
+  const body = {vessel_id:document.getElementById('mm-vessel').value?parseInt(document.getElementById('mm-vessel').value):null,type:document.getElementById('mm-type').value,description:document.getElementById('mm-desc').value,priority:document.getElementById('mm-priority').value,scheduled_date:document.getElementById('mm-date').value||null,technician:document.getElementById('mm-tech').value,estimated_hours:parseFloat(document.getElementById('mm-hours').value)||null,cost:parseFloat(document.getElementById('mm-cost').value)||0,status:document.getElementById('mm-status').value,notes:document.getElementById('mm-notes').value};
+  if (!body.description) { toast('Descrição obrigatória','error'); return; }
+  if (id) await api('PUT',`/maintenance/${id}`,body); else await api('POST','/maintenance',body);
+  toast('OS salva!'); closeModalForce(); pages.maintenance();
+}
+
+// ── PAGE: ANALYTICS ───────────────────────────────────
+pages.analytics = async () => {
+  const [kpis, rev, top] = await Promise.all([
+    api('GET','/analytics/kpis'),
+    api('GET','/analytics/revenue-chart'),
+    api('GET','/analytics/top-clients')
+  ]);
+  setContent(`
+  <div class="grid g4 mb-2">
+    <div class="kpi green"><div class="kpi-label">Ocupação Total</div><div class="kpi-value">${kpis.ocupacao_total}%</div><div class="kpi-sub">${kpis.vagas_ocupadas} de ${kpis.vagas_total} vagas</div></div>
+    <div class="kpi"><div class="kpi-label">Receita Mês</div><div class="kpi-value" style="font-size:18px">${fmt(kpis.receita_mes)}</div><div class="kpi-sub">Loja: ${fmt(kpis.receita_loja)}</div></div>
+    <div class="kpi red"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:18px">${fmt(kpis.inadimplencia)}</div><div class="kpi-sub">${kpis.taxa_inadimplencia}%</div></div>
+    <div class="kpi purple"><div class="kpi-label">LTV Médio</div><div class="kpi-value" style="font-size:18px">${fmt(kpis.ltv_medio)}</div><div class="kpi-sub">por cliente</div></div>
+  </div>
+  <div class="grid g4 mb-2">
+    <div class="kpi"><div class="kpi-label">Seca Ocupação</div><div class="kpi-value">${kpis.ocupacao_seca}%</div><div class="kpi-sub">${kpis.vagas_seca_ocupadas}/${kpis.vagas_seca_total}</div></div>
+    <div class="kpi"><div class="kpi-label">Molhada Ocupação</div><div class="kpi-value">${kpis.ocupacao_molhada}%</div><div class="kpi-sub">${kpis.vagas_molhada_ocupadas}/${kpis.vagas_molhada_total}</div></div>
+    <div class="kpi"><div class="kpi-label">SLA Médio</div><div class="kpi-value">${kpis.sla_avg_min} min</div><div class="kpi-sub">Tempo de atendimento</div></div>
+    <div class="kpi"><div class="kpi-label">Ticket Médio Loja</div><div class="kpi-value" style="font-size:18px">${fmt(kpis.ticket_medio_loja)}</div></div>
+  </div>
+  <div class="grid g2 mb-2">
+    <div class="card">
+      <div class="card-title mb-2">Receita Mensal (12 meses)</div>
+      <canvas id="rev-chart-big" height="200"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-title mb-2">Operações por Tipo</div>
+      <canvas id="ops-chart" height="200"></canvas>
+    </div>
+  </div>
+  <div class="grid g2 mb-2">
+    <div class="card">
+      <div class="card-title mb-2">Receita por Categoria</div>
+      <canvas id="cat-chart" height="200"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-title mb-2">Top 10 Clientes (LTV)</div>
+      ${(top||[]).map((c,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <span style="width:20px;text-align:center;font-size:12px;color:var(--text3)">${i+1}</span>
+        <div style="flex:1"><div class="text-sm font-bold">${c.name}</div><div class="text-xs text-muted">${c.vessels} embarcações</div></div>
+        ${tierBadge(c.tier)}
+        <span class="text-success font-bold text-sm">${fmt(c.ltv)}</span>
+      </div>`).join('')}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title mb-2">KPIs Completos</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+      ${[
+        ['Clientes Ativos', kpis.total_clientes, null],
+        ['Clientes VIP/Gold', kpis.vip_count, null],
+        ['Embarcações', kpis.total_vessels, null],
+        ['Contratos Ativos', kpis.contratos_ativos, null],
+        ['Receita Seca', fmt(kpis.receita_seca), null],
+        ['Receita Molhada', fmt(kpis.receita_molhada), null],
+        ['Receita Loja', fmt(kpis.receita_loja), null],
+        ['Inadimplência', fmt(kpis.inadimplencia), null],
+        ['Taxa Inadimplência', kpis.taxa_inadimplencia+'%', null],
+        ['OS Abertas', kpis.os_abertas, null],
+        ['OS Urgentes', kpis.os_urgentes, null],
+        ['Custo Manutenção Mês', fmt(kpis.custo_manutencao_mes), null],
+        ['Fila Hoje', kpis.queue_hoje, null],
+        ['Fila Aguardando', kpis.queue_aguardando, null],
+        ['Alertas Não Lidos', kpis.alertas_nao_lidos, null],
+      ].map(([label,val])=>`<div style="background:var(--surface2);border-radius:8px;padding:12px;border:1px solid var(--border)"><div class="text-xs text-muted mb-1">${label}</div><div class="font-bold">${val}</div></div>`).join('')}
+    </div>
+  </div>`);
+
+  if (rev && rev.length) {
+    pageCharts.rev = new Chart(document.getElementById('rev-chart-big'), {
+      type:'bar',
+      data:{labels:rev.map(r=>r.month),datasets:[{label:'Receita',data:rev.map(r=>r.total),backgroundColor:'rgba(59,130,246,.7)',borderColor:'#3b82f6',borderRadius:6}]},
+      options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}
+    });
+  }
+  if (kpis.ops_por_tipo && kpis.ops_por_tipo.length) {
+    pageCharts.ops = new Chart(document.getElementById('ops-chart'), {
+      type:'doughnut',
+      data:{labels:kpis.ops_por_tipo.map(o=>o.operation_type),datasets:[{data:kpis.ops_por_tipo.map(o=>o.count),backgroundColor:['rgba(59,130,246,.8)','rgba(16,185,129,.8)','rgba(99,102,241,.8)','rgba(245,158,11,.8)']}]},
+      options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8'}}}}
+    });
+  }
+  pageCharts.cat = new Chart(document.getElementById('cat-chart'), {
+    type:'bar',
+    data:{labels:['Armazenagem Seca','Armazenagem Molhada','Loja'],datasets:[{data:[kpis.receita_seca||0,kpis.receita_molhada||0,kpis.receita_loja||0],backgroundColor:['rgba(16,185,129,.7)','rgba(59,130,246,.7)','rgba(245,158,11,.7)'],borderRadius:6}]},
+    options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},y:{grid:{display:false}}}}
+  });
+};
+
+// ── PAGE: ALERTS ──────────────────────────────────────
+pages.alerts = async () => {
+  const alerts = await api('GET','/alerts');
+  setContent(`
+  <div class="flex justify-between mb-2">
+    <span class="text-sm text-muted">${alerts.filter(a=>!a.read_at).length} alertas não lidos</span>
+    <button class="btn btn-ghost btn-sm" onclick="markAllRead()">✓ Marcar todos como lidos</button>
+  </div>
+  <div id="alerts-list">${renderAlerts(alerts||[])}</div>`);
+};
+
+function renderAlerts(alerts) {
+  if (!alerts.length) return '<div class="empty-state"><div class="icon">🔔</div><p>Nenhum alerta</p></div>';
+  return alerts.map(a=>`
+  <div class="alert-item ${a.severity}" style="${a.read_at?'opacity:.5':''}">
+    <div class="alert-icon">${{info:'ℹ️',warning:'⚠️',error:'🚨'}[a.severity]||'🔔'}</div>
+    <div class="alert-content">
+      <div class="alert-msg">${a.message}</div>
+      <div class="alert-meta">${fmtDT(a.created_at)} · ${a.type}${a.read_at?' · Lido':''}</div>
+    </div>
+    ${!a.read_at?`<button class="btn btn-ghost btn-sm" onclick="markRead(${a.id})">✓ Ler</button>`:''}
+  </div>`).join('');
+}
+
+async function markRead(id) {
+  await api('PUT',`/alerts/${id}/read`);
+  refreshBadges(); pages.alerts();
+}
+
+async function markAllRead() {
+  await api('PUT','/alerts/read-all');
+  toast('Todos os alertas marcados como lidos'); refreshBadges(); pages.alerts();
+}
+
+// ── INIT ──────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') closeModalForce();
+});
+tryAutoLogin();
+</script>
+</body>
+</html>
