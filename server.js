@@ -5,9 +5,9 @@ const path   = require('path');
 const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 
-const PORT    = 3000;
-const SECRET  = 'marinaone_secret_2024';
-const DB_PATH = path.join(__dirname, 'marina.db');
+const PORT    = process.env.PORT || 3000;
+const SECRET  = process.env.JWT_SECRET || 'marinaone_secret_2024';
+const DB_PATH = process.env.VERCEL ? '/tmp/marina.db' : path.join(__dirname, 'marina.db');
 let db;
 
 // ── JWT ──────────────────────────────────────────────────────────────
