@@ -172,6 +172,34 @@ textarea{resize:vertical;min-height:72px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
 .empty-state .icon{font-size:48px;margin-bottom:12px}
+/* ── FINANCIAL TREE ─────────────────────────────────── */
+.fin-year{margin-bottom:10px}
+.fin-year-header{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:.15s;user-select:none}
+.fin-year-header:hover{border-color:var(--accent);background:var(--surface2)}
+.fin-year-title{font-size:16px;font-weight:700;color:var(--text);flex:1;display:flex;align-items:center;gap:8px}
+.fin-expand{color:var(--text3);font-size:11px;width:14px;flex-shrink:0;transition:transform .2s}
+.fin-year-stats{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fin-stat{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.fin-stat.green{background:rgba(16,185,129,.15);color:#34d399}
+.fin-stat.yellow{background:rgba(245,158,11,.15);color:#fbbf24}
+.fin-stat.red{background:rgba(239,68,68,.15);color:#f87171}
+.fin-stat.total{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.fin-year-body{padding:6px 0 4px 20px;border-left:2px solid var(--border);margin-left:16px;margin-top:4px}
+.fin-month{margin-bottom:6px}
+.fin-month-header{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--surface2);border-radius:10px;cursor:pointer;transition:.15s;user-select:none}
+.fin-month-header:hover{background:var(--surface3)}
+.fin-month-title{font-size:13px;font-weight:600;color:var(--text2);flex:1}
+.fin-month-stats{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.fin-status-tabs{display:flex;gap:0;background:var(--surface2);padding:4px;border-radius:10px;overflow-x:auto;flex-shrink:0}
+.fin-status-tab{padding:8px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--text3);transition:.15s;white-space:nowrap;display:flex;align-items:center;gap:7px}
+.fin-status-tab:hover{color:var(--text)}
+.fin-status-tab.active{background:var(--surface);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.tab-count{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center}
+.tab-count-all{background:rgba(59,130,246,.2);color:#60a5fa}
+.tab-count-pending{background:rgba(245,158,11,.2);color:#fbbf24}
+.tab-count-overdue{background:rgba(239,68,68,.2);color:#f87171}
+.tab-count-paid{background:rgba(16,185,129,.2);color:#34d399}
+.fin-month-amount{font-size:12px;font-weight:700;color:var(--text)}
 </style>
 </head>
 <body>
@@ -900,33 +928,169 @@ async function saveContract() {
 }
 
 // ── PAGE: FINANCIAL ───────────────────────────────────
+let _allCharges      = [];
+let _finStatusFilter = '';
+let _finExpandYears  = {};
+let _finExpandMonths = {};
+const MONTH_PT = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
 pages.financial = async () => {
-  const summary = await api('GET','/financial/summary');
-  const charges = await api('GET','/financial/charges');
+  const summary  = await api('GET','/financial/summary');
+  _allCharges    = await api('GET','/financial/charges') || [];
+  const curYear  = new Date().getFullYear().toString();
+  const curMonth = String(new Date().getMonth()+1).padStart(2,'0');
+  if (_finExpandYears[curYear]  === undefined) _finExpandYears[curYear]  = true;
+  if (_finExpandMonths[`${curYear}-${curMonth}`] === undefined) _finExpandMonths[`${curYear}-${curMonth}`] = true;
+  _finStatusFilter = _finStatusFilter || '';
+
+  const cnt = {
+    all:     _allCharges.length,
+    pending: _allCharges.filter(c=>c.status==='pending').length,
+    overdue: _allCharges.filter(c=>c.status==='overdue').length,
+    paid:    _allCharges.filter(c=>c.status==='paid').length
+  };
+  const tot = {
+    pending: _allCharges.filter(c=>c.status==='pending').reduce((s,c)=>s+c.amount,0),
+    overdue: _allCharges.filter(c=>c.status==='overdue').reduce((s,c)=>s+c.amount,0),
+    paid:    _allCharges.filter(c=>c.status==='paid').reduce((s,c)=>s+c.amount,0)
+  };
+  const totalGeral = tot.paid + tot.pending + tot.overdue;
+
   setContent(`
   <div class="grid g4 mb-2">
     <div class="kpi green"><div class="kpi-label">Receita do Mês</div><div class="kpi-value" style="font-size:20px">${fmt(summary.total_paid_month)}</div><span class="kpi-icon">💰</span></div>
-    <div class="kpi yellow"><div class="kpi-label">A Receber</div><div class="kpi-value" style="font-size:20px">${fmt(summary.total_pending)}</div><span class="kpi-icon">📅</span></div>
+    <div class="kpi yellow"><div class="kpi-label">A Receber</div><div class="kpi-value" style="font-size:20px">${fmt(summary.total_pending)}</div><div class="kpi-sub">${cnt.pending} cobranças</div><span class="kpi-icon">📅</span></div>
     <div class="kpi red"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:20px">${fmt(summary.total_overdue)}</div><div class="kpi-sub">${summary.count_overdue} cobranças</div><span class="kpi-icon">⚠️</span></div>
-    <div class="kpi"><div class="kpi-label">Receita Prevista</div><div class="kpi-value" style="font-size:20px">${fmt((summary.total_pending||0)+(summary.total_paid_month||0))}</div><span class="kpi-icon">📈</span></div>
+    <div class="kpi purple"><div class="kpi-label">Total Geral</div><div class="kpi-value" style="font-size:20px">${fmt(totalGeral)}</div><div class="kpi-sub">${cnt.all} cobranças</div><span class="kpi-icon">📊</span></div>
   </div>
-  <div class="flex justify-between mb-2">
-    <div class="tabs">
-      <div class="tab active" onclick="filterCharges('',this)">Todas</div>
-      <div class="tab" onclick="filterCharges('pending',this)">Pendentes</div>
-      <div class="tab" onclick="filterCharges('overdue',this)">Vencidas</div>
-      <div class="tab" onclick="filterCharges('paid',this)">Pagas</div>
+
+  <div class="flex justify-between items-center" style="gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    <div class="fin-status-tabs">
+      <button class="fin-status-tab${_finStatusFilter===''?' active':''}" onclick="setFinStatus('',this)">
+        Todas <span class="tab-count tab-count-all">${cnt.all}</span>
+      </button>
+      <button class="fin-status-tab${_finStatusFilter==='pending'?' active':''}" onclick="setFinStatus('pending',this)">
+        🕐 Pendentes <span class="tab-count tab-count-pending">${cnt.pending}</span>
+        <span style="font-size:11px;color:var(--text3)">${fmt(tot.pending)}</span>
+      </button>
+      <button class="fin-status-tab${_finStatusFilter==='overdue'?' active':''}" onclick="setFinStatus('overdue',this)">
+        🔴 Vencidas <span class="tab-count tab-count-overdue">${cnt.overdue}</span>
+        <span style="font-size:11px;color:var(--text3)">${fmt(tot.overdue)}</span>
+      </button>
+      <button class="fin-status-tab${_finStatusFilter==='paid'?' active':''}" onclick="setFinStatus('paid',this)">
+        ✅ Pagas <span class="tab-count tab-count-paid">${cnt.paid}</span>
+        <span style="font-size:11px;color:var(--text3)">${fmt(tot.paid)}</span>
+      </button>
     </div>
     <button class="btn btn-primary" onclick="openChargeModal()">+ Nova Cobrança</button>
   </div>
-  <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead>
-    <tbody id="charges-tbody">${renderChargeRows(charges||[])}</tbody>
-  </table></div></div>`);
+
+  <div id="fin-tree"></div>`);
+
+  renderFinTree();
 };
 
+function calcFinTotals(arr) {
+  return {
+    paid:    arr.filter(c=>c.status==='paid').reduce((s,c)=>s+c.amount,0),
+    pending: arr.filter(c=>c.status==='pending').reduce((s,c)=>s+c.amount,0),
+    overdue: arr.filter(c=>c.status==='overdue').reduce((s,c)=>s+c.amount,0),
+    total:   arr.reduce((s,c)=>s+c.amount,0),
+    count:   arr.length
+  };
+}
+
+function renderFinTree() {
+  const filtered = _finStatusFilter ? _allCharges.filter(c=>c.status===_finStatusFilter) : _allCharges;
+
+  // Group: year → month → charges
+  const byYear = {};
+  filtered.forEach(c => {
+    const d = c.due_date || '';
+    const y = d.slice(0,4) || '?';
+    const m = d.slice(5,7) || '?';
+    if (!byYear[y]) byYear[y] = {};
+    if (!byYear[y][m]) byYear[y][m] = [];
+    byYear[y][m].push(c);
+  });
+
+  const curYear = new Date().getFullYear().toString();
+  const years   = Object.keys(byYear).sort((a,b)=>Number(b)-Number(a));
+
+  if (!years.length) {
+    document.getElementById('fin-tree').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Nenhuma cobrança encontrada para este filtro</p></div>';
+    return;
+  }
+
+  let html = '';
+  years.forEach(year => {
+    const isCur   = year === curYear;
+    const exp     = _finExpandYears[year] !== false && (isCur || !!_finExpandYears[year]);
+    const allArr  = Object.values(byYear[year]).flat();
+    const yt      = calcFinTotals(allArr);
+
+    let stats = '';
+    if (yt.paid    > 0) stats += `<span class="fin-stat green">💰 ${fmt(yt.paid)}</span>`;
+    if (yt.pending > 0) stats += `<span class="fin-stat yellow">🕐 ${fmt(yt.pending)}</span>`;
+    if (yt.overdue > 0) stats += `<span class="fin-stat red">🔴 ${fmt(yt.overdue)}</span>`;
+    stats += `<span class="fin-stat total">${yt.count} cobranças · ${fmt(yt.total)}</span>`;
+
+    html += `
+    <div class="fin-year">
+      <div class="fin-year-header" onclick="toggleFinYear('${year}')">
+        <span class="fin-expand">${exp?'▼':'▶'}</span>
+        <span class="fin-year-title">${year}${isCur?' <span class="badge badge-info" style="font-size:10px;margin-left:6px">Ano Atual</span>':''}</span>
+        <div class="fin-year-stats">${stats}</div>
+      </div>
+      <div id="fin-y-${year}" class="fin-year-body" style="display:${exp?'block':'none'}">
+        ${renderFinMonths(byYear[year], year)}
+      </div>
+    </div>`;
+  });
+
+  document.getElementById('fin-tree').innerHTML = html;
+}
+
+function renderFinMonths(monthsObj, year) {
+  const months   = Object.keys(monthsObj).sort((a,b)=>Number(b)-Number(a));
+  const curYear  = new Date().getFullYear().toString();
+  const curMonth = String(new Date().getMonth()+1).padStart(2,'0');
+  let html = '';
+
+  months.forEach(month => {
+    const key = `${year}-${month}`;
+    const arr = monthsObj[month];
+    const exp = _finExpandMonths[key] !== false && (year===curYear && month===curMonth || !!_finExpandMonths[key]);
+    const mt  = calcFinTotals(arr);
+
+    let mStats = `<span style="font-size:11px;color:var(--text3)">${mt.count} cobranças</span>`;
+    if (mt.paid    > 0) mStats += `<span class="badge badge-success" style="font-size:11px">${fmt(mt.paid)}</span>`;
+    if (mt.pending > 0) mStats += `<span class="badge badge-warning" style="font-size:11px">${fmt(mt.pending)}</span>`;
+    if (mt.overdue > 0) mStats += `<span class="badge badge-danger"  style="font-size:11px">${fmt(mt.overdue)}</span>`;
+
+    html += `
+    <div class="fin-month">
+      <div class="fin-month-header" onclick="toggleFinMonth('${key}')">
+        <span class="fin-expand">${exp?'▼':'▶'}</span>
+        <span class="fin-month-title">📅 ${MONTH_PT[parseInt(month)]||month} ${year}</span>
+        <div class="fin-month-stats">${mStats}</div>
+      </div>
+      <div id="fin-m-${key}" style="display:${exp?'block':'none'}">
+        <div class="card" style="margin-top:6px;padding:0;overflow:hidden">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody>${renderChargeRows(arr)}</tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  return html;
+}
+
 function renderChargeRows(charges) {
-  if (!charges.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma cobrança</td></tr>';
+  if (!charges||!charges.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sem cobranças</td></tr>';
   return charges.map(c=>`<tr>
     <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
     <td>${c.description}</td>
@@ -940,18 +1104,36 @@ function renderChargeRows(charges) {
   </tr>`).join('');
 }
 
-async function filterCharges(status, el) {
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+function setFinStatus(status, el) {
+  _finStatusFilter = status;
+  document.querySelectorAll('.fin-status-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
-  const data = await api('GET',`/financial/charges${status?'?status='+status:''}`);
-  document.getElementById('charges-tbody').innerHTML = renderChargeRows(data||[]);
+  renderFinTree();
+}
+
+function toggleFinYear(year) {
+  _finExpandYears[year] = !_finExpandYears[year];
+  const body = document.getElementById(`fin-y-${year}`);
+  const hdr  = body?.previousElementSibling;
+  if (body) body.style.display = _finExpandYears[year] ? 'block' : 'none';
+  if (hdr)  hdr.querySelector('.fin-expand').textContent = _finExpandYears[year] ? '▼' : '▶';
+}
+
+function toggleFinMonth(key) {
+  _finExpandMonths[key] = !_finExpandMonths[key];
+  const body = document.getElementById(`fin-m-${key}`);
+  const hdr  = body?.previousElementSibling;
+  if (body) body.style.display = _finExpandMonths[key] ? 'block' : 'none';
+  if (hdr)  hdr.querySelector('.fin-expand').textContent = _finExpandMonths[key] ? '▼' : '▶';
 }
 
 async function markPaid(id) {
   const method = prompt('Forma de pagamento (pix, dinheiro, cartao, transferencia):','pix');
   if (!method) return;
   await api('PUT',`/financial/charges/${id}`,{status:'paid',payment_method:method});
-  toast('Pagamento registrado!'); pages.financial();
+  toast('Pagamento registrado!');
+  _allCharges = await api('GET','/financial/charges') || [];
+  renderFinTree();
 }
 
 async function openChargeModal() {
@@ -978,7 +1160,9 @@ async function saveCharge() {
   const body = {client_id:parseInt(document.getElementById('ch-client').value),description:document.getElementById('ch-desc').value,amount:parseFloat(document.getElementById('ch-amount').value),due_date:document.getElementById('ch-due').value,notes:document.getElementById('ch-notes').value};
   if (!body.description||!body.amount||!body.due_date) { toast('Preencha todos os campos obrigatórios','error'); return; }
   await api('POST','/financial/charges',body);
-  toast('Cobrança criada!'); closeModalForce(); pages.financial();
+  toast('Cobrança criada!'); closeModalForce();
+  _allCharges = await api('GET','/financial/charges') || [];
+  renderFinTree();
 }
 
 // ── PAGE: STORE ───────────────────────────────────────
