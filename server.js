@@ -226,14 +226,14 @@ addRoute('GET', '/api/vessels/:id', async (req, res, ctx) => {
 });
 addRoute('POST', '/api/vessels', async (req, res, ctx) => {
   const b = ctx.body;
-  const r = dbRun('INSERT INTO vessels(client_id,name,type,length,beam,draft,year,registration,model,manufacturer,engine,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-                  [b.client_id, b.name, b.type, b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes]);
+  const r = dbRun('INSERT INTO vessels(client_id,name,type,size,length,beam,draft,year,registration,model,manufacturer,engine,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                  [b.client_id, b.name, b.type, b.size||'media', b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes]);
   sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
 });
 addRoute('PUT', '/api/vessels/:id', async (req, res, ctx) => {
   const b = ctx.body;
-  dbRun('UPDATE vessels SET name=?,type=?,length=?,beam=?,draft=?,year=?,registration=?,model=?,manufacturer=?,engine=?,notes=? WHERE id=?',
-        [b.name, b.type, b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes, ctx.params.id]);
+  dbRun('UPDATE vessels SET name=?,type=?,size=?,length=?,beam=?,draft=?,year=?,registration=?,model=?,manufacturer=?,engine=?,notes=? WHERE id=?',
+        [b.name, b.type, b.size||'media', b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes, ctx.params.id]);
   sendJson(res, { ok: true });
 });
 addRoute('DELETE', '/api/vessels/:id', async (req, res, ctx) => {
@@ -326,6 +326,13 @@ addRoute('PUT', '/api/contracts/:id', async (req, res, ctx) => {
 });
 
 // ── QUEUE ─────────────────────────────────────────────────────────────
+function getAvgDuration(vesselSize, opType) {
+  // Returns estimated minutes for operation based on vessel size
+  const sz = vesselSize || 'media';
+  const settingKey = `avg_time_${opType}_${sz}`;
+  const val = dbGet('SELECT value FROM settings WHERE key=?', [settingKey]);
+  return val ? parseInt(val.value) || 30 : 30;
+}
 function enrichQueueRow(q) {
   const spot = dbGet(`SELECT s.type FROM spots s JOIN contracts ct ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [q.vessel_id]);
   const spotType = spot?.type || null;
@@ -337,17 +344,18 @@ function enrichQueueRow(q) {
     if (q.operation_type === 'descida' && inWater)  inconsistent = true;
     if (q.operation_type === 'subida'  && !inWater) inconsistent = true;
   }
-  return { ...q, vessel_status: vs, is_inconsistent: inconsistent };
+  const estimated_duration_min = getAvgDuration(q.vessel_size, q.operation_type);
+  return { ...q, vessel_status: vs, is_inconsistent: inconsistent, estimated_duration_min };
 }
 addRoute('GET', '/api/queue/history', async (req, res) => {
-  const rows = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, c.name as client_name, c.tier as client_tier
+  const rows = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, c.name as client_name, c.tier as client_tier
     FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
     WHERE q.status IN ('completed','cancelled') ORDER BY q.requested_at DESC LIMIT 50`);
   sendJson(res, rows.map(enrichQueueRow));
 });
 addRoute('GET', '/api/queue', async (req, res, ctx) => {
   const { status = '' } = ctx.qs;
-  let sql = `SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.length as vessel_length,
+  let sql = `SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, v.length as vessel_length,
     c.name as client_name, c.tier as client_tier
     FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id WHERE 1=1`;
   const a = [];
@@ -358,8 +366,31 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
   } else {
     sql += ` AND q.status NOT IN ('completed','cancelled')`;
   }
-  const rows = dbAll(sql + ' ORDER BY q.priority DESC, q.requested_at ASC', a);
-  sendJson(res, rows.map(enrichQueueRow));
+  const rows = dbAll(sql + ' ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC', a);
+  const enriched = rows.map(enrichQueueRow);
+  // Calculate cumulative estimated start/end times for active queue
+  if (!status || status === 'waiting,in_progress') {
+    let cursor = new Date();
+    // If there's an in_progress op, start from it
+    const inProg = enriched.find(r => r.status === 'in_progress');
+    if (inProg && inProg.started_at) {
+      const endTime = new Date(inProg.started_at);
+      endTime.setMinutes(endTime.getMinutes() + inProg.estimated_duration_min);
+      inProg.estimated_end_at = endTime.toISOString();
+      cursor = endTime;
+    }
+    for (const row of enriched) {
+      if (row.status === 'in_progress') continue; // already handled
+      if (row.status === 'waiting') {
+        row.estimated_start_at = cursor.toISOString();
+        const end = new Date(cursor);
+        end.setMinutes(end.getMinutes() + row.estimated_duration_min);
+        row.estimated_end_at = end.toISOString();
+        cursor = end;
+      }
+    }
+  }
+  sendJson(res, enriched);
 });
 addRoute('POST', '/api/queue', async (req, res, ctx) => {
   const vessel = dbGet('SELECT * FROM vessels WHERE id=?', [ctx.body.vessel_id]);
@@ -377,9 +408,39 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
   if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui uma operação ativa na fila (cancele-a primeiro).' }, 400);
   const client   = dbGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
   const priority = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
-  const r = dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes) VALUES(?,?,?,'waiting',?,?)`,
-                  [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null]);
+  // Assign queue_order = max existing waiting order + 1
+  const maxOrder = dbGet(`SELECT MAX(queue_order) as mo FROM queue_operations WHERE status='waiting'`);
+  const queueOrder = (maxOrder?.mo || 0) + 1;
+  const r = dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes,queue_order) VALUES(?,?,?,'waiting',?,?,?)`,
+                  [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null, queueOrder]);
   sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
+});
+addRoute('PUT', '/api/queue/:id/reorder', async (req, res, ctx) => {
+  const { direction, justification } = ctx.body || {};
+  if (!justification || !justification.trim())
+    return sendJson(res, { error: 'Justificativa obrigatória para reordenar a fila.' }, 400);
+  if (!['up','down'].includes(direction))
+    return sendJson(res, { error: 'Direção inválida.' }, 400);
+  const op = dbGet(`SELECT * FROM queue_operations WHERE id=? AND status='waiting'`, [ctx.params.id]);
+  if (!op) return sendJson(res, { error: 'Operação não encontrada ou não está aguardando.' }, 404);
+  // Get all waiting ops sorted by queue_order to find adjacent
+  const waitingOps = dbAll(`SELECT id, queue_order FROM queue_operations WHERE status='waiting' ORDER BY queue_order ASC`);
+  const idx = waitingOps.findIndex(o => o.id == ctx.params.id);
+  if (idx === -1) return sendJson(res, { error: 'Operação não encontrada na fila de espera.' }, 404);
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= waitingOps.length)
+    return sendJson(res, { error: direction === 'up' ? 'Já é o primeiro na fila.' : 'Já é o último na fila.' }, 400);
+  const other = waitingOps[swapIdx];
+  // Swap queue_order values
+  dbRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [other.queue_order, op.id]);
+  dbRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [op.queue_order, other.id]);
+  // Log the action
+  const user = ctx.user || {};
+  const vessel = dbGet('SELECT name FROM vessels WHERE id=?', [op.vessel_id]);
+  dbRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+    [user.id||null, user.name||user.email||'Sistema', 'queue_reorder',
+     JSON.stringify({ op_id: op.id, vessel: vessel?.name, direction, justification: justification.trim(), moved_from: idx+1, moved_to: swapIdx+1, total: waitingOps.length })]);
+  sendJson(res, { ok: true });
 });
 addRoute('PUT', '/api/queue/:id', async (req, res, ctx) => {
   const b = ctx.body;
@@ -769,6 +830,17 @@ addRoute('PUT', '/api/settings', async (req, res, ctx) => {
   sendJson(res, { ok: true });
 });
 
+// ── SYSTEM LOGS ───────────────────────────────────────────────────────
+addRoute('GET', '/api/system-logs', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { limit: lim = '100', action = '' } = ctx.qs;
+  let sql = 'SELECT * FROM system_logs WHERE 1=1';
+  const a = [];
+  if (action) { sql += ' AND action=?'; a.push(action); }
+  sql += ` ORDER BY created_at DESC LIMIT ${parseInt(lim)||100}`;
+  sendJson(res, dbAll(sql, a));
+});
+
 // ── DB INIT & SEED ────────────────────────────────────────────────────
 function initDb() {
   db = new DatabaseSync(DB_PATH);
@@ -1009,6 +1081,14 @@ function migrateDb() {
   try { db.exec(`CREATE TABLE IF NOT EXISTS payment_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,charge_id INTEGER NOT NULL,client_id INTEGER,client_name TEXT,description TEXT,amount REAL,payment_method TEXT,pay_notes TEXT,comprovante_data TEXT,comprovante_name TEXT,user_id INTEGER,user_email TEXT,user_name TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP)`); } catch(e) {}
   try { db.exec(`ALTER TABLE contracts ADD COLUMN contract_file TEXT`); } catch(e) {}
   try { db.exec(`ALTER TABLE contracts ADD COLUMN contract_file_name TEXT`); } catch(e) {}
+  try { db.exec(`ALTER TABLE vessels ADD COLUMN size TEXT DEFAULT 'media'`); } catch(e) {}
+  try { db.exec(`ALTER TABLE queue_operations ADD COLUMN queue_order INTEGER`); } catch(e) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS system_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,user_name TEXT,action TEXT,details TEXT,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`); } catch(e) {}
+  // Initialize queue_order for existing waiting ops that don't have it set
+  try {
+    const noOrder = dbAll(`SELECT id FROM queue_operations WHERE status='waiting' AND queue_order IS NULL ORDER BY priority DESC, requested_at ASC`);
+    noOrder.forEach((op, i) => dbRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [i+1, op.id]));
+  } catch(e) {}
   // Seed default settings (INSERT OR IGNORE)
   const defSettings = [
     ['marina_name','Marina One'],['marina_cnpj','00.000.000/0001-00'],
@@ -1020,6 +1100,10 @@ function migrateDb() {
     ['store_whatsapp','5511999990000'],
     ['store_whatsapp_template','Olá {cliente}! Segue seu orçamento da {marina}:\n\n🛥️ Embarcação: {embarcacao}\n📋 Itens: {itens}\n💰 Total: {total}\n\nPara pagamento via PIX:\nChave: {pix_key}\n\n{qrcode_link}\n\nApós o pagamento, envie o comprovante para este número. Obrigado!'],
     ['license_plan','professional'],['license_valid_until','2027-12-31'],['license_marina_id','MRN-001'],
+    // Average operation times in minutes per vessel size
+    ['avg_time_descida_pequena','20'],['avg_time_descida_media','35'],['avg_time_descida_grande','60'],
+    ['avg_time_subida_pequena','20'],['avg_time_subida_media','35'],['avg_time_subida_grande','60'],
+    ['avg_time_atracacao_pequena','15'],['avg_time_atracacao_media','25'],['avg_time_atracacao_grande','40'],
   ];
   for (const [k,v] of defSettings) {
     try { dbRun(`INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)`,[k,v]); } catch(e) {}

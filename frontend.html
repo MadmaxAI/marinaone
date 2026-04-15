@@ -629,18 +629,36 @@ pages.queue = async () => {
   <div id="queue-list">${renderQueue(queue||[])}</div>`);
 };
 
+const VESSEL_SIZE_LABEL = { pequena:'🚤 Pequena', media:'🛥️ Média', grande:'🛳️ Grande' };
+
 function renderQueue(queue) {
   if (!queue.length) return '<div class="empty-state"><div class="icon">📋</div><p>Sem operações na fila</p></div>';
-  return queue.map(q => {
+  const waitingOps = queue.filter(q => q.status === 'waiting');
+  const opDirections = { descida:'⬇ terra → água', subida:'⬆ água → terra', atracacao:'⚓ Atracação' };
+  return queue.map((q, idx) => {
     const inconsistent = q.is_inconsistent;
-    const borderColor  = inconsistent ? 'var(--danger)' : (q.priority ? 'var(--warning)' : 'var(--border)');
-    const opDirections = { descida:'⬇ terra → água', subida:'⬆ água → terra', atracacao:'⚓ Atracação' };
+    const borderColor  = inconsistent ? 'var(--danger)' : (q.status==='in_progress' ? 'var(--success)' : q.priority ? 'var(--warning)' : 'var(--border)');
+    const waitIdx      = waitingOps.indexOf(q);
+    const isFirst      = waitIdx === 0;
+    const isLast       = waitIdx === waitingOps.length - 1;
+    const canReorder   = q.status === 'waiting' && !inconsistent;
+    // Estimated time display
+    let timeInfo = '';
+    if (q.status === 'waiting' && q.estimated_start_at) {
+      const est = new Date(q.estimated_start_at);
+      const estEnd = q.estimated_end_at ? new Date(q.estimated_end_at) : null;
+      timeInfo = `<span style="font-size:11px;color:var(--text3);margin-left:4px">· ⏰ Previsão início: <strong>${fmtDT(q.estimated_start_at)}</strong> (~${q.estimated_duration_min}min)</span>`;
+    } else if (q.status === 'in_progress' && q.estimated_end_at) {
+      timeInfo = `<span style="font-size:11px;color:var(--success);margin-left:4px">· ⏳ Previsão término: <strong>${fmtDT(q.estimated_end_at)}</strong> (~${q.estimated_duration_min}min)</span>`;
+    }
     return `
-  <div class="queue-card" id="qcard-${q.id}" style="border-left:3px solid ${borderColor}${inconsistent?';background:rgba(239,68,68,.05)':''}">
+  <div class="queue-card" id="qcard-${q.id}" style="border-left:3px solid ${borderColor}${inconsistent?';background:rgba(239,68,68,.05)':q.status==='in_progress'?';background:rgba(34,197,94,.04)':''}">
     <div style="flex:1;min-width:0">
       <div class="flex items-center gap-2 mb-1" style="flex-wrap:wrap">
+        ${q.status==='waiting' && !inconsistent ? `<span style="font-size:11px;font-weight:700;color:var(--text3);background:var(--surface2);padding:2px 7px;border-radius:12px;min-width:24px;text-align:center">#${waitIdx+1}</span>` : ''}
         <span class="font-bold">${q.vessel_name}</span>
         ${tierBadge(q.client_tier)}
+        ${VESSEL_SIZE_LABEL[q.vessel_size] ? `<span style="font-size:11px;color:var(--text3)">${VESSEL_SIZE_LABEL[q.vessel_size]}</span>` : ''}
         ${opBadge(q.operation_type)}
         <span style="font-size:11px;color:var(--text3)">${opDirections[q.operation_type]||''}</span>
         ${statusBadge(q.status)}
@@ -649,6 +667,7 @@ function renderQueue(queue) {
       <div class="flex items-center gap-2 mb-1" style="flex-wrap:wrap">
         ${VESSEL_STATUS_BADGE(q.vessel_status)}
         <span class="text-xs text-muted">${q.client_name} · ${q.vessel_type||''}${q.vessel_length?' '+q.vessel_length+'m':''}</span>
+        ${timeInfo}
       </div>
       <div class="text-xs text-muted">
         Solicitado: ${fmtDT(q.requested_at)}
@@ -659,10 +678,16 @@ function renderQueue(queue) {
         ${inconsistent ? ' · <span style="color:var(--danger);font-weight:600">Esta operação é inválida para o estado atual da embarcação — cancele-a.</span>' : ''}
       </div>
     </div>
-    <div class="flex gap-2" style="flex-shrink:0;align-items:flex-start">
-      ${q.status==='waiting' && !inconsistent ? `<button class="btn btn-warning btn-sm" onclick="updateQueue(${q.id},'in_progress')">▶ Iniciar</button>` : ''}
-      ${q.status==='in_progress' && !inconsistent ? `<button class="btn btn-success btn-sm" onclick="updateQueue(${q.id},'completed')">✓ Concluir</button>` : ''}
-      ${!['completed','cancelled'].includes(q.status) ? `<button class="btn btn-danger btn-sm" onclick="cancelQueueOp(${q.id})" title="Cancelar operação">✕ Cancelar</button>` : ''}
+    <div class="flex gap-2" style="flex-shrink:0;align-items:flex-start;flex-direction:column">
+      <div class="flex gap-2">
+        ${q.status==='waiting' && !inconsistent ? `<button class="btn btn-warning btn-sm" onclick="updateQueue(${q.id},'in_progress')">▶ Iniciar</button>` : ''}
+        ${q.status==='in_progress' && !inconsistent ? `<button class="btn btn-success btn-sm" onclick="updateQueue(${q.id},'completed')">✓ Concluir</button>` : ''}
+        ${!['completed','cancelled'].includes(q.status) ? `<button class="btn btn-danger btn-sm" onclick="cancelQueueOp(${q.id})" title="Cancelar operação">✕ Cancelar</button>` : ''}
+      </div>
+      ${canReorder ? `<div class="flex gap-1" style="align-self:flex-end">
+        ${!isFirst  ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:13px" onclick="reorderQueueOp(${q.id},'up')"   title="Mover para cima na fila">↑</button>` : ''}
+        ${!isLast   ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:13px" onclick="reorderQueueOp(${q.id},'down')" title="Mover para baixo na fila">↓</button>` : ''}
+      </div>` : ''}
     </div>
   </div>`;
   }).join('');
@@ -673,6 +698,35 @@ async function cancelQueueOp(id) {
   await api('PUT', `/queue/${id}`, { status: 'cancelled' });
   toast('Operação cancelada');
   pages.queue();
+}
+
+function reorderQueueOp(id, direction) {
+  const dirLabel = direction === 'up' ? 'Mover para Frente' : 'Mover para Trás';
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">🔀 ${dirLabel} na Fila</div>
+    <div class="settings-info-box" style="margin-bottom:12px">Uma justificativa é obrigatória. A ação será registrada no log do sistema com data, hora e usuário responsável.</div>
+    <div class="form-group">
+      <label>Justificativa *</label>
+      <textarea id="reorder-just" rows="3" placeholder="Ex: Cliente VIP com urgência médica, operação de manutenção crítica..."></textarea>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitReorderQueue(${id},'${direction}')">✔ Confirmar Reordenação</button>
+    </div>
+  </div>`);
+}
+
+async function submitReorderQueue(id, direction) {
+  const justification = document.getElementById('reorder-just')?.value?.trim();
+  if (!justification) { toast('Justificativa obrigatória','error'); return; }
+  const r = await api('PUT', `/queue/${id}/reorder`, { direction, justification });
+  if (r && r.ok) {
+    toast('Fila reordenada com sucesso');
+    closeModalForce();
+    pages.queue();
+  } else if (r && r.error) {
+    toast(r.error, 'error');
+  }
 }
 
 async function filterQueue(type, el) {
@@ -950,7 +1004,16 @@ async function openVesselModal(id=null, clientsArg=null) {
       <div class="form-group"><label>Tipo</label>
         <select id="vm-type">${['lancha','veleiro','jetski','catamarã','iate','barco a remo','outro'].map(t=>`<option ${v.type===t?'selected':''}>${t}</option>`).join('')}</select>
       </div>
+      <div class="form-group"><label>Porte</label>
+        <select id="vm-size">
+          <option value="pequena" ${(v.size||'media')==='pequena'?'selected':''}>🚤 Pequena (até 6m)</option>
+          <option value="media"   ${(v.size||'media')==='media'  ?'selected':''}>🛥️ Média (6–12m)</option>
+          <option value="grande"  ${(v.size||'media')==='grande' ?'selected':''}>🛳️ Grande (acima 12m)</option>
+        </select>
+      </div>
       <div class="form-group"><label>Modelo</label><input id="vm-model" value="${v.model||''}"></div>
+    </div>
+    <div class="form-row cols2">
       <div class="form-group"><label>Fabricante</label><input id="vm-manufacturer" value="${v.manufacturer||''}"></div>
     </div>
     <div class="form-row cols3">
@@ -972,7 +1035,7 @@ async function openVesselModal(id=null, clientsArg=null) {
 }
 
 async function saveVessel(id) {
-  const body = {name:document.getElementById('vm-name').value,client_id:parseInt(document.getElementById('vm-client').value),type:document.getElementById('vm-type').value,model:document.getElementById('vm-model').value,manufacturer:document.getElementById('vm-manufacturer').value,length:parseFloat(document.getElementById('vm-length').value)||null,beam:parseFloat(document.getElementById('vm-beam').value)||null,draft:parseFloat(document.getElementById('vm-draft').value)||null,year:parseInt(document.getElementById('vm-year').value)||null,registration:document.getElementById('vm-registration').value,engine:document.getElementById('vm-engine').value,notes:document.getElementById('vm-notes').value};
+  const body = {name:document.getElementById('vm-name').value,client_id:parseInt(document.getElementById('vm-client').value),type:document.getElementById('vm-type').value,size:document.getElementById('vm-size').value,model:document.getElementById('vm-model').value,manufacturer:document.getElementById('vm-manufacturer').value,length:parseFloat(document.getElementById('vm-length').value)||null,beam:parseFloat(document.getElementById('vm-beam').value)||null,draft:parseFloat(document.getElementById('vm-draft').value)||null,year:parseInt(document.getElementById('vm-year').value)||null,registration:document.getElementById('vm-registration').value,engine:document.getElementById('vm-engine').value,notes:document.getElementById('vm-notes').value};
   if (!body.name) { toast('Nome obrigatório','error'); return; }
   if (id) await api('PUT',`/vessels/${id}`,body); else await api('POST','/vessels',body);
   toast('Embarcação salva!'); closeModalForce(); pages.vessels();
@@ -2794,10 +2857,12 @@ async function renderSettings(tab) {
   const s = await api('GET','/settings') || {};
 
   const tabs = [
-    ['marina',   '🏢 Marina'],
-    ['financeiro','💰 Financeiro'],
+    ['marina',     '🏢 Marina'],
+    ['financeiro', '💰 Financeiro'],
     ['notificacoes','📲 Notificações'],
-    ['licenca',  '🔑 Licença'],
+    ['operacoes',  '⏱ Operações'],
+    ['logs',       '📋 Logs do Sistema'],
+    ['licenca',    '🔑 Licença'],
   ];
   const tabBar = tabs.map(([t,l])=>`<button class="settings-tab${_settingsTab===t?' active':''}" onclick="renderSettings('${t}')">${l}</button>`).join('');
 
@@ -2896,6 +2961,69 @@ async function renderSettings(tab) {
       <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
         <button class="btn btn-primary" onclick="saveSettings(['store_whatsapp_template'])">💾 Salvar Template</button>
       </div>
+    </div>`;
+
+  } else if (_settingsTab === 'operacoes') {
+    const sizes = ['pequena','media','grande'];
+    const ops   = ['descida','subida','atracacao'];
+    const opLabels = { descida:'⬇ Descida', subida:'⬆ Subida', atracacao:'⚓ Atracação' };
+    const sizeLabels = { pequena:'🚤 Pequena', media:'🛥️ Média', grande:'🛳️ Grande' };
+    const rows = ops.map(op => `
+      <tr>
+        <td style="font-weight:600;padding:8px 12px">${opLabels[op]}</td>
+        ${sizes.map(sz => `<td style="padding:8px 12px;text-align:center">
+          <input type="number" id="s-avg_time_${op}_${sz}" value="${s['avg_time_'+op+'_'+sz]||30}"
+            min="1" max="480" style="width:72px;text-align:center" title="Minutos">
+          <span style="font-size:11px;color:var(--text3)"> min</span>
+        </td>`).join('')}
+      </tr>`).join('');
+    const allKeys = ops.flatMap(op => sizes.map(sz => `avg_time_${op}_${sz}`));
+    content = `
+    <div class="settings-card">
+      <div class="settings-card-title">⏱ Tempos Médios de Operação</div>
+      <div class="settings-info-box">Configure o tempo médio (em minutos) para cada tipo de operação e porte de embarcação. Esses tempos são usados para calcular os horários estimados na fila de operações.</div>
+      <div class="table-wrap">
+        <table style="width:100%">
+          <thead><tr>
+            <th>Operação</th>
+            ${sizes.map(sz=>`<th style="text-align:center">${sizeLabels[sz]}</th>`).join('')}
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="form-actions" style="border-top:none;padding-top:0;margin-top:16px">
+        <button class="btn btn-primary" onclick="saveSettings(${JSON.stringify(allKeys)})">💾 Salvar Tempos Médios</button>
+      </div>
+    </div>`;
+
+  } else if (_settingsTab === 'logs') {
+    const logs = await api('GET','/system-logs?limit=200') || [];
+    const actionLabels = { queue_reorder: '🔀 Reordenação de Fila' };
+    const logsHtml = logs.length ? logs.map(l => {
+      let details = '';
+      try {
+        const d = JSON.parse(l.details||'{}');
+        if (l.action === 'queue_reorder') {
+          details = `Embarcação <strong>${d.vessel||''}</strong> movida ${d.direction==='up'?'para frente':'para trás'} (posição ${d.moved_from}→${d.moved_to} de ${d.total}). Justificativa: <em>"${d.justification}"</em>`;
+        } else {
+          details = l.details || '';
+        }
+      } catch(e) { details = l.details || ''; }
+      return `<tr>
+        <td style="white-space:nowrap">${fmtDT(l.created_at)}</td>
+        <td>${l.user_name||'—'}</td>
+        <td>${actionLabels[l.action]||l.action}</td>
+        <td style="font-size:12px">${details}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:24px">Nenhum log registrado</td></tr>';
+    content = `
+    <div class="settings-card">
+      <div class="settings-card-title">📋 Logs do Sistema</div>
+      <div class="settings-info-box">Registro de ações administrativas: reordenações de fila e outras operações com justificativa.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Detalhes</th></tr></thead>
+        <tbody>${logsHtml}</tbody>
+      </table></div>
     </div>`;
 
   } else if (_settingsTab === 'licenca') {
