@@ -618,14 +618,13 @@ pages.dashboard = async () => {
 // ── PAGE: QUEUE ───────────────────────────────────────
 pages.queue = async () => {
   const queue = await api('GET', '/queue');
-  const vessels = await api('GET', '/vessels');
   setContent(`
   <div class="flex justify-between mb-2">
     <div class="tabs">
       <div class="tab active" onclick="filterQueue('active',this)">Ativa</div>
       <div class="tab" onclick="filterQueue('history',this)">Histórico</div>
     </div>
-    <button class="btn btn-primary" onclick="openQueueModal(${JSON.stringify(vessels||[]).replace(/"/g,'&quot;')})">+ Nova Operação</button>
+    <button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>
   </div>
   <div id="queue-list">${renderQueue(queue||[])}</div>`);
 };
@@ -674,17 +673,21 @@ async function updateQueue(id, status) {
   pages.queue();
 }
 
-function openQueueModal(vessels) {
-  modal(`<div class="modal" onclick="event.stopPropagation()">
+async function openQueueModal() {
+  // Open modal first, then populate vessels for the default operation type
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-title">Nova Operação na Fila</div>
     <div class="form-row cols2">
-      <div class="form-group"><label>Embarcação</label>
-        <select id="q-vessel">
-          ${(typeof vessels==='string'?JSON.parse(vessels):vessels).map(v=>`<option value="${v.id}">${v.name} - ${v.client_name}</option>`).join('')}
+      <div class="form-group"><label>Operação *</label>
+        <select id="q-type" onchange="refreshQueueVessels()">
+          <option value="descida">⬇ Descida (terra → água)</option>
+          <option value="subida">⬆ Subida (água → terra)</option>
+          <option value="atracacao">⚓ Atracação</option>
         </select>
       </div>
-      <div class="form-group"><label>Operação</label>
-        <select id="q-type"><option value="descida">⬇ Descida (seco → água)</option><option value="subida">⬆ Subida (água → seco)</option><option value="atracacao">⚓ Atracação</option></select>
+      <div class="form-group"><label>Embarcação *</label>
+        <select id="q-vessel"><option disabled>Carregando...</option></select>
+        <div id="q-vessel-hint" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
       </div>
     </div>
     <div class="form-group"><label>Observações</label><input id="q-notes" placeholder="Opcional..."></div>
@@ -693,6 +696,32 @@ function openQueueModal(vessels) {
       <button class="btn btn-primary" onclick="submitQueue()">Adicionar à Fila</button>
     </div>
   </div>`);
+  await refreshQueueVessels();
+}
+
+async function refreshQueueVessels() {
+  const opType = document.getElementById('q-type')?.value || 'descida';
+  const sel    = document.getElementById('q-vessel');
+  const hint   = document.getElementById('q-vessel-hint');
+  if (!sel) return;
+  sel.innerHTML = '<option disabled>Buscando...</option>';
+  if (hint) hint.textContent = '';
+  const vessels = await api('GET', `/vessels?eligible_for=${opType}`) || [];
+  if (!vessels.length) {
+    sel.innerHTML = '<option value="" disabled selected>Nenhuma embarcação elegível</option>';
+    const tips = {
+      descida: 'Não há embarcações em terra disponíveis para Descida (todas já estão na água ou com operação em andamento).',
+      subida:  'Não há embarcações na água disponíveis para Subida (nenhuma realizou Descida concluída ou há operação em andamento).',
+      atracacao:'Não há embarcações sem operação ativa no momento.',
+    };
+    if (hint) hint.textContent = tips[opType] || '';
+    return;
+  }
+  const statusLabel = { descida:'Em terra', subida:'Na água', atracacao:'' };
+  sel.innerHTML = vessels.map(v =>
+    `<option value="${v.id}">${v.name} — ${v.client_name} ${v.vessel_status ? '· '+v.vessel_status : ''}</option>`
+  ).join('');
+  if (hint) hint.textContent = `${vessels.length} embarcação${vessels.length>1?'s':''} elegível${vessels.length>1?'s':''} para ${opType === 'descida' ? 'Descida' : opType === 'subida' ? 'Subida' : 'Atracação'}.`;
 }
 
 async function submitQueue() {

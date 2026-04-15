@@ -183,7 +183,7 @@ function vesselStatus(vesselId, spotType) {
   return 'Em terra';
 }
 addRoute('GET', '/api/vessels', async (req, res, ctx) => {
-  const { search = '', client_id = '' } = ctx.qs;
+  const { search = '', client_id = '', eligible_for = '' } = ctx.qs;
   let sql = `SELECT v.*, c.name as client_name, c.tier as client_tier, s.number as spot_number, s.type as spot_type
     FROM vessels v JOIN clients c ON v.client_id=c.id
     LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active'
@@ -191,8 +191,23 @@ addRoute('GET', '/api/vessels', async (req, res, ctx) => {
   const a = [];
   if (search)    { sql += ' AND (v.name LIKE ? OR v.registration LIKE ? OR c.name LIKE ?)'; a.push(`%${search}%`, `%${search}%`, `%${search}%`); }
   if (client_id) { sql += ' AND v.client_id=?'; a.push(client_id); }
-  const rows = dbAll(sql + ' ORDER BY v.name', a);
-  sendJson(res, rows.map(r => ({ ...r, vessel_status: vesselStatus(r.id, r.spot_type) })));
+  let rows = dbAll(sql + ' ORDER BY v.name', a);
+  rows = rows.map(r => ({ ...r, vessel_status: vesselStatus(r.id, r.spot_type) }));
+  // Filter by operation eligibility
+  if (eligible_for === 'descida') {
+    // Can descida: vessel is NOT in water (last completed op ≠ descida)
+    rows = rows.filter(r => r.vessel_status !== 'Na água');
+    // Also exclude vessels with an active queue op
+    rows = rows.filter(r => !dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id]));
+  } else if (eligible_for === 'subida') {
+    // Can subida: vessel IS in water (last completed op = descida)
+    rows = rows.filter(r => r.vessel_status === 'Na água');
+    rows = rows.filter(r => !dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id]));
+  } else if (eligible_for === 'atracacao') {
+    // Atracação: no sequence restriction, just no active op
+    rows = rows.filter(r => !dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id]));
+  }
+  sendJson(res, rows);
 });
 addRoute('GET', '/api/vessels/:id', async (req, res, ctx) => {
   const v = dbGet(`SELECT v.*, c.name as client_name, s.type as spot_type FROM vessels v JOIN clients c ON v.client_id=c.id LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active' LEFT JOIN spots s ON ct.spot_id=s.id WHERE v.id=?`, [ctx.params.id]);
