@@ -416,6 +416,29 @@ addRoute('PUT', '/api/store/orders/:id/delivery', async (req, res, ctx) => {
   dbRun(`UPDATE store_orders SET ${updates.join(',')} WHERE id=?`, params);
   sendJson(res, { ok: true });
 });
+addRoute('GET', '/api/store/stats', async (req, res) => {
+  const td = todayStr();
+  const g1 = (sql, a=[]) => dbGet(sql, a);
+  const vendas_hoje   = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND DATE(created_at)=?`,[td])?.v||0;
+  const receita_hoje  = g1(`SELECT COALESCE(SUM(total),0) as v FROM store_orders WHERE status='paid' AND DATE(created_at)=?`,[td])?.v||0;
+  const aguardando    = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='pending_payment'`)?.v||0;
+  const preparando    = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND delivery_status='preparando'`)?.v||0;
+  const entregando    = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND delivery_status='entregando'`)?.v||0;
+  const entregue_hoje = g1(`SELECT COUNT(*) as v FROM store_orders WHERE delivery_status='entregue' AND DATE(created_at)=?`,[td])?.v||0;
+  const estoque_baixo = g1(`SELECT COUNT(*) as v FROM store_items WHERE active=1 AND stock<=min_stock`)?.v||0;
+  const abertos       = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='open'`)?.v||0;
+  const ticket_medio  = vendas_hoje>0 ? receita_hoje/vendas_hoje : 0;
+
+  const parse = rows => { for (const r of rows) { try { r.items=JSON.parse(r.items); } catch{} } return rows; };
+  const pipeBase = `SELECT o.*,c.name as client_name FROM store_orders o LEFT JOIN clients c ON o.client_id=c.id WHERE `;
+  const pipeline_aguardando = parse(dbAll(pipeBase+`o.status='pending_payment' ORDER BY o.created_at ASC LIMIT 10`));
+  const pipeline_preparando = parse(dbAll(pipeBase+`o.status='paid' AND o.delivery_status='preparando' ORDER BY o.created_at ASC LIMIT 10`));
+  const pipeline_entregando = parse(dbAll(pipeBase+`o.status='paid' AND o.delivery_status='entregando' ORDER BY o.created_at ASC LIMIT 10`));
+  const pipeline_entregue   = parse(dbAll(pipeBase+`o.delivery_status='entregue' AND DATE(o.created_at)=? ORDER BY o.created_at DESC LIMIT 10`,[td]));
+  const recent = parse(dbAll(`SELECT o.*,c.name as client_name FROM store_orders o LEFT JOIN clients c ON o.client_id=c.id WHERE o.status='paid' ORDER BY o.created_at DESC LIMIT 8`));
+  const vendas_semana = dbAll(`SELECT DATE(created_at) as day,COUNT(*) as count,COALESCE(SUM(total),0) as total FROM store_orders WHERE status='paid' AND DATE(created_at)>=? GROUP BY day ORDER BY day`,[daysAgo(6)]);
+  sendJson(res,{vendas_hoje,receita_hoje,aguardando,preparando,entregando,entregue_hoje,estoque_baixo,abertos,ticket_medio,pipeline_aguardando,pipeline_preparando,pipeline_entregando,pipeline_entregue,recent,vendas_semana});
+});
 addRoute('GET', '/api/store/pix-config', async (req, res) => {
   sendJson(res, dbGet(`SELECT * FROM store_pix_config WHERE active=1 ORDER BY id DESC`) || {});
 });

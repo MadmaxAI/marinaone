@@ -202,6 +202,22 @@ textarea{resize:vertical;min-height:72px}
 .fin-month-amount{font-size:12px;font-weight:700;color:var(--text)}
 .badge-orange{background:rgba(249,115,22,.15);color:#fb923c}
 .delivery-flow{display:flex;flex-direction:column;gap:4px}
+/* STORE PIPELINE */
+.pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+@media(max-width:900px){.pipeline{grid-template-columns:1fr 1fr}}
+.pipeline-col{background:var(--surface2);border-radius:10px;padding:12px;border:1px solid var(--border);min-height:80px}
+.pipeline-col-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.pipeline-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;transition:.15s;cursor:default}
+.pipeline-card:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.pipeline-card .pc-client{font-weight:600;font-size:13px;margin-bottom:3px;color:var(--text)}
+.pipeline-card .pc-items{color:var(--text3);font-size:11px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pipeline-card .pc-footer{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pipeline-card .pc-total{font-weight:700;color:var(--success);font-size:13px}
+.pipeline-card .pc-time{font-size:10px;color:var(--text3)}
+.pipeline-empty{text-align:center;padding:16px 8px;color:var(--text3);font-size:12px}
+/* STORE GESTAO */
+.gestao-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.gestao-section-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 </style>
 </head>
 <body>
@@ -1169,26 +1185,129 @@ async function saveCharge() {
 
 // ── PAGE: STORE ───────────────────────────────────────
 let cart = [];
+let _storeTab = 'dashboard';
 pages.store = async () => {
   cart = [];
   setContent(`
-  <div class="tabs">
-    <div class="tab active" onclick="showStoreTab('pdv',this)">🛒 PDV</div>
-    <div class="tab" onclick="showStoreTab('items',this)">📦 Estoque</div>
-    <div class="tab" onclick="showStoreTab('orders',this)">📋 Pedidos</div>
-    <div class="tab" onclick="showStoreTab('pix',this)">💳 Config PIX</div>
+  <div class="tabs" id="store-tabs">
+    <div class="tab${_storeTab==='dashboard'?' active':''}" onclick="showStoreTab('dashboard',this)">📊 Dashboard</div>
+    <div class="tab${_storeTab==='pdv'?' active':''}" onclick="showStoreTab('pdv',this)">🛒 PDV</div>
+    <div class="tab${_storeTab==='orders'?' active':''}" onclick="showStoreTab('orders',this)">📋 Pedidos</div>
+    <div class="tab${_storeTab==='items'?' active':''}" onclick="showStoreTab('items',this)">📦 Estoque</div>
+    <div class="tab${_storeTab==='gestao'?' active':''}" onclick="showStoreTab('gestao',this)">⚙️ Gestão</div>
   </div>
   <div id="store-content"></div>`);
-  showStoreTab('pdv', document.querySelector('.tab.active'));
+  const activeEl = document.querySelector('#store-tabs .tab.active') || document.querySelector('#store-tabs .tab');
+  showStoreTab(_storeTab, activeEl);
 };
 
 async function showStoreTab(tab, el) {
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  if (tab==='pdv') await renderPDV();
-  else if (tab==='items') await renderStoreItems();
+  _storeTab = tab;
+  document.querySelectorAll('#store-tabs .tab').forEach(t=>t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (tab==='dashboard') await renderStoreDashboard();
+  else if (tab==='pdv') await renderPDV();
   else if (tab==='orders') await renderOrders();
-  else if (tab==='pix') await renderPixConfig();
+  else if (tab==='items') await renderStoreItems();
+  else if (tab==='gestao') await renderStoreGestao();
+}
+
+// ── STORE DASHBOARD ───────────────────────────────────
+async function renderStoreDashboard() {
+  document.getElementById('store-content').innerHTML = '<div class="spinner"></div>';
+  const s = await api('GET','/store/stats') || {};
+
+  const kpiRow = [
+    {label:'Vendas Hoje',      val: s.vendas_hoje||0,        sub:`Ticket médio: ${fmt(s.ticket_medio||0)}`, cls:'green',  icon:'🛒'},
+    {label:'Receita Hoje',     val: fmt(s.receita_hoje||0),  sub:'Vendas pagas hoje',                       cls:'',       icon:'💰'},
+    {label:'Aguard. Pgto',     val: s.aguardando||0,         sub:'Enviados via WhatsApp',                   cls:'yellow', icon:'📲'},
+    {label:'Em Preparo',       val: s.preparando||0,         sub:'Pedidos sendo preparados',                cls:'purple', icon:'🍳'},
+    {label:'Em Entrega',       val: s.entregando||0,         sub:'A caminho do cliente',                    cls:'',       icon:'🛵'},
+    {label:'Entregues Hoje',   val: s.entregue_hoje||0,      sub:'Concluídos hoje',                         cls:'green',  icon:'✅'},
+  ].map(k=>`<div class="kpi ${k.cls}"><div class="kpi-label">${k.label}</div><div class="kpi-value" style="font-size:22px">${k.val}</div><div class="kpi-sub">${k.sub}</div><span class="kpi-icon">${k.icon}</span></div>`).join('');
+
+  const pcCard = (o) => {
+    const items = Array.isArray(o.items) ? o.items.map(i=>`${i.name}×${i.qty}`).join(', ') : String(o.items||'');
+    const ago = o.created_at ? fmtDT(o.created_at) : '';
+    return `<div class="pipeline-card">
+      <div class="pc-client">${o.client_name||'Balcão'} <span style="font-size:10px;color:var(--text3)">#${o.id}</span></div>
+      <div class="pc-items" title="${items}">${items}</div>
+      <div class="pc-footer"><span class="pc-total">${fmt(o.total)}</span><span class="pc-time">${ago}</span></div>
+    </div>`;
+  };
+
+  const colAg  = (s.pipeline_aguardando||[]).map(pcCard).join('')||'<div class="pipeline-empty">Nenhum</div>';
+  const colPr  = (s.pipeline_preparando||[]).map(pcCard).join('')||'<div class="pipeline-empty">Nenhum</div>';
+  const colEn  = (s.pipeline_entregando||[]).map(pcCard).join('')||'<div class="pipeline-empty">Nenhum</div>';
+  const colOk  = (s.pipeline_entregue||[]).map(pcCard).join('')||'<div class="pipeline-empty">Nenhum</div>';
+
+  const recentRows = (s.recent||[]).map(o=>{
+    const items = Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):String(o.items||'');
+    return `<tr>
+      <td>${fmtDT(o.created_at)}</td>
+      <td>${o.client_name||'Balcão'}</td>
+      <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${items}</td>
+      <td class="text-success font-bold">${fmt(o.total)}</td>
+      <td>${o.payment_method?`<span class="badge badge-gray">${o.payment_method}</span>`:'—'}</td>
+      <td>${o.delivery_status?`<span class="badge badge-info">${o.delivery_status}</span>`:statusBadge(o.status)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Sem vendas ainda</td></tr>';
+
+  const semana = s.vendas_semana||[];
+  const chartLabels = semana.map(d=>d.day.slice(5));
+  const chartData   = semana.map(d=>d.total);
+
+  document.getElementById('store-content').innerHTML = `
+  <div class="grid" style="grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">${kpiRow}</div>
+
+  <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:15px;font-weight:700;color:var(--text)">🔄 Pipeline de Pedidos</div>
+    <button class="btn btn-ghost btn-sm" onclick="renderStoreDashboard()">↻ Atualizar</button>
+  </div>
+  <div class="pipeline">
+    <div class="pipeline-col">
+      <div class="pipeline-col-title"><span style="color:var(--warning)">📲</span> Aguard. Pgto <span class="badge badge-warning" style="margin-left:auto">${(s.pipeline_aguardando||[]).length}</span></div>
+      ${colAg}
+    </div>
+    <div class="pipeline-col">
+      <div class="pipeline-col-title"><span style="color:var(--accent2)">🍳</span> Em Preparo <span class="badge badge-purple" style="margin-left:auto">${(s.pipeline_preparando||[]).length}</span></div>
+      ${colPr}
+    </div>
+    <div class="pipeline-col">
+      <div class="pipeline-col-title"><span style="color:#fb923c">🛵</span> Em Entrega <span class="badge badge-orange" style="margin-left:auto">${(s.pipeline_entregando||[]).length}</span></div>
+      ${colEn}
+    </div>
+    <div class="pipeline-col">
+      <div class="pipeline-col-title"><span style="color:var(--success)">✅</span> Entregue Hoje <span class="badge badge-success" style="margin-left:auto">${(s.pipeline_entregue||[]).length}</span></div>
+      ${colOk}
+    </div>
+  </div>
+
+  <div class="grid g2 mb-2">
+    <div class="card">
+      <div class="card-title mb-2">📈 Receita — Últimos 7 Dias</div>
+      <canvas id="store-week-chart" height="140"></canvas>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:16px 20px 12px;font-size:14px;font-weight:600">🕐 Últimas Vendas</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Data</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pgto</th><th>Status</th></tr></thead>
+        <tbody>${recentRows}</tbody>
+      </table></div>
+    </div>
+  </div>
+
+  ${s.estoque_baixo>0?`<div class="alert-item warning" style="margin-bottom:0"><span class="alert-icon">⚠️</span><div class="alert-content"><div class="alert-msg font-bold">${s.estoque_baixo} item(ns) com estoque abaixo do mínimo</div><div class="alert-meta"><a href="#" onclick="showStoreTab('items',document.querySelectorAll('#store-tabs .tab')[3])" style="color:var(--warning)">Ver estoque →</a></div></div></div>`:''}
+  `;
+
+  if (chartData.length) {
+    if (pageCharts.storeWeek) { pageCharts.storeWeek.destroy(); delete pageCharts.storeWeek; }
+    pageCharts.storeWeek = new Chart(document.getElementById('store-week-chart'), {
+      type:'bar',
+      data:{labels:chartLabels,datasets:[{label:'Receita',data:chartData,backgroundColor:'rgba(16,185,129,.7)',borderColor:'#10b981',borderRadius:6}]},
+      options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}
+    });
+  }
 }
 
 async function renderPDV() {
@@ -1461,28 +1580,82 @@ async function orderDelivery(id, body) {
   renderOrders(window._ordersFilter);
 }
 
-async function renderPixConfig() {
-  const cfg = await api('GET','/store/pix-config');
+async function renderStoreGestao() {
+  const cfg = await api('GET','/store/pix-config') || {};
+  const stats = await api('GET','/store/stats') || {};
   document.getElementById('store-content').innerHTML = `
-  <div class="card" style="max-width:500px">
-    <div class="card-title mb-2">💳 Configuração PIX</div>
-    <div class="form-group mb-2"><label>Chave PIX *</label><input id="pix-key" value="${cfg?.key||''}"></div>
-    <div class="form-group mb-2"><label>Tipo de Chave</label>
-      <select id="pix-type">
-        ${['cpf','cnpj','email','telefone','aleatoria'].map(t=>`<option value="${t}" ${cfg?.key_type===t?'selected':''}>${t}</option>`).join('')}
-      </select>
+  <div style="max-width:700px">
+
+    <div class="gestao-section">
+      <div class="gestao-section-title">💳 Configuração PIX</div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Chave PIX *</label><input id="pix-key" value="${cfg.key||''}"></div>
+        <div class="form-group"><label>Tipo de Chave</label>
+          <select id="pix-type">${['cpf','cnpj','email','telefone','aleatoria'].map(t=>`<option value="${t}" ${cfg.key_type===t?'selected':''}>${t}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Nome do Recebedor *</label><input id="pix-name" value="${cfg.merchant_name||''}"></div>
+        <div class="form-group"><label>Cidade *</label><input id="pix-city" value="${cfg.city||''}"></div>
+      </div>
+      ${cfg.key?`<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
+        <span style="color:var(--success)">✅</span> PIX ativo: <strong>${cfg.key}</strong> (${cfg.key_type}) — ${cfg.merchant_name}, ${cfg.city}
+      </div>`:'<div style="background:rgba(245,158,11,.1);border:1px solid var(--warning);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--warning)">⚠️ PIX não configurado — pagamentos via WhatsApp não funcionarão sem configuração</div>'}
+      <div class="form-actions" style="margin-top:0;padding-top:0;border-top:none;justify-content:flex-start">
+        <button class="btn btn-primary" onclick="savePixConfig()">💾 Salvar Configuração PIX</button>
+        ${cfg.key?`<button class="btn btn-ghost" onclick="testPixQR()">🧪 Testar QR Code</button>`:''}
+      </div>
     </div>
-    <div class="form-group mb-2"><label>Nome do Recebedor *</label><input id="pix-name" value="${cfg?.merchant_name||''}"></div>
-    <div class="form-group mb-2"><label>Cidade *</label><input id="pix-city" value="${cfg?.city||''}"></div>
-    <div class="form-actions"><button class="btn btn-primary" onclick="savePixConfig()">💾 Salvar Configuração PIX</button></div>
+
+    <div class="gestao-section">
+      <div class="gestao-section-title">📊 Resumo Operacional</div>
+      <div class="grid g3" style="gap:10px">
+        <div style="background:var(--surface2);border-radius:8px;padding:12px;border:1px solid var(--border)">
+          <div class="text-xs text-muted mb-1">Pedidos Abertos</div>
+          <div class="font-bold text-warning" style="font-size:20px">${stats.abertos||0}</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:12px;border:1px solid var(--border)">
+          <div class="text-xs text-muted mb-1">Estoque Baixo</div>
+          <div class="font-bold ${(stats.estoque_baixo||0)>0?'text-danger':'text-success'}" style="font-size:20px">${stats.estoque_baixo||0} itens</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:12px;border:1px solid var(--border)">
+          <div class="text-xs text-muted mb-1">Vendas Hoje</div>
+          <div class="font-bold text-success" style="font-size:20px">${stats.vendas_hoje||0}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gestao-section">
+      <div class="gestao-section-title">⚙️ Ações Rápidas</div>
+      <div class="flex gap-2" style="flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="showStoreTab('items',document.querySelectorAll('#store-tabs .tab')[3])">📦 Gerenciar Estoque</button>
+        <button class="btn btn-ghost" onclick="showStoreTab('orders',document.querySelectorAll('#store-tabs .tab')[2])">📋 Ver Todos os Pedidos</button>
+        <button class="btn btn-ghost" onclick="showStoreTab('dashboard',document.querySelectorAll('#store-tabs .tab')[0])">📊 Dashboard</button>
+      </div>
+    </div>
   </div>`;
 }
 
 async function savePixConfig() {
   const body = {key:document.getElementById('pix-key').value,key_type:document.getElementById('pix-type').value,merchant_name:document.getElementById('pix-name').value,city:document.getElementById('pix-city').value};
-  if (!body.key||!body.merchant_name) { toast('Preencha todos os campos','error'); return; }
+  if (!body.key||!body.merchant_name) { toast('Preencha chave PIX e nome do recebedor','error'); return; }
   await api('POST','/store/pix-config',body);
-  toast('Configuração PIX salva!');
+  toast('Configuração PIX salva!'); renderStoreGestao();
+}
+
+async function testPixQR() {
+  const pix = await api('POST','/store/pix-qrcode',{amount:1.00});
+  if (!pix||!pix.payload) { toast('Erro ao gerar QR Code','error'); return; }
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pix.payload)}`;
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">🧪 Teste PIX — R$ 1,00</div>
+    <div style="text-align:center;padding:16px">
+      <img src="${qrUrl}" style="border-radius:8px;width:180px;height:180px;margin-bottom:12px">
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;word-break:break-all;font-family:monospace;font-size:10px;color:var(--text2);margin-bottom:8px">${pix.payload}</div>
+      <div style="font-size:11px;color:var(--text3)">TXID: ${pix.txid}</div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" onclick="closeModalForce()">Fechar</button></div>
+  </div>`);
 }
 
 function filterPDVItems() {
