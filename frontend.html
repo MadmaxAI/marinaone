@@ -2045,9 +2045,10 @@ async function renderStoreDashboard() {
   `;
 
   // Load stock summary async (non-blocking)
-  api('GET','/store/stock-stats').then(ss => {
+  api('GET','/store/stock-stats').then(raw => {
     const el = document.getElementById('dash-stock-section');
-    if (!el || !ss) return;
+    if (!el) return;
+    const ss = { total_itens:0, total_skus_zero:0, total_skus_baixo:0, total_skus_ok:0, valor_custo:0, valor_venda:0, criticos:[], ...(raw||{}) };
     const urgBadgeSmall = i => i.stock <= 0
       ? `<span class="badge badge-danger">Zerado</span>`
       : `<span class="badge badge-warning">Baixo</span>`;
@@ -2271,10 +2272,17 @@ const CAT_ICONS = { manutencao:'🔧', equipamento:'⚓', bebida:'🥤', aliment
 
 async function renderStoreItems() {
   document.getElementById('store-content').innerHTML = '<div class="spinner"></div>';
-  const [items, ss] = await Promise.all([
+  const [items, ssRaw] = await Promise.all([
     api('GET','/store/items'),
     api('GET','/store/stock-stats'),
   ]);
+  // Fallback so nothing renders as "undefined"
+  const ss = {
+    total_itens:0, total_skus_zero:0, total_skus_baixo:0, total_skus_ok:0,
+    valor_custo:0, valor_venda:0, margem_potencial:0, cobertura_media:null,
+    por_categoria:[], top_vendidos:[], criticos:[],
+    ...(ssRaw||{})
+  };
 
   const urgColor = i => i.stock <= 0 ? 'var(--danger)' : i.stock <= i.min_stock ? 'var(--warning)' : 'var(--success)';
   const urgBadge = i => i.stock <= 0
@@ -2712,35 +2720,42 @@ function filterPDVItems() {
 
 // ── PAGE: MAINTENANCE ─────────────────────────────────
 pages.maintenance = async () => {
-  const items = await api('GET','/maintenance');
-  const vessels = await api('GET','/vessels');
-  const counts = {open:0,in_progress:0,completed:0,urgent:0};
-  (items||[]).forEach(m=>{
-    if (m.status==='open') counts.open++;
+  const allItems = await api('GET','/maintenance') || [];
+  const vessels  = await api('GET','/vessels');
+  const counts   = {open:0,in_progress:0,completed:0,urgent:0};
+  allItems.forEach(m => {
+    if (m.status==='open')        counts.open++;
     if (m.status==='in_progress') counts.in_progress++;
-    if (m.status==='completed') counts.completed++;
-    if (m.priority==='urgent') counts.urgent++;
+    if (m.status==='completed')   counts.completed++;
+    if (m.priority==='urgent')    counts.urgent++;
   });
   const _maintFilter = window._maintFilter || '';
+  // Apply active filter to displayed rows
+  let displayItems = allItems;
+  if (_maintFilter === 'urgent') displayItems = allItems.filter(m => m.priority === 'urgent');
+  else if (_maintFilter)         displayItems = allItems.filter(m => m.status === _maintFilter);
+
   setContent(`
-  <div class="grid g4 mb-2">
-    <div class="kpi ${_maintFilter===''?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('',this)" title="Todas as OS">
-      <div class="kpi-label">Total</div><div class="kpi-value">${(items||[]).length}</div><div class="kpi-sub">todas as OS</div><span class="kpi-icon">🔧</span></div>
-    <div class="kpi ${_maintFilter==='open'?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('open',this)" title="OS Abertas">
+  <div class="grid g4 mb-2" id="maint-kpis">
+    <div class="kpi clickable ${_maintFilter===''?'kpi-active':''}" onclick="filterMaintenanceKpi('')">
+      <div class="kpi-label">Total</div><div class="kpi-value">${allItems.length}</div><div class="kpi-sub">todas as OS</div><span class="kpi-icon">🔧</span></div>
+    <div class="kpi clickable ${_maintFilter==='open'?'kpi-active':''}" onclick="filterMaintenanceKpi('open')">
       <div class="kpi-label">Abertas</div><div class="kpi-value">${counts.open}</div><div class="kpi-sub">aguardando início</div><span class="kpi-icon">📋</span></div>
-    <div class="kpi yellow ${_maintFilter==='in_progress'?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('in_progress',this)" title="Em Andamento">
+    <div class="kpi yellow clickable ${_maintFilter==='in_progress'?'kpi-active':''}" onclick="filterMaintenanceKpi('in_progress')">
       <div class="kpi-label">Em Andamento</div><div class="kpi-value">${counts.in_progress}</div><div class="kpi-sub">em execução</div><span class="kpi-icon">⚙️</span></div>
-    <div class="kpi green ${_maintFilter==='completed'?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('completed',this)" title="Concluídas">
+    <div class="kpi green clickable ${_maintFilter==='completed'?'kpi-active':''}" onclick="filterMaintenanceKpi('completed')">
       <div class="kpi-label">Concluídas</div><div class="kpi-value">${counts.completed}</div><div class="kpi-sub">finalizadas</div><span class="kpi-icon">✅</span></div>
-    <div class="kpi red ${_maintFilter==='urgent'?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('urgent',this)" title="Urgentes">
+    <div class="kpi red clickable ${_maintFilter==='urgent'?'kpi-active':''}" onclick="filterMaintenanceKpi('urgent')">
       <div class="kpi-label">Urgentes</div><div class="kpi-value">${counts.urgent}</div><div class="kpi-sub">alta prioridade</div><span class="kpi-icon">🚨</span></div>
   </div>
-  <div class="flex justify-end mb-2">
+  <div class="flex justify-between items-center mb-2">
+    <div style="font-size:12px;color:var(--text3)">${displayItems.length} OS${_maintFilter?' · filtro ativo':''}
+      ${_maintFilter?`<button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="filterMaintenanceKpi('')">✕ Limpar filtro</button>`:''}</div>
     <button class="btn btn-primary" onclick="openMaintenanceModal(null,${JSON.stringify(vessels||[]).replace(/"/g,'&quot;')})">+ Nova OS</button>
   </div>
   <div class="card"><div class="table-wrap"><table>
     <thead><tr><th>OS</th><th>Embarcação</th><th>Tipo</th><th>Descrição</th><th>Prioridade</th><th>Agendado</th><th>Custo</th><th>Status</th><th>Ações</th></tr></thead>
-    <tbody id="maint-tbody">${renderMaintenanceRows(items||[])}</tbody>
+    <tbody id="maint-tbody">${renderMaintenanceRows(displayItems)}</tbody>
   </table></div></div>`);
 };
 
@@ -2770,14 +2785,6 @@ async function filterMaintenance(status, el) {
 }
 async function filterMaintenanceKpi(filter) {
   window._maintFilter = filter;
-  const all = await api('GET','/maintenance') || [];
-  let data = all;
-  if (filter === 'urgent') data = all.filter(m => m.priority === 'urgent');
-  else if (filter) data = all.filter(m => m.status === filter);
-  document.getElementById('maint-tbody').innerHTML = renderMaintenanceRows(data);
-  // Update active KPI highlights
-  document.querySelectorAll('.kpi-active').forEach(el => el.classList.remove('kpi-active'));
-  // Re-render to show active state properly
   pages.maintenance();
 }
 
@@ -3133,12 +3140,14 @@ async function renderAlertsPage(filter) {
   const topTypes = Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
   // Filter
+  const SEVERITY_FILTERS = ['unread','read','warning','error','info','all'];
   let filtered = allAlerts;
-  if (_alertsFilter === 'unread')   filtered = allAlerts.filter(a => !a.read_at);
-  else if (_alertsFilter === 'read')    filtered = allAlerts.filter(a => !!a.read_at);
-  else if (_alertsFilter === 'warning') filtered = allAlerts.filter(a => a.severity==='warning');
-  else if (_alertsFilter === 'error')   filtered = allAlerts.filter(a => a.severity==='error');
-  else if (_alertsFilter === 'info')    filtered = allAlerts.filter(a => a.severity==='info');
+  if (_alertsFilter === 'unread')        filtered = allAlerts.filter(a => !a.read_at);
+  else if (_alertsFilter === 'read')     filtered = allAlerts.filter(a => !!a.read_at);
+  else if (_alertsFilter === 'warning')  filtered = allAlerts.filter(a => a.severity==='warning');
+  else if (_alertsFilter === 'error')    filtered = allAlerts.filter(a => a.severity==='error');
+  else if (_alertsFilter === 'info')     filtered = allAlerts.filter(a => a.severity==='info');
+  else if (_alertsFilter !== 'all')      filtered = allAlerts.filter(a => a.type === _alertsFilter);
 
   // Unified clickable KPI-filter cards (no separate tabs bar)
   const kpiCards = [
@@ -3164,13 +3173,14 @@ async function renderAlertsPage(filter) {
   ${topTypes.length ? `
   <div class="card mb-2" style="padding:10px 16px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Tipos:</span>
-      ${topTypes.map(([t,c])=>`<span style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px"><strong>${c}</strong> ${t}</span>`).join('')}
+      <span style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Filtrar por tipo:</span>
+      ${topTypes.map(([t,c])=>`<span onclick="renderAlertsPage('${t}')" style="cursor:pointer;background:${_alertsFilter===t?'var(--accent)':'var(--surface2)'};color:${_alertsFilter===t?'#fff':'inherit'};border:1px solid ${_alertsFilter===t?'var(--accent)':'var(--border)'};border-radius:20px;padding:3px 10px;font-size:12px;transition:background .15s" title="Filtrar por tipo: ${t}"><strong>${c}</strong> ${t}</span>`).join('')}
+      ${!['all','unread','read','warning','error','info'].includes(_alertsFilter)?`<span onclick="renderAlertsPage('all')" style="cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;color:var(--text3)">✕ limpar</span>`:''}
     </div>
   </div>` : ''}
 
   <div class="flex justify-between items-center mb-2">
-    <div style="font-size:12px;color:var(--text3)">${filtered.length} alerta${filtered.length!==1?'s':''} · <strong style="color:var(--text)">${kpiCards.find(c=>c.v===_alertsFilter)?.label||'Todos'}</strong></div>
+    <div style="font-size:12px;color:var(--text3)">${filtered.length} alerta${filtered.length!==1?'s':''} · <strong style="color:var(--text)">${kpiCards.find(c=>c.v===_alertsFilter)?.label||'Tipo: '+_alertsFilter}</strong></div>
     <button class="btn btn-ghost btn-sm" onclick="markAllRead()">✓ Marcar todos como lidos</button>
   </div>
   <div id="alerts-list">${renderAlerts(filtered)}</div>`);
