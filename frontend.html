@@ -1478,8 +1478,16 @@ async function confirmSale() {
   const payment = document.getElementById('pdv-payment')?.value || 'dinheiro';
   const client_id = document.getElementById('pdv-client')?.value;
   const vessel_id = document.getElementById('pdv-vessel')?.value;
-  const r = await api('POST','/store/orders',{items:cart,client_id:client_id?parseInt(client_id):null,vessel_id:vessel_id?parseInt(vessel_id):null,payment_method:payment,status:'paid'});
-  if (r && r.id) { toast(`Venda finalizada! Total: ${fmt(r.total)}`); cart=[]; pages.store(); }
+  // Pagamento no balcão = já pago → entra direto em Em Preparo
+  const r = await api('POST','/store/orders',{
+    items: cart,
+    client_id: client_id ? parseInt(client_id) : null,
+    vessel_id:  vessel_id  ? parseInt(vessel_id)  : null,
+    payment_method: payment,
+    status: 'paid',
+    delivery_status: 'preparando'
+  });
+  if (r && r.id) { toast(`Venda finalizada — Em Preparo! Total: ${fmt(r.total)}`); cart=[]; pages.store(); }
 }
 
 async function renderStoreItems() {
@@ -1547,57 +1555,110 @@ async function deleteItem(id) {
   toast('Item removido'); showStoreTab('items', document.querySelectorAll('.tab')[1]);
 }
 
-async function renderOrders(statusFilter) {
-  statusFilter = statusFilter || window._ordersFilter || 'all';
-  window._ordersFilter = statusFilter;
-  const qs = (statusFilter && statusFilter!=='all') ? `?status=${statusFilter}` : '';
-  const orders = await api('GET','/store/orders'+qs);
-  const filterTabs = [
-    ['all','Todos'],['paid','Pagos'],['pending_payment','Aguard. Pgto'],['open','Abertos']
-  ].map(([v,l])=>`<button class="tab${statusFilter===v?' active':''}" onclick="renderOrders('${v}')">${l}</button>`).join('');
-  function deliveryCell(o) {
-    const btns = [];
-    if (o.status==='pending_payment') {
-      return `<div class="delivery-flow"><span class="badge badge-warning">Aguard. Pgto</span><button class="btn btn-success btn-sm" onclick="orderDelivery(${o.id},{status:'paid',delivery_status:'preparando'})">✅ Confirmar Comprovante</button></div>`;
-    }
-    if (o.status==='paid') {
-      if (!o.delivery_status) {
-        return `<button class="btn btn-ghost btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'preparando'})">▶ Iniciar Preparo</button>`;
-      }
-      if (o.delivery_status==='preparando') {
-        return `<div class="delivery-flow"><span class="badge badge-warning">🍳 Preparando</span><button class="btn btn-primary btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'entregando'})">🚀 Saiu p/ Entrega</button></div>`;
-      }
-      if (o.delivery_status==='entregando') {
-        return `<div class="delivery-flow"><span class="badge badge-orange">🛵 Em Entrega</span><button class="btn btn-success btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'entregue'})">✅ Entregue</button></div>`;
-      }
-      if (o.delivery_status==='entregue') {
-        return `<span class="badge badge-success">✅ Entregue</span>`;
-      }
-    }
-    return statusBadge(o.status);
+// Retorna o estágio unificado de um pedido como string interna
+function orderStage(o) {
+  if (o.status === 'pending_payment')  return 'aguardando';
+  if (o.status === 'paid') {
+    if (o.delivery_status === 'entregue')  return 'entregue';
+    if (o.delivery_status === 'entregando') return 'entregando';
+    return 'preparando'; // null, 'preparando' ou qualquer outro paid
   }
+  return 'aguardando'; // fallback
+}
+
+// Badge visual por estágio
+function orderStageBadge(stage) {
+  const map = {
+    aguardando: `<span class="badge badge-warning">⏳ Aguard. Pagamento</span>`,
+    preparando: `<span class="badge badge-purple">🍳 Em Preparo</span>`,
+    entregando: `<span class="badge badge-orange">🛵 Em Entrega</span>`,
+    entregue:   `<span class="badge badge-success">✅ Entregue</span>`,
+  };
+  return map[stage] || `<span class="badge badge-gray">${stage}</span>`;
+}
+
+async function renderOrders(stageFilter) {
+  stageFilter = stageFilter || window._ordersFilter || 'todos';
+  window._ordersFilter = stageFilter;
+
+  // Busca todos os pedidos (filtramos client-side pelo estágio unificado)
+  const allOrders = await api('GET', '/store/orders') || [];
+
+  const filtered = stageFilter === 'todos' ? allOrders : allOrders.filter(o => orderStage(o) === stageFilter);
+
+  // Contagens por estágio
+  const cnt = {
+    todos:      allOrders.length,
+    aguardando: allOrders.filter(o=>orderStage(o)==='aguardando').length,
+    preparando: allOrders.filter(o=>orderStage(o)==='preparando').length,
+    entregando: allOrders.filter(o=>orderStage(o)==='entregando').length,
+    entregue:   allOrders.filter(o=>orderStage(o)==='entregue').length,
+  };
+
+  const tabDef = [
+    ['todos',      'Todos',              'tab-count-all'],
+    ['aguardando', '⏳ Aguard. Pgto',   'tab-count-pending'],
+    ['preparando', '🍳 Em Preparo',     'tab-count-pending'],
+    ['entregando', '🛵 Em Entrega',     'tab-count-all'],
+    ['entregue',   '✅ Entregue',       'tab-count-paid'],
+  ];
+  const filterTabs = tabDef.map(([v,l,cc])=>`
+    <button class="fin-status-tab${stageFilter===v?' active':''}" onclick="renderOrders('${v}')">
+      ${l} <span class="tab-count ${cc}">${cnt[v]}</span>
+    </button>`).join('');
+
+  function deliveryCell(o) {
+    const stage = orderStage(o);
+    if (stage === 'aguardando') {
+      return `<div class="delivery-flow">
+        ${orderStageBadge('aguardando')}
+        <button class="btn btn-success btn-sm" onclick="orderDelivery(${o.id},{status:'paid',delivery_status:'preparando'})">✅ Confirmar Pagamento</button>
+      </div>`;
+    }
+    if (stage === 'preparando') {
+      return `<div class="delivery-flow">
+        ${orderStageBadge('preparando')}
+        <button class="btn btn-primary btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'entregando'})">🚀 Saiu p/ Entrega</button>
+      </div>`;
+    }
+    if (stage === 'entregando') {
+      return `<div class="delivery-flow">
+        ${orderStageBadge('entregando')}
+        <button class="btn btn-success btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'entregue'})">✅ Confirmar Entrega</button>
+      </div>`;
+    }
+    if (stage === 'entregue') {
+      return orderStageBadge('entregue');
+    }
+    return orderStageBadge(stage);
+  }
+
   document.getElementById('store-content').innerHTML = `
-  <div class="flex justify-between mb-2" style="align-items:center">
-    <div class="tabs" style="margin-bottom:0">${filterTabs}</div>
+  <div class="flex justify-between mb-2" style="align-items:center;flex-wrap:wrap;gap:8px">
+    <div class="fin-status-tabs">${filterTabs}</div>
     <button class="btn btn-ghost btn-sm" onclick="renderOrders(window._ordersFilter)">↻ Atualizar</button>
   </div>
   <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Data</th><th>Cliente</th><th>Embarcação</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Status / Entrega</th></tr></thead>
-    <tbody>${(orders||[]).map(o=>`<tr>
+    <thead><tr>
+      <th>Data</th><th>Cliente</th><th>Embarcação</th><th>Itens</th>
+      <th>Total</th><th>Pgto</th><th>Etapa / Ação</th>
+    </tr></thead>
+    <tbody>${filtered.map(o=>`<tr>
       <td>${fmtDT(o.created_at)}</td>
-      <td>${o.client_name||'—'}</td>
+      <td>${o.client_name||'<span class="text-muted">Balcão</span>'}</td>
       <td>${o.vessel_name||'—'}</td>
       <td style="max-width:220px;white-space:normal;font-size:12px">${Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):o.items}</td>
       <td class="text-success font-bold">${fmt(o.total)}</td>
       <td>${o.payment_method?`<span class="badge badge-gray">${o.payment_method}</span>`:'—'}</td>
       <td>${deliveryCell(o)}</td>
-    </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Sem pedidos</td></tr>'}
+    </tr>`).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhum pedido nesta etapa</td></tr>`}
     </tbody>
   </table></div></div>`;
 }
 
 async function orderDelivery(id, body) {
-  await api('PUT',`/store/orders/${id}/delivery`,body);
+  await api('PUT',`/store/orders/${id}/delivery`, body);
+  toast('Etapa atualizada!');
   renderOrders(window._ordersFilter);
 }
 
