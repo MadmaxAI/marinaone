@@ -1239,12 +1239,12 @@ async function renderStoreDashboard() {
   const s = await api('GET','/store/stats') || {};
 
   const kpiRow = [
-    {label:'Vendas Hoje',      val: s.vendas_hoje||0,        sub:`Ticket médio: ${fmt(s.ticket_medio||0)}`, cls:'green',  icon:'🛒',  action:"goToOrders('paid')"},
-    {label:'Receita Hoje',     val: fmt(s.receita_hoje||0),  sub:'Vendas pagas hoje',                       cls:'',       icon:'💰',  action:"goToOrders('paid')"},
-    {label:'Aguard. Pgto',     val: s.aguardando||0,         sub:'Enviados via WhatsApp',                   cls:'yellow', icon:'📲',  action:"goToOrders('pending_payment')"},
-    {label:'Em Preparo',       val: s.preparando||0,         sub:'Pedidos sendo preparados',                cls:'purple', icon:'🍳',  action:"goToOrders('paid')"},
-    {label:'Em Entrega',       val: s.entregando||0,         sub:'A caminho do cliente',                    cls:'',       icon:'🛵',  action:"goToOrders('paid')"},
-    {label:'Entregues Hoje',   val: s.entregue_hoje||0,      sub:'Concluídos hoje',                         cls:'green',  icon:'✅',  action:"goToOrders('paid')"},
+    {label:'Vendas Hoje',      val: s.vendas_hoje||0,        sub:`Ticket médio: ${fmt(s.ticket_medio||0)}`, cls:'green',  icon:'🛒',  action:"goToOrders('todos')"},
+    {label:'Receita Hoje',     val: fmt(s.receita_hoje||0),  sub:'Vendas pagas hoje',                       cls:'',       icon:'💰',  action:"goToOrders('todos')"},
+    {label:'Aguard. Pgto',     val: s.aguardando||0,         sub:'Enviados via WhatsApp',                   cls:'yellow', icon:'📲',  action:"goToOrders('aguardando')"},
+    {label:'Em Preparo',       val: s.preparando||0,         sub:'Pedidos sendo preparados',                cls:'purple', icon:'🍳',  action:"goToOrders('preparando')"},
+    {label:'Em Entrega',       val: s.entregando||0,         sub:'A caminho do cliente',                    cls:'',       icon:'🛵',  action:"goToOrders('entregando')"},
+    {label:'Entregues Hoje',   val: s.entregue_hoje||0,      sub:'Concluídos hoje',                         cls:'green',  icon:'✅',  action:"goToOrders('entregue')"},
   ].map(k=>`<div class="kpi ${k.cls} clickable" onclick="${k.action}" title="Ver pedidos"><div class="kpi-label">${k.label}</div><div class="kpi-value" style="font-size:22px">${k.val}</div><div class="kpi-sub">${k.sub}</div><span class="kpi-icon">${k.icon}</span></div>`).join('');
 
   const pcCard = (o, filter) => {
@@ -1257,14 +1257,14 @@ async function renderStoreDashboard() {
     </div>`;
   };
 
-  const colAg  = (s.pipeline_aguardando||[]).map(o=>pcCard(o,'pending_payment')).join('')||'<div class="pipeline-empty">Nenhum</div>';
-  const colPr  = (s.pipeline_preparando||[]).map(o=>pcCard(o,'paid')).join('')||'<div class="pipeline-empty">Nenhum</div>';
-  const colEn  = (s.pipeline_entregando||[]).map(o=>pcCard(o,'paid')).join('')||'<div class="pipeline-empty">Nenhum</div>';
-  const colOk  = (s.pipeline_entregue||[]).map(o=>pcCard(o,'paid')).join('')||'<div class="pipeline-empty">Nenhum</div>';
+  const colAg  = (s.pipeline_aguardando||[]).map(o=>pcCard(o,'aguardando')).join('')||'<div class="pipeline-empty">Nenhum</div>';
+  const colPr  = (s.pipeline_preparando||[]).map(o=>pcCard(o,'preparando')).join('')||'<div class="pipeline-empty">Nenhum</div>';
+  const colEn  = (s.pipeline_entregando||[]).map(o=>pcCard(o,'entregando')).join('')||'<div class="pipeline-empty">Nenhum</div>';
+  const colOk  = (s.pipeline_entregue||[]).map(o=>pcCard(o,'entregue')).join('')||'<div class="pipeline-empty">Nenhum</div>';
 
   const recentRows = (s.recent||[]).map(o=>{
     const items = Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):String(o.items||'');
-    return `<tr class="row-link" onclick="goToOrders('paid')" title="Ver todos os pedidos pagos">
+    return `<tr class="row-link" onclick="goToOrders('todos')" title="Ver todos os pedidos">
       <td>${fmtDT(o.created_at)}</td>
       <td>${o.client_name||'Balcão'}</td>
       <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${items}</td>
@@ -1287,19 +1287,19 @@ async function renderStoreDashboard() {
   </div>
   <div class="pipeline">
     <div class="pipeline-col">
-      <div class="pipeline-col-title" onclick="goToOrders('pending_payment')" title="Ver pedidos aguardando pagamento"><span style="color:var(--warning)">📲</span> Aguard. Pgto <span class="badge badge-warning" style="margin-left:auto">${(s.pipeline_aguardando||[]).length}</span></div>
+      <div class="pipeline-col-title" onclick="goToOrders('aguardando')" title="Ver pedidos aguardando pagamento"><span style="color:var(--warning)">📲</span> Aguard. Pgto <span class="badge badge-warning" style="margin-left:auto">${(s.pipeline_aguardando||[]).length}</span></div>
       ${colAg}
     </div>
     <div class="pipeline-col">
-      <div class="pipeline-col-title" onclick="goToOrders('paid')" title="Ver pedidos em preparo"><span style="color:var(--accent2)">🍳</span> Em Preparo <span class="badge badge-purple" style="margin-left:auto">${(s.pipeline_preparando||[]).length}</span></div>
+      <div class="pipeline-col-title" onclick="goToOrders('preparando')" title="Ver pedidos em preparo"><span style="color:var(--accent2)">🍳</span> Em Preparo <span class="badge badge-purple" style="margin-left:auto">${(s.pipeline_preparando||[]).length}</span></div>
       ${colPr}
     </div>
     <div class="pipeline-col">
-      <div class="pipeline-col-title" onclick="goToOrders('paid')" title="Ver pedidos em entrega"><span style="color:#fb923c">🛵</span> Em Entrega <span class="badge badge-orange" style="margin-left:auto">${(s.pipeline_entregando||[]).length}</span></div>
+      <div class="pipeline-col-title" onclick="goToOrders('entregando')" title="Ver pedidos em entrega"><span style="color:#fb923c">🛵</span> Em Entrega <span class="badge badge-orange" style="margin-left:auto">${(s.pipeline_entregando||[]).length}</span></div>
       ${colEn}
     </div>
     <div class="pipeline-col">
-      <div class="pipeline-col-title" onclick="goToOrders('paid')" title="Ver pedidos entregues"><span style="color:var(--success)">✅</span> Entregue Hoje <span class="badge badge-success" style="margin-left:auto">${(s.pipeline_entregue||[]).length}</span></div>
+      <div class="pipeline-col-title" onclick="goToOrders('entregue')" title="Ver pedidos entregues"><span style="color:var(--success)">✅</span> Entregue Hoje <span class="badge badge-success" style="margin-left:auto">${(s.pipeline_entregue||[]).length}</span></div>
       ${colOk}
     </div>
   </div>
