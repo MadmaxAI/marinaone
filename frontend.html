@@ -1233,17 +1233,117 @@ function renderFinMonths(monthsObj, year) {
 
 function renderChargeRows(charges) {
   if (!charges||!charges.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sem cobranças</td></tr>';
-  return charges.map(c=>`<tr>
+  return charges.map(c=>`<tr class="row-link" onclick="viewChargeDetail(${c.id})" title="Clique para ver detalhes">
     <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
     <td>${c.description}</td>
     <td class="font-bold">${fmt(c.amount)}</td>
     <td>${fmtDate(c.due_date)}</td>
     <td>${c.paid_date?fmtDate(c.paid_date):'—'} ${c.payment_method?'<span class="badge badge-gray">'+c.payment_method+'</span>':''}</td>
     <td>${statusBadge(c.status)}</td>
-    <td><div class="flex gap-2">
+    <td onclick="event.stopPropagation()"><div class="flex gap-2">
       ${c.status!=='paid'?`<button class="btn btn-success btn-sm" onclick="markPaid(${c.id})">✓ Pago</button>`:''}
     </div></td>
   </tr>`).join('');
+}
+
+async function viewChargeDetail(id) {
+  const c = (_allCharges || []).find(x => x.id === id);
+  if (!c) return;
+
+  // Load payment logs for this charge
+  const logs = await api('GET', `/financial/payment-logs?charge_id=${id}`) || [];
+
+  const statusColors = { paid:'var(--success)', pending:'var(--warning)', overdue:'var(--danger)' };
+  const statusLabels = { paid:'✅ Pago', pending:'🕐 Pendente', overdue:'🔴 Vencido' };
+
+  const logsHtml = logs.length ? logs.map(l => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:600;color:var(--success);margin-bottom:4px">💳 ${l.payment_method||'—'} · ${fmt(l.amount)}</div>
+          <div style="font-size:12px;color:var(--text2)">${l.pay_notes||'—'}</div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);text-align:right">
+          <div>${fmtDT(l.created_at)}</div>
+          <div style="margin-top:2px">por <strong style="color:var(--text2)">${l.user_name||l.user_email||'—'}</strong></div>
+        </div>
+      </div>
+      ${l.comprovante_data ? `
+        <div style="margin-top:8px">
+          <button class="btn btn-ghost btn-sm" onclick="viewComprovante(${l.id})">📎 ${l.comprovante_name||'Comprovante'} — ver anexo</button>
+        </div>` : ''}
+    </div>`).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">Nenhum registro de pagamento.</div>';
+
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">📄 Detalhes da Cobrança #${c.id}</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">CLIENTE</div>
+        <div style="font-weight:600">${c.client_name} ${tierBadge(c.client_tier)}</div>
+      </div>
+      <div class="settings-info-box" style="border-left:3px solid ${statusColors[c.status]||'var(--border)'}">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">STATUS</div>
+        <div style="font-weight:700;color:${statusColors[c.status]||'var(--text)'}">${statusLabels[c.status]||c.status}</div>
+      </div>
+    </div>
+
+    <div class="settings-info-box" style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">DESCRIÇÃO</div>
+      <div style="font-weight:500">${c.description||'—'}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">VALOR</div>
+        <div style="font-weight:700;font-size:18px;color:var(--accent)">${fmt(c.amount)}</div>
+      </div>
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">VENCIMENTO</div>
+        <div style="font-weight:600">${fmtDate(c.due_date)}</div>
+      </div>
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">PAGAMENTO</div>
+        <div style="font-weight:600">${c.paid_date ? fmtDate(c.paid_date) : '—'}${c.payment_method ? ' <span class="badge badge-gray">'+c.payment_method+'</span>' : ''}</div>
+      </div>
+    </div>
+
+    ${c.notes ? `<div class="settings-info-box" style="margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">OBSERVAÇÕES</div>
+      <div style="font-size:13px">${c.notes}</div>
+    </div>` : ''}
+
+    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+      🧾 Histórico de Pagamentos (${logs.length})
+    </div>
+    ${logsHtml}
+
+    <div class="form-actions" style="margin-top:20px">
+      ${c.status !== 'paid' ? `<button class="btn btn-success" onclick="closeModalForce();markPaid(${c.id})">✓ Registrar Pagamento</button>` : ''}
+      <button class="btn btn-ghost" onclick="closeModalForce()">Fechar</button>
+    </div>
+  </div>`);
+}
+
+async function viewComprovante(logId) {
+  const data = await api('GET', `/financial/payment-logs/${logId}/comprovante`);
+  if (!data || !data.comprovante_data) { toast('Comprovante não encontrado','error'); return; }
+  const isImg = data.comprovante_data.startsWith('data:image');
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">📎 ${data.comprovante_name||'Comprovante'}</div>
+    <div style="text-align:center;padding:8px 0">
+      ${isImg
+        ? `<img src="${data.comprovante_data}" style="max-width:100%;max-height:60vh;border-radius:8px;border:1px solid var(--border)">`
+        : `<div style="padding:32px;color:var(--text2)">
+             <div style="font-size:40px;margin-bottom:12px">📄</div>
+             <div>${data.comprovante_name}</div>
+             <a href="${data.comprovante_data}" download="${data.comprovante_name}" class="btn btn-primary" style="margin-top:16px;display:inline-block">⬇ Baixar PDF</a>
+           </div>`}
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Fechar</button>
+    </div>
+  </div>`);
 }
 
 function setFinStatus(status, el) {

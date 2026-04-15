@@ -526,7 +526,12 @@ addRoute('PUT', '/api/alerts/:id/unread', async (req, res, ctx) => {
   sendJson(res, { ok: true });
 });
 addRoute('GET', '/api/financial/payment-logs', async (req, res, ctx) => {
-  const logs = dbAll(`SELECT * FROM payment_logs ORDER BY created_at DESC LIMIT 200`);
+  const { charge_id = '' } = ctx.qs;
+  let sql = 'SELECT * FROM payment_logs';
+  const params = [];
+  if (charge_id) { sql += ' WHERE charge_id=?'; params.push(charge_id); }
+  sql += ' ORDER BY created_at DESC LIMIT 200';
+  const logs = dbAll(sql, params);
   // Strip comprovante_data from list (too large), keep name only
   sendJson(res, logs.map(l => ({ ...l, comprovante_data: l.comprovante_data ? '[anexo]' : null })));
 });
