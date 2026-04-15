@@ -402,7 +402,8 @@ function refreshPage() { nav(currentPage); }
 const fmt = n => n == null ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 const fmtNum = n => n == null ? '—' : new Intl.NumberFormat('pt-BR').format(n);
 const fmtDate = s => { if(!s) return '—'; const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('pt-BR'); };
-const fmtDT = s => { if(!s) return '—'; return new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+const fmtDT   = s => { if(!s) return '—'; return new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+const fmtTime = s => { if(!s) return '—'; return new Date(s).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); };
 const tierBadge = t => {
   if(t==='vip') return '<span class="tier-vip">VIP</span>';
   if(t==='gold') return '<span class="tier-gold">GOLD</span>';
@@ -616,18 +617,44 @@ pages.dashboard = async () => {
 };
 
 // ── PAGE: QUEUE ───────────────────────────────────────
+let _queueTab = 'active';
 pages.queue = async () => {
+  if (_queueTab === 'calendar') { await renderQueueCalendar(); return; }
+  if (_queueTab === 'history')  { await renderQueueHistory();  return; }
   const queue = await api('GET', '/queue');
   setContent(`
   <div class="flex justify-between mb-2">
     <div class="tabs">
-      <div class="tab active" onclick="filterQueue('active',this)">Ativa</div>
-      <div class="tab" onclick="filterQueue('history',this)">Histórico</div>
+      <div class="tab ${_queueTab==='active'?'active':''}"   onclick="switchQueueTab('active',this)">Fila Ativa</div>
+      <div class="tab ${_queueTab==='calendar'?'active':''}" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>
+      <div class="tab ${_queueTab==='history'?'active':''}"  onclick="switchQueueTab('history',this)">Histórico</div>
     </div>
     <button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>
   </div>
   <div id="queue-list">${renderQueue(queue||[])}</div>`);
 };
+async function switchQueueTab(tab, el) {
+  _queueTab = tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (tab === 'calendar') await renderQueueCalendar();
+  else if (tab === 'history') await renderQueueHistory();
+  else await pages.queue();
+}
+async function renderQueueHistory() {
+  setContent(`
+  <div class="flex justify-between mb-2">
+    <div class="tabs">
+      <div class="tab" onclick="switchQueueTab('active',this)">Fila Ativa</div>
+      <div class="tab" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>
+      <div class="tab active" onclick="switchQueueTab('history',this)">Histórico</div>
+    </div>
+    <button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>
+  </div>
+  <div id="queue-list"><div class="empty-state"><div class="icon">⏳</div><p>Carregando...</p></div></div>`);
+  const data = await api('GET','/queue/history');
+  document.getElementById('queue-list').innerHTML = renderQueue(data||[]);
+}
 
 const VESSEL_SIZE_LABEL = { pequena:'🚤 Pequena', media:'🛥️ Média', grande:'🛳️ Grande' };
 
@@ -644,12 +671,10 @@ function renderQueue(queue) {
     const canReorder   = q.status === 'waiting' && !inconsistent;
     // Estimated time display
     let timeInfo = '';
-    if (q.status === 'waiting' && q.estimated_start_at) {
-      const est = new Date(q.estimated_start_at);
-      const estEnd = q.estimated_end_at ? new Date(q.estimated_end_at) : null;
-      timeInfo = `<span style="font-size:11px;color:var(--text3);margin-left:4px">· ⏰ Previsão início: <strong>${fmtDT(q.estimated_start_at)}</strong> (~${q.estimated_duration_min}min)</span>`;
+    if (q.status === 'waiting' && q.estimated_start_at && q.estimated_end_at) {
+      timeInfo = `<span style="font-size:11px;color:var(--text3);margin-left:4px">·&nbsp;⏰&nbsp;<strong>Início previsto:</strong>&nbsp;${fmtTime(q.estimated_start_at)}&nbsp;&nbsp;<strong>Término previsto:</strong>&nbsp;${fmtTime(q.estimated_end_at)}&nbsp;<span style="opacity:.7">(~${q.estimated_duration_min}min)</span></span>`;
     } else if (q.status === 'in_progress' && q.estimated_end_at) {
-      timeInfo = `<span style="font-size:11px;color:var(--success);margin-left:4px">· ⏳ Previsão término: <strong>${fmtDT(q.estimated_end_at)}</strong> (~${q.estimated_duration_min}min)</span>`;
+      timeInfo = `<span style="font-size:11px;color:var(--success);margin-left:4px">·&nbsp;⏳&nbsp;<strong>Início:</strong>&nbsp;${fmtTime(q.started_at)}&nbsp;&nbsp;<strong>Término previsto:</strong>&nbsp;${fmtTime(q.estimated_end_at)}&nbsp;<span style="opacity:.7">(~${q.estimated_duration_min}min)</span></span>`;
     }
     return `
   <div class="queue-card" id="qcard-${q.id}" style="border-left:3px solid ${borderColor}${inconsistent?';background:rgba(239,68,68,.05)':q.status==='in_progress'?';background:rgba(34,197,94,.04)':''}">
@@ -729,9 +754,154 @@ async function submitReorderQueue(id, direction) {
   }
 }
 
+async function renderQueueCalendar() {
+  const now = new Date();
+  const todayStr = now.toLocaleDateString('pt-BR', {weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  setContent(`
+  <div class="flex justify-between mb-2">
+    <div class="tabs">
+      <div class="tab" onclick="switchQueueTab('active',this)">Fila Ativa</div>
+      <div class="tab active" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>
+      <div class="tab" onclick="switchQueueTab('history',this)">Histórico</div>
+    </div>
+    <button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>
+  </div>
+  <div id="cal-container"><div class="empty-state"><div class="icon">📅</div><p>Carregando calendário...</p></div></div>`);
+  const cal = await api('GET','/queue/calendar');
+  if (!cal) return;
+  const container = document.getElementById('cal-container');
+  if (!container) return;
+
+  const opColors = { descida:'#3b82f6', subida:'#f59e0b', atracacao:'#8b5cf6', completed_descida:'#93c5fd', completed_subida:'#fcd34d', completed_atracacao:'#c4b5fd', cancelled:'#d1d5db' };
+  const opLabel  = { descida:'⬇ Descida', subida:'⬆ Subida', atracacao:'⚓ Atracação' };
+  const tierColors = { vip:'#f59e0b', gold:'#eab308', silver:'#94a3b8', standard:'#6b7280' };
+
+  // Build unified timeline from done + active ops
+  const allOps = [];
+  for (const op of (cal.done||[])) {
+    if (op.status === 'cancelled') continue; // skip cancelled in calendar
+    const start = op.started_at   ? new Date(op.started_at)   : new Date(op.requested_at);
+    const end   = op.completed_at ? new Date(op.completed_at) : new Date(start.getTime() + (op.estimated_duration_min||30)*60000);
+    allOps.push({ ...op, _start: start, _end: end, _actual: true });
+  }
+  for (const op of (cal.active||[])) {
+    if (op.is_inconsistent) continue;
+    const start = op.status==='in_progress' && op.started_at ? new Date(op.started_at) : (op.estimated_start_at ? new Date(op.estimated_start_at) : new Date());
+    const end   = op.estimated_end_at ? new Date(op.estimated_end_at) : new Date(start.getTime() + (op.estimated_duration_min||30)*60000);
+    allOps.push({ ...op, _start: start, _end: end, _actual: op.status==='in_progress' });
+  }
+  allOps.sort((a,b) => a._start - b._start);
+
+  if (!allOps.length) {
+    container.innerHTML = `<div class="card" style="text-align:center;padding:40px">
+      <div style="font-size:48px;margin-bottom:12px">📅</div>
+      <div style="font-size:16px;color:var(--text2);font-weight:600">${todayStr}</div>
+      <div style="color:var(--text3);margin-top:8px">Nenhuma operação agendada para hoje</div>
+    </div>`;
+    return;
+  }
+
+  // Determine timeline bounds
+  const tStart = allOps[0]._start;
+  const tEnd   = allOps[allOps.length-1]._end;
+  const tRange = Math.max((tEnd - tStart)/60000, 60); // at least 60 min span
+
+  // Build timeline bars
+  const bars = allOps.map(op => {
+    const offsetMin  = (op._start - tStart)/60000;
+    const durationMin= Math.max((op._end - op._start)/60000, 5);
+    const leftPct    = (offsetMin / tRange) * 100;
+    const widthPct   = Math.max((durationMin / tRange) * 100, 3);
+    const colorKey   = op.status==='completed' ? 'completed_'+op.operation_type : op.status==='cancelled' ? 'cancelled' : op.operation_type;
+    const color      = opColors[colorKey] || '#6b7280';
+    const textColor  = op.status==='completed'||op.status==='cancelled' ? '#374151' : '#fff';
+    const opacity    = op.status==='cancelled' ? '0.5' : '1';
+    const isNow      = op.status === 'in_progress';
+    return `<div style="
+        position:absolute;left:${leftPct.toFixed(2)}%;width:${widthPct.toFixed(2)}%;
+        background:${color};color:${textColor};opacity:${opacity};
+        border-radius:6px;padding:6px 8px;font-size:11px;min-height:52px;
+        box-shadow:${isNow?'0 0 0 2px var(--success),':''}0 1px 3px rgba(0,0,0,.15);
+        cursor:default;overflow:hidden;
+        ${isNow?'animation:pulse 2s infinite;':''}
+      " title="${op.vessel_name} — ${opLabel[op.operation_type]||op.operation_type}\n${fmtTime(op._start.toISOString())} → ${fmtTime(op._end.toISOString())}\n${op.client_name}">
+      <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${op.vessel_name}</div>
+      <div style="opacity:.85;margin-top:2px">${opLabel[op.operation_type]||op.operation_type}</div>
+      <div style="opacity:.75;margin-top:2px;font-size:10px">${fmtTime(op._start.toISOString())}–${fmtTime(op._end.toISOString())}</div>
+      ${op.status==='in_progress'?'<div style="margin-top:2px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">EM ANDAMENTO</div>':''}
+    </div>`;
+  }).join('');
+
+  // Current time indicator
+  const nowOffsetMin = (now - tStart)/60000;
+  const nowPct = Math.max(0, Math.min(100, (nowOffsetMin/tRange)*100));
+  const nowLine = nowOffsetMin >= 0 && nowOffsetMin <= tRange
+    ? `<div style="position:absolute;left:${nowPct.toFixed(2)}%;top:0;bottom:0;width:2px;background:var(--danger);z-index:10">
+         <div style="position:absolute;top:-20px;left:-16px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">${fmtTime(now.toISOString())}</div>
+       </div>` : '';
+
+  // Hour tick marks
+  const tickStart = new Date(tStart); tickStart.setSeconds(0,0); tickStart.setMinutes(Math.ceil(tickStart.getMinutes()/30)*30,0,0);
+  let ticks = '';
+  for (let t = new Date(tickStart); t <= tEnd; t.setMinutes(t.getMinutes()+30)) {
+    const pct = ((t - tStart)/60000/tRange)*100;
+    if (pct < 0 || pct > 100) continue;
+    ticks += `<div style="position:absolute;left:${pct.toFixed(2)}%;top:0;bottom:0;border-left:1px dashed var(--border);z-index:0">
+      <div style="position:absolute;top:-18px;left:2px;font-size:10px;color:var(--text3);white-space:nowrap">${fmtTime(t.toISOString())}</div>
+    </div>`;
+  }
+
+  // Maneuver indicator legend
+  const mvTime = cal.maneuver_time_min||0;
+
+  // List table below timeline
+  const tableRows = allOps.map(op => {
+    const stBadge = op.status==='completed'?`<span class="badge badge-success">✓ Concluída</span>`:op.status==='in_progress'?`<span class="badge badge-warning">▶ Em andamento</span>`:op.status==='cancelled'?`<span class="badge badge-gray">Cancelada</span>`:`<span class="badge badge-info">Aguardando</span>`;
+    return `<tr>
+      <td style="white-space:nowrap;font-weight:600">${fmtTime(op._start.toISOString())}</td>
+      <td style="white-space:nowrap">${fmtTime(op._end.toISOString())}</td>
+      <td><strong>${op.vessel_name}</strong> <span style="font-size:11px;color:var(--text3)">${op.client_name}</span></td>
+      <td>${opBadge(op.operation_type)}</td>
+      <td>${VESSEL_SIZE_LABEL[op.vessel_size]||'—'}</td>
+      <td>${stBadge}</td>
+      <td style="font-size:11px;color:var(--text3)">~${Math.round((op._end-op._start)/60000)}min${op._actual?'':' (prev.)'}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+  <div class="card mb-2" style="padding:16px">
+    <div class="flex justify-between items-center mb-3">
+      <div>
+        <div style="font-size:16px;font-weight:700;text-transform:capitalize">${todayStr}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${allOps.length} operação${allOps.length!==1?'s':''} · Tempo de manobra: ${mvTime}min entre operações</div>
+      </div>
+      <div class="flex gap-2">
+        ${[['descida','#3b82f6','Descida'],['subida','#f59e0b','Subida'],['atracacao','#8b5cf6','Atracação']].map(([,c,l])=>
+          `<span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>${l}</span>`
+        ).join('')}
+        <span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:2px;height:14px;background:var(--danger);display:inline-block"></span>Agora</span>
+      </div>
+    </div>
+    <div style="position:relative;height:80px;margin:24px 0 8px">
+      ${ticks}
+      ${nowLine}
+      ${bars}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title mb-2">📋 Detalhamento do Dia</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Início</th><th>Término</th><th>Embarcação / Cliente</th><th>Operação</th><th>Porte</th><th>Status</th><th>Duração</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table></div>
+  </div>`;
+}
+
 async function filterQueue(type, el) {
+  _queueTab = type;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
+  if (el) el.classList.add('active');
+  if (type === 'calendar') { await renderQueueCalendar(); return; }
   let data;
   if (type==='active') data = await api('GET','/queue');
   else data = await api('GET','/queue/history');
@@ -2978,10 +3148,11 @@ async function renderSettings(tab) {
         </td>`).join('')}
       </tr>`).join('');
     const allKeys = ops.flatMap(op => sizes.map(sz => `avg_time_${op}_${sz}`));
+    allKeys.push('maneuver_time_min');
     content = `
     <div class="settings-card">
       <div class="settings-card-title">⏱ Tempos Médios de Operação</div>
-      <div class="settings-info-box">Configure o tempo médio (em minutos) para cada tipo de operação e porte de embarcação. Esses tempos são usados para calcular os horários estimados na fila de operações.</div>
+      <div class="settings-info-box">Configure o tempo médio (em minutos) para cada tipo de operação e porte de embarcação. Esses tempos são usados para calcular os horários estimados na fila de operações e no calendário do dia.</div>
       <div class="table-wrap">
         <table style="width:100%">
           <thead><tr>
@@ -2991,8 +3162,19 @@ async function renderSettings(tab) {
           <tbody>${rows}</tbody>
         </table>
       </div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-title">🔄 Tempo de Manobra entre Operações</div>
+      <div class="settings-info-box">Intervalo de segurança entre o término de uma operação e o início da próxima. Garante tempo para reposicionamento de equipamentos, equipe e área de manobra.</div>
+      <div class="form-row" style="align-items:center;gap:16px">
+        <div class="form-group" style="max-width:200px;margin:0">
+          <label>Tempo de manobra (minutos)</label>
+          <input type="number" id="s-maneuver_time_min" value="${s.maneuver_time_min||10}" min="0" max="120" style="max-width:100px">
+        </div>
+        <div style="font-size:12px;color:var(--text3);padding-top:20px">Este tempo é somado automaticamente entre operações consecutivas no cálculo dos horários previstos e no calendário.</div>
+      </div>
       <div class="form-actions" style="border-top:none;padding-top:0;margin-top:16px">
-        <button class="btn btn-primary" onclick="saveSettings(${JSON.stringify(allKeys)})">💾 Salvar Tempos Médios</button>
+        <button class="btn btn-primary" onclick="saveSettings(${JSON.stringify(allKeys)})">💾 Salvar Configurações de Tempo</button>
       </div>
     </div>`;
 

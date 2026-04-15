@@ -353,6 +353,37 @@ addRoute('GET', '/api/queue/history', async (req, res) => {
     WHERE q.status IN ('completed','cancelled') ORDER BY q.requested_at DESC LIMIT 50`);
   sendJson(res, rows.map(enrichQueueRow));
 });
+function getManeuverTime() {
+  const val = dbGet(`SELECT value FROM settings WHERE key='maneuver_time_min'`);
+  return val ? parseInt(val.value) || 0 : 0;
+}
+function applyEstimatedTimes(enriched) {
+  const maneuver = getManeuverTime();
+  let cursor = new Date();
+  let prevEnd = null;
+  // If there's an in_progress op, it anchors the timeline
+  const inProg = enriched.find(r => r.status === 'in_progress');
+  if (inProg && inProg.started_at) {
+    const endTime = new Date(inProg.started_at);
+    endTime.setMinutes(endTime.getMinutes() + inProg.estimated_duration_min);
+    inProg.estimated_end_at = endTime.toISOString();
+    cursor = new Date(endTime);
+    cursor.setMinutes(cursor.getMinutes() + maneuver);
+    prevEnd = endTime;
+  }
+  for (const row of enriched) {
+    if (row.status === 'in_progress') continue;
+    if (row.status === 'waiting') {
+      row.estimated_start_at = cursor.toISOString();
+      const end = new Date(cursor);
+      end.setMinutes(end.getMinutes() + row.estimated_duration_min);
+      row.estimated_end_at = end.toISOString();
+      cursor = new Date(end);
+      cursor.setMinutes(cursor.getMinutes() + maneuver);
+      prevEnd = end;
+    }
+  }
+}
 addRoute('GET', '/api/queue', async (req, res, ctx) => {
   const { status = '' } = ctx.qs;
   let sql = `SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, v.length as vessel_length,
@@ -368,29 +399,27 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
   }
   const rows = dbAll(sql + ' ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC', a);
   const enriched = rows.map(enrichQueueRow);
-  // Calculate cumulative estimated start/end times for active queue
-  if (!status || status === 'waiting,in_progress') {
-    let cursor = new Date();
-    // If there's an in_progress op, start from it
-    const inProg = enriched.find(r => r.status === 'in_progress');
-    if (inProg && inProg.started_at) {
-      const endTime = new Date(inProg.started_at);
-      endTime.setMinutes(endTime.getMinutes() + inProg.estimated_duration_min);
-      inProg.estimated_end_at = endTime.toISOString();
-      cursor = endTime;
-    }
-    for (const row of enriched) {
-      if (row.status === 'in_progress') continue; // already handled
-      if (row.status === 'waiting') {
-        row.estimated_start_at = cursor.toISOString();
-        const end = new Date(cursor);
-        end.setMinutes(end.getMinutes() + row.estimated_duration_min);
-        row.estimated_end_at = end.toISOString();
-        cursor = end;
-      }
-    }
-  }
+  applyEstimatedTimes(enriched);
   sendJson(res, enriched);
+});
+addRoute('GET', '/api/queue/calendar', async (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  // Completed/cancelled ops from today (actual times)
+  const done = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size,
+    c.name as client_name, c.tier as client_tier
+    FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
+    WHERE q.status IN ('completed','cancelled') AND DATE(q.requested_at)=?
+    ORDER BY COALESCE(q.started_at, q.requested_at) ASC`, [today]);
+  // Active ops (with estimated times)
+  const active = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size,
+    c.name as client_name, c.tier as client_tier
+    FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
+    WHERE q.status NOT IN ('completed','cancelled')
+    ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
+  const activeEnriched = active.map(enrichQueueRow);
+  applyEstimatedTimes(activeEnriched);
+  const doneEnriched   = done.map(enrichQueueRow);
+  sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime() });
 });
 addRoute('POST', '/api/queue', async (req, res, ctx) => {
   const vessel = dbGet('SELECT * FROM vessels WHERE id=?', [ctx.body.vessel_id]);
@@ -1104,6 +1133,7 @@ function migrateDb() {
     ['avg_time_descida_pequena','20'],['avg_time_descida_media','35'],['avg_time_descida_grande','60'],
     ['avg_time_subida_pequena','20'],['avg_time_subida_media','35'],['avg_time_subida_grande','60'],
     ['avg_time_atracacao_pequena','15'],['avg_time_atracacao_media','25'],['avg_time_atracacao_grande','40'],
+    ['maneuver_time_min','10'],
   ];
   for (const [k,v] of defSettings) {
     try { dbRun(`INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)`,[k,v]); } catch(e) {}
