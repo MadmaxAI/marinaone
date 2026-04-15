@@ -2041,8 +2041,40 @@ async function renderStoreDashboard() {
     </div>
   </div>
 
-  ${s.estoque_baixo>0?`<div class="alert-item warning" style="margin-bottom:0"><span class="alert-icon">⚠️</span><div class="alert-content"><div class="alert-msg font-bold">${s.estoque_baixo} item(ns) com estoque abaixo do mínimo</div><div class="alert-meta"><a href="#" onclick="showStoreTab('items',document.querySelectorAll('#store-tabs .tab')[3])" style="color:var(--warning)">Ver estoque →</a></div></div></div>`:''}
+  <div id="dash-stock-section"><div style="color:var(--text3);font-size:12px;padding:8px 0">Carregando resumo de estoque...</div></div>
   `;
+
+  // Load stock summary async (non-blocking)
+  api('GET','/store/stock-stats').then(ss => {
+    const el = document.getElementById('dash-stock-section');
+    if (!el || !ss) return;
+    const urgBadgeSmall = i => i.stock <= 0
+      ? `<span class="badge badge-danger">Zerado</span>`
+      : `<span class="badge badge-warning">Baixo</span>`;
+    const critHtml = (ss.criticos||[]).slice(0,6).map(i =>
+      `<div class="flex justify-between items-center" style="padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px">${i.name} <span style="color:var(--text3);font-size:11px">(${i.category})</span></span>
+        <div class="flex gap-2 items-center">
+          <span style="font-size:12px;font-weight:700;color:${i.stock<=0?'var(--danger)':'var(--warning)'}">${i.stock}/${i.min_stock}</span>
+          ${urgBadgeSmall(i)}
+        </div>
+      </div>`).join('') || '<div style="color:var(--success);padding:8px 0;font-size:13px">✅ Nenhum item crítico</div>';
+    el.innerHTML = `
+    <div class="grid" style="grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+      <div class="kpi"><span class="kpi-icon">📦</span><div class="kpi-label">Total SKUs</div><div class="kpi-value" style="font-size:20px">${ss.total_itens}</div><div class="kpi-sub">${ss.total_skus_ok} em nível OK</div></div>
+      <div class="kpi ${ss.total_skus_baixo>0?'yellow':''}"><span class="kpi-icon">⚠️</span><div class="kpi-label">Estoque Baixo</div><div class="kpi-value" style="font-size:20px">${ss.total_skus_baixo}</div><div class="kpi-sub">Abaixo do mínimo</div></div>
+      <div class="kpi ${ss.total_skus_zero>0?'red':''}"><span class="kpi-icon">⛔</span><div class="kpi-label">Zerados</div><div class="kpi-value" style="font-size:20px">${ss.total_skus_zero}</div><div class="kpi-sub">Sem unidades</div></div>
+      <div class="kpi green"><span class="kpi-icon">💰</span><div class="kpi-label">Valor em Estoque</div><div class="kpi-value" style="font-size:16px">${fmt(ss.valor_venda)}</div><div class="kpi-sub">Preço de venda</div></div>
+    </div>
+    ${(ss.criticos||[]).length > 0 ? `
+    <div class="card" style="margin-bottom:0">
+      <div class="flex justify-between items-center mb-2">
+        <div class="card-title" style="color:var(--warning);margin:0">⚠️ Itens Críticos de Estoque</div>
+        <a href="#" onclick="showStoreTab('items',document.querySelectorAll('#store-tabs .tab')[3])" style="font-size:12px;color:var(--accent)">Ver todos →</a>
+      </div>
+      ${critHtml}
+    </div>` : `<div style="color:var(--success);font-size:13px;padding:4px 0">✅ Todos os itens com estoque adequado</div>`}`;
+  });
 
   if (chartData.length) {
     if (pageCharts.storeWeek) { pageCharts.storeWeek.destroy(); delete pageCharts.storeWeek; }
@@ -2235,29 +2267,184 @@ async function confirmSale() {
   if (r && r.id) { toast(`Venda finalizada — Em Preparo! Total: ${fmt(r.total)}`); cart=[]; pages.store(); }
 }
 
+const CAT_ICONS = { manutencao:'🔧', equipamento:'⚓', bebida:'🥤', alimento:'🍫', limpeza:'🧴', outros:'📦' };
+
 async function renderStoreItems() {
-  const items = await api('GET','/store/items');
+  document.getElementById('store-content').innerHTML = '<div class="spinner"></div>';
+  const [items, ss] = await Promise.all([
+    api('GET','/store/items'),
+    api('GET','/store/stock-stats'),
+  ]);
+
+  const urgColor = i => i.stock <= 0 ? 'var(--danger)' : i.stock <= i.min_stock ? 'var(--warning)' : 'var(--success)';
+  const urgBadge = i => i.stock <= 0
+    ? `<span class="badge badge-danger">⛔ Zerado</span>`
+    : i.stock <= i.min_stock
+      ? `<span class="badge badge-warning">⚠ Baixo</span>`
+      : `<span class="badge badge-success">✅ OK</span>`;
+
+  // KPI cards
+  const kpis = [
+    { icon:'📦', label:'Total de SKUs',      val: ss.total_itens,              sub: `${ss.total_skus_ok} em nível OK`,              cls:'' },
+    { icon:'⚠️', label:'Estoque Baixo',      val: ss.total_skus_baixo,         sub: `Abaixo do mínimo`,                              cls: ss.total_skus_baixo>0?'yellow':'' },
+    { icon:'⛔', label:'Sem Estoque',        val: ss.total_skus_zero,          sub: `Itens zerados`,                                 cls: ss.total_skus_zero>0?'red':'' },
+    { icon:'💰', label:'Valor em Estoque',   val: fmt(ss.valor_custo),         sub: `Preço de custo`,                                cls:'' },
+    { icon:'🏷️', label:'Valor a Venda',      val: fmt(ss.valor_venda),         sub: `Margem potencial: ${fmt(ss.margem_potencial)}`, cls:'green' },
+    { icon:'📅', label:'Cobertura Média',    val: ss.cobertura_media != null ? ss.cobertura_media+'d' : '—', sub:`Dias de estoque restantes`, cls:'' },
+  ];
+  const kpiHtml = kpis.map(k => `
+    <div class="kpi ${k.cls}">
+      <span class="kpi-icon">${k.icon}</span>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value" style="font-size:20px">${k.val}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join('');
+
+  // Category breakdown table
+  const catRows = (ss.por_categoria||[]).map(c => `<tr>
+    <td>${CAT_ICONS[c.category]||'📦'} <strong>${c.category}</strong></td>
+    <td style="text-align:center">${c.itens}</td>
+    <td style="text-align:center">${c.stock_total}</td>
+    <td class="text-success">${fmt(c.valor_venda)}</td>
+    <td style="text-align:center">${c.baixo > 0 ? `<span class="badge badge-warning">${c.baixo} baixo</span>` : ''}${c.zero > 0 ? `<span class="badge badge-danger">${c.zero} zerado</span>` : ''}${c.baixo===0&&c.zero===0?'<span class="badge badge-success">OK</span>':''}</td>
+  </tr>`).join('');
+
+  // Top sellers
+  const topRows = (ss.top_vendidos||[]).filter(i=>i.qtd_vendida_30d>0).slice(0,8).map((i,idx) => `<tr>
+    <td style="color:var(--text3);font-weight:700;text-align:center">${idx+1}</td>
+    <td><strong>${i.name}</strong> <span class="badge badge-gray" style="font-size:10px">${i.category}</span></td>
+    <td style="text-align:center;font-weight:700;color:var(--accent)">${i.qtd_vendida_30d} ${i.unit}</td>
+    <td class="text-success">${fmt(i.receita_30d)}</td>
+    <td style="text-align:center"><strong style="color:${urgColor(i)}">${i.stock}</strong> / ${i.min_stock}</td>
+    <td>${urgBadge(i)}</td>
+  </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:16px">Sem vendas registradas nos últimos 30 dias</td></tr>';
+
+  // Critical items
+  const critRows = (ss.criticos||[]).map(i => {
+    const pct = Math.round((i.stock / Math.max(i.min_stock,1)) * 100);
+    const barColor = i.stock<=0 ? 'var(--danger)' : 'var(--warning)';
+    return `<tr>
+      <td><strong>${i.name}</strong> <span class="badge badge-gray" style="font-size:10px">${i.category}</span></td>
+      <td style="text-align:center">
+        <strong style="color:${barColor}">${i.stock}</strong>
+        <div style="background:var(--surface2);border-radius:4px;height:6px;margin-top:4px;overflow:hidden">
+          <div style="background:${barColor};width:${Math.min(pct,100)}%;height:100%"></div>
+        </div>
+      </td>
+      <td style="text-align:center;color:var(--text3)">${i.min_stock}</td>
+      <td>${urgBadge(i)}</td>
+      <td style="text-align:center;font-size:11px;color:var(--text3)">${i.dias_cobertura!=null ? i.dias_cobertura+'d' : '—'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openItemModal(${i.id})">✏️ Ajustar</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--success);padding:16px">✅ Nenhum item crítico</td></tr>';
+
+  // Full items table
+  let _stockFilter = window._stockFilter || 'todos';
+  const filteredItems = _stockFilter === 'baixo'
+    ? items.filter(i => i.stock > 0 && i.stock <= i.min_stock)
+    : _stockFilter === 'zero'
+      ? items.filter(i => i.stock <= 0)
+      : items;
+
+  const itemRows = filteredItems.map(i => `<tr>
+    <td><strong>${i.name}</strong></td>
+    <td><span class="badge badge-gray">${CAT_ICONS[i.category]||''} ${i.category}</span></td>
+    <td class="text-success font-bold">${fmt(i.price)}</td>
+    <td style="color:var(--text3)">${fmt(i.cost)}</td>
+    <td>
+      <strong style="color:${urgColor(i)}">${i.stock}</strong> ${i.unit}
+      <div style="background:var(--surface2);border-radius:3px;height:4px;margin-top:3px;width:60px;overflow:hidden">
+        <div style="background:${urgColor(i)};width:${Math.min(Math.round(i.stock/Math.max(i.min_stock,1)*100),100)}%;height:100%"></div>
+      </div>
+    </td>
+    <td style="text-align:center;color:var(--text3)">${i.min_stock}</td>
+    <td>${fmt(i.stock*i.cost)}</td>
+    <td>${urgBadge(i)}</td>
+    <td><div class="flex gap-1">
+      <button class="btn btn-ghost btn-sm" onclick="openItemModal(${i.id})">✏️</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteItem(${i.id})">🗑</button>
+    </div></td>
+  </tr>`).join('') || `<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Nenhum item encontrado</td></tr>`;
+
   document.getElementById('store-content').innerHTML = `
-  <div class="flex justify-between mb-2">
-    <span class="text-sm text-muted">${items.length} itens em estoque</span>
-    <button class="btn btn-primary" onclick="openItemModal()">+ Novo Item</button>
+  <!-- KPIs -->
+  <div class="grid" style="grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px">${kpiHtml}</div>
+
+  <!-- Analíticos: Categoria + Top Vendidos -->
+  <div class="grid g2 mb-3">
+    <div class="card">
+      <div class="card-title mb-2">🗂 Por Categoria</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Categoria</th><th style="text-align:center">SKUs</th><th style="text-align:center">Qtd Total</th><th>Valor Venda</th><th>Status</th></tr></thead>
+        <tbody>${catRows}</tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-title mb-2">🏆 Mais Vendidos — Últimos 30 Dias</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>#</th><th>Item</th><th style="text-align:center">Qtd</th><th>Receita</th><th style="text-align:center">Estoque/Mín</th><th>Status</th></tr></thead>
+        <tbody>${topRows}</tbody>
+      </table></div>
+    </div>
   </div>
-  <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Item</th><th>Categoria</th><th>Preço</th><th>Custo</th><th>Estoque</th><th>Mín.</th><th>Status</th><th>Ações</th></tr></thead>
-    <tbody>${(items||[]).map(i=>`<tr>
-      <td class="font-bold">${i.name}</td>
-      <td><span class="badge badge-gray">${i.category}</span></td>
-      <td class="text-success font-bold">${fmt(i.price)}</td>
-      <td>${fmt(i.cost)}</td>
-      <td class="${i.stock<=i.min_stock?'text-danger font-bold':''}">${i.stock} ${i.unit}</td>
-      <td>${i.min_stock}</td>
-      <td>${i.stock<=i.min_stock?'<span class="badge badge-danger">Baixo</span>':'<span class="badge badge-success">OK</span>'}</td>
-      <td><div class="flex gap-2">
-        <button class="btn btn-ghost btn-sm" onclick="openItemModal(${i.id})">✏️</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteItem(${i.id})">🗑</button>
-      </div></td>
-    </tr>`).join('')}</tbody>
-  </table></div></div>`;
+
+  <!-- Itens críticos -->
+  ${(ss.criticos||[]).length > 0 ? `
+  <div class="card mb-3">
+    <div class="card-title mb-2" style="color:var(--warning)">⚠️ Itens Críticos — Estoque Abaixo do Mínimo</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Item</th><th style="text-align:center">Estoque</th><th style="text-align:center">Mínimo</th><th>Status</th><th style="text-align:center">Cobertura</th><th>Ação</th></tr></thead>
+      <tbody>${critRows}</tbody>
+    </table></div>
+  </div>` : ''}
+
+  <!-- Tabela completa -->
+  <div class="card">
+    <div class="flex justify-between items-center mb-2">
+      <div class="flex gap-2 items-center">
+        <div class="card-title" style="margin:0">📋 Todos os Itens</div>
+        <div class="tabs" style="margin:0">
+          <div class="tab${_stockFilter==='todos'?' active':''}" onclick="filterStockTable('todos',this)">Todos (${items.length})</div>
+          <div class="tab${_stockFilter==='baixo'?' active':''}" onclick="filterStockTable('baixo',this)" style="color:var(--warning)">⚠ Baixo (${ss.total_skus_baixo})</div>
+          <div class="tab${_stockFilter==='zero'?' active':''}" onclick="filterStockTable('zero',this)" style="color:var(--danger)">⛔ Zerado (${ss.total_skus_zero})</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="openItemModal()">+ Novo Item</button>
+    </div>
+    <div class="table-wrap" id="stock-table-wrap"><table>
+      <thead><tr><th>Item</th><th>Categoria</th><th>Preço</th><th>Custo</th><th>Estoque</th><th style="text-align:center">Mín.</th><th>Valor Custo</th><th>Status</th><th>Ações</th></tr></thead>
+      <tbody id="stock-tbody">${itemRows}</tbody>
+    </table></div>
+  </div>`;
+
+  // Render chart for categories
+  if (ss.por_categoria?.length && typeof Chart !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    canvas.id = 'stock-cat-chart'; canvas.height = 180;
+    const catCard = document.querySelector('.card');
+    if (catCard) {
+      const chartDiv = document.createElement('div');
+      chartDiv.style.cssText = 'margin-top:12px';
+      chartDiv.appendChild(canvas);
+      catCard.appendChild(chartDiv);
+      if (pageCharts.stockCat) { pageCharts.stockCat.destroy(); delete pageCharts.stockCat; }
+      pageCharts.stockCat = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: ss.por_categoria.map(c => c.category),
+          datasets: [{ data: ss.por_categoria.map(c => c.valor_venda), backgroundColor: ['#3b82f6','#f59e0b','#10b981','#8b5cf6','#ef4444','#6b7280'] }]
+        },
+        options: { responsive:true, plugins:{ legend:{ position:'right', labels:{ color:'var(--text2)', font:{size:11} } } } }
+      });
+    }
+  }
+}
+
+function filterStockTable(filter, el) {
+  window._stockFilter = filter;
+  document.querySelectorAll('#store-content .tabs .tab').forEach(t=>t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderStoreItems();
 }
 
 async function openItemModal(id=null) {

@@ -624,6 +624,70 @@ addRoute('GET', '/api/store/stats', async (req, res) => {
   const vendas_semana = dbAll(`SELECT DATE(created_at) as day,COUNT(*) as count,COALESCE(SUM(total),0) as total FROM store_orders WHERE status='paid' AND DATE(created_at)>=? GROUP BY day ORDER BY day`,[daysAgo(6)]);
   sendJson(res,{vendas_hoje,receita_hoje,aguardando,preparando,entregando,entregue_hoje,estoque_baixo,abertos,ticket_medio,pipeline_aguardando,pipeline_preparando,pipeline_entregando,pipeline_entregue,recent,vendas_semana});
 });
+addRoute('GET', '/api/store/stock-stats', async (req, res) => {
+  const items = dbAll(`SELECT * FROM store_items WHERE active=1`);
+  const g1 = (sql, a=[]) => dbGet(sql, a);
+  const ago30 = daysAgo(30);
+
+  // KPI aggregates
+  const total_itens        = items.length;
+  const total_skus_zero    = items.filter(i => i.stock <= 0).length;
+  const total_skus_baixo   = items.filter(i => i.stock > 0 && i.stock <= i.min_stock).length;
+  const total_skus_ok      = items.filter(i => i.stock > i.min_stock).length;
+  const valor_custo        = items.reduce((s, i) => s + (i.stock||0) * (i.cost||0), 0);
+  const valor_venda        = items.reduce((s, i) => s + (i.stock||0) * (i.price||0), 0);
+  const margem_potencial   = valor_venda - valor_custo;
+
+  // Per-category breakdown
+  const cats = {};
+  items.forEach(i => {
+    if (!cats[i.category]) cats[i.category] = { category: i.category, itens: 0, stock_total: 0, valor_venda: 0, valor_custo: 0, baixo: 0, zero: 0 };
+    cats[i.category].itens++;
+    cats[i.category].stock_total += i.stock||0;
+    cats[i.category].valor_venda += (i.stock||0) * (i.price||0);
+    cats[i.category].valor_custo += (i.stock||0) * (i.cost||0);
+    if (i.stock <= 0) cats[i.category].zero++;
+    else if (i.stock <= i.min_stock) cats[i.category].baixo++;
+  });
+  const por_categoria = Object.values(cats).sort((a, b) => b.valor_venda - a.valor_venda);
+
+  // Top 10 most sold last 30 days
+  const orders_recentes = dbAll(`SELECT items FROM store_orders WHERE status != 'cancelled' AND DATE(created_at) >= ?`, [ago30]);
+  const qtd_vendida = {};
+  for (const o of orders_recentes) {
+    let its; try { its = JSON.parse(o.items); } catch { its = []; }
+    for (const i of its) { qtd_vendida[i.item_id] = (qtd_vendida[i.item_id]||0) + i.qty; }
+  }
+  const top_vendidos = items
+    .map(i => ({ ...i, qtd_vendida_30d: qtd_vendida[i.id]||0, receita_30d: (qtd_vendida[i.id]||0)*i.price }))
+    .sort((a, b) => b.qtd_vendida_30d - a.qtd_vendida_30d)
+    .slice(0, 10);
+
+  // Critical items (zero or low), sorted by urgency (stock/min ratio ascending)
+  const criticos = items
+    .filter(i => i.stock <= i.min_stock)
+    .map(i => {
+      const diasCobertura = qtd_vendida[i.id]
+        ? Math.round((i.stock / (qtd_vendida[i.id] / 30)) * 10) / 10
+        : null;
+      return { ...i, qtd_vendida_30d: qtd_vendida[i.id]||0, dias_cobertura: diasCobertura };
+    })
+    .sort((a, b) => (a.stock / Math.max(a.min_stock,1)) - (b.stock / Math.max(b.min_stock,1)));
+
+  // Giro médio (average days of coverage for items with sales)
+  const coberturas = items
+    .filter(i => qtd_vendida[i.id] && i.stock > 0)
+    .map(i => i.stock / (qtd_vendida[i.id] / 30));
+  const cobertura_media = coberturas.length
+    ? Math.round(coberturas.reduce((s,v) => s+v, 0) / coberturas.length)
+    : null;
+
+  sendJson(res, {
+    total_itens, total_skus_zero, total_skus_baixo, total_skus_ok,
+    valor_custo, valor_venda, margem_potencial, cobertura_media,
+    por_categoria, top_vendidos, criticos
+  });
+});
 addRoute('GET', '/api/store/pix-config', async (req, res) => {
   sendJson(res, dbGet(`SELECT * FROM store_pix_config WHERE active=1 ORDER BY id DESC`) || {});
 });
