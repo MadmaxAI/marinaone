@@ -405,6 +405,17 @@ addRoute('PUT', '/api/store/orders/:id', async (req, res, ctx) => {
         [ctx.body.status, ctx.body.payment_method || null, ctx.body.notes || null, ctx.params.id]);
   sendJson(res, { ok: true });
 });
+addRoute('PUT', '/api/store/orders/:id/delivery', async (req, res, ctx) => {
+  const { delivery_status, status } = ctx.body;
+  const updates = [];
+  const params = [];
+  if (delivery_status !== undefined) { updates.push('delivery_status=?'); params.push(delivery_status); }
+  if (status !== undefined) { updates.push('status=?'); params.push(status); }
+  if (!updates.length) { sendJson(res,{ok:true}); return; }
+  params.push(ctx.params.id);
+  dbRun(`UPDATE store_orders SET ${updates.join(',')} WHERE id=?`, params);
+  sendJson(res, { ok: true });
+});
 addRoute('GET', '/api/store/pix-config', async (req, res) => {
   sendJson(res, dbGet(`SELECT * FROM store_pix_config WHERE active=1 ORDER BY id DESC`) || {});
 });
@@ -521,7 +532,7 @@ addRoute('GET', '/api/analytics/kpis', async (req, res) => {
     vagas_total, vagas_ocupadas,
     vagas_seca_total, vagas_seca_ocupadas,
     vagas_molhada_total, vagas_molhada_ocupadas,
-    receita_mes, inadimplencia, pendente, receita_seca, receita_molhada, receita_loja: loja_mes,
+    receita_mes, inadimplencia, pendente, receita_seca, receita_molhada: receita_mol, receita_loja: loja_mes,
     taxa_inadimplencia: total_ct_val ? Math.round(inadimplencia / total_ct_val * 1000) / 10 : 0,
     total_clientes, vip_count, total_vessels, contratos_ativos,
     queue_hoje, queue_aguardando,
@@ -546,6 +557,61 @@ addRoute('GET', '/api/analytics/top-clients', async (req, res) => {
 });
 addRoute('GET', '/api/analytics/occupancy-trend', async (req, res) => {
   sendJson(res, dbAll(`SELECT DATE(start_date) as d, COUNT(*) as new_contracts FROM contracts GROUP BY DATE(start_date) ORDER BY d DESC LIMIT 30`));
+});
+addRoute('GET', '/api/analytics/extended', async (req, res) => {
+  checkOverdue();
+  const ms = monthStart();
+  const ago3m = daysAgo(90);
+  const ago6m = daysAgo(180);
+  const g1 = (sql,a=[]) => dbGet(sql,a);
+
+  const receita_3m    = g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`,[ago3m])?.v||0;
+  const receita_6m    = g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`,[ago6m])?.v||0;
+  const receita_total = g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid'`)?.v||0;
+  const despesas_manut= g1(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_os WHERE status='completed'`)?.v||0;
+  const contratos_vencendo_30d = g1(`SELECT COUNT(*) as v FROM contracts WHERE status='active' AND end_date<=?`,[daysAhead(30)])?.v||0;
+  const contratos_vencendo_7d  = g1(`SELECT COUNT(*) as v FROM contracts WHERE status='active' AND end_date<=?`,[daysAhead(7)])?.v||0;
+  const valor_carteira = g1(`SELECT COALESCE(SUM(monthly_value),0) as v FROM contracts WHERE status='active'`)?.v||0;
+  const clientes_novos_mes = g1(`SELECT COUNT(*) as v FROM clients WHERE DATE(created_at)>=?`,[ms])?.v||0;
+  const ltv_max  = g1(`SELECT MAX(ltv) as v FROM clients WHERE active=1`)?.v||0;
+  const pedidos_mes = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND DATE(created_at)>=?`,[ms])?.v||0;
+  const pedidos_pendentes = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status IN ('open','pending_payment')`)?.v||0;
+  const ops_total = g1(`SELECT COUNT(*) as v FROM queue_operations`)?.v||0;
+  const ops_mes   = g1(`SELECT COUNT(*) as v FROM queue_operations WHERE DATE(requested_at)>=?`,[ms])?.v||0;
+  const ops_completed_mes = g1(`SELECT COUNT(*) as v FROM queue_operations WHERE status='completed' AND DATE(completed_at)>=?`,[ms])?.v||0;
+  const taxa_conclusao = ops_mes>0 ? Math.round(ops_completed_mes/ops_mes*100) : 0;
+  const os_total = g1(`SELECT COUNT(*) as v FROM maintenance_os`)?.v||0;
+  const os_concluidas = g1(`SELECT COUNT(*) as v FROM maintenance_os WHERE status='completed'`)?.v||0;
+  const taxa_resolucao_os = os_total>0 ? Math.round(os_concluidas/os_total*100) : 0;
+  const spots_seca_livre = g1(`SELECT COUNT(*) as v FROM spots WHERE type='seca' AND status='available'`)?.v||0;
+  const spots_mol_livre  = g1(`SELECT COUNT(*) as v FROM spots WHERE type='molhada' AND status='available'`)?.v||0;
+
+  const receita_por_mes    = dbAll(`SELECT strftime('%Y-%m',paid_date) as month, COALESCE(SUM(amount),0) as total, COUNT(*) as count FROM financial_charges WHERE status='paid' AND paid_date IS NOT NULL GROUP BY month ORDER BY month DESC LIMIT 12`).reverse();
+  const loja_por_mes       = dbAll(`SELECT strftime('%Y-%m',created_at) as month, COALESCE(SUM(total),0) as total, COUNT(*) as count FROM store_orders WHERE status='paid' GROUP BY month ORDER BY month DESC LIMIT 12`).reverse();
+  const ops_por_tipo       = dbAll(`SELECT operation_type, COUNT(*) as count FROM queue_operations GROUP BY operation_type ORDER BY count DESC`);
+  const ops_por_mes        = dbAll(`SELECT strftime('%Y-%m',requested_at) as month, COUNT(*) as count FROM queue_operations GROUP BY month ORDER BY month DESC LIMIT 12`).reverse();
+  const manut_por_tipo     = dbAll(`SELECT type, COUNT(*) as count, COALESCE(SUM(cost),0) as total FROM maintenance_os GROUP BY type`);
+  const charges_por_status = dbAll(`SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM financial_charges GROUP BY status`);
+  const top_clientes_loja  = dbAll(`SELECT c.name, c.tier, COALESCE(SUM(o.total),0) as total_loja, COUNT(o.id) as pedidos FROM clients c LEFT JOIN store_orders o ON o.client_id=c.id AND o.status='paid' WHERE c.active=1 GROUP BY c.id ORDER BY total_loja DESC LIMIT 10`);
+  const vip_count   = g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='vip'`)?.v||0;
+  const gold_count  = g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='gold'`)?.v||0;
+  const silver_count= g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='silver'`)?.v||0;
+  const std_count   = g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='standard'`)?.v||0;
+
+  sendJson(res, {
+    receita_3m, receita_6m, receita_total, despesas_manut,
+    margem_bruta: receita_total - despesas_manut,
+    contratos_vencendo_30d, contratos_vencendo_7d,
+    valor_carteira, valor_carteira_anual: valor_carteira*12,
+    clientes_novos_mes, ltv_max,
+    pedidos_mes, pedidos_pendentes,
+    ops_total, ops_mes, ops_completed_mes, taxa_conclusao,
+    os_total, os_concluidas, taxa_resolucao_os,
+    spots_seca_livre, spots_mol_livre,
+    receita_por_mes, loja_por_mes, ops_por_tipo, ops_por_mes,
+    manut_por_tipo, charges_por_status, top_clientes_loja,
+    vip_count, gold_count, silver_count, std_count,
+  });
 });
 
 // ── DB INIT & SEED ────────────────────────────────────────────────────
@@ -590,6 +656,12 @@ function seedDb() {
     ['Patricia Mendes Luz','patricia@email.com','(11) 99999-0008','890.123.456-08','vip','Rua Consolacao, 800'],
   ];
   const cids = clientData.map(c => Number(dbRun('INSERT INTO clients(name,email,phone,cpf,tier,address) VALUES(?,?,?,?,?,?)', c).lastInsertRowid));
+  const cEmails = ['carlos','ana','roberto','mariana','fernando','juliana','marcelo','patricia'];
+  cEmails.forEach((prefix,i) => {
+    try { dbRun('INSERT INTO users(email,password_hash,name,role) VALUES(?,?,?,?)',
+                [`${prefix}@marinaone.com`, sha256('senha123'), clientData[i][0], 'client']); }
+    catch(e) {}
+  });
 
   const vesselData = [
     [cids[0],'Rei dos Mares','lancha',12.5,3.2,1.0,2020,'SP-1001','Phantom 45','Phantom','Diesel 600cv'],
@@ -770,6 +842,29 @@ const server = http.createServer(async (req, res) => {
 
 // ── START ─────────────────────────────────────────────────────────────
 initDb();
+
+function migrateDb() {
+  // Add new columns to store_orders (ignore error if already exist)
+  try { db.exec(`ALTER TABLE store_orders ADD COLUMN delivery_status TEXT DEFAULT NULL`); } catch(e) {}
+  try { db.exec(`ALTER TABLE store_orders ADD COLUMN whatsapp_sent INTEGER DEFAULT 0`); } catch(e) {}
+  // Add client users
+  const pwd = sha256('senha123');
+  const logins = [
+    ['carlos@marinaone.com','Carlos Eduardo Souza'],
+    ['ana@marinaone.com','Ana Paula Ferreira'],
+    ['roberto@marinaone.com','Roberto Alves Lima'],
+    ['mariana@marinaone.com','Mariana Costa Pinto'],
+    ['fernando@marinaone.com','Fernando Oliveira'],
+    ['juliana@marinaone.com','Juliana Santos Cruz'],
+    ['marcelo@marinaone.com','Marcelo Rodrigues'],
+    ['patricia@marinaone.com','Patricia Mendes Luz'],
+  ];
+  for (const [email,name] of logins) {
+    try { dbRun('INSERT INTO users(email,password_hash,name,role) VALUES(?,?,?,?)',[email,pwd,name,'client']); }
+    catch(e) {}
+  }
+}
+migrateDb();
 
 // Run seed (wrapped to catch & report errors clearly)
 try { seedDb(); }

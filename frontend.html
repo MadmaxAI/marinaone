@@ -200,6 +200,8 @@ textarea{resize:vertical;min-height:72px}
 .tab-count-overdue{background:rgba(239,68,68,.2);color:#f87171}
 .tab-count-paid{background:rgba(16,185,129,.2);color:#34d399}
 .fin-month-amount{font-size:12px;font-weight:700;color:var(--text)}
+.badge-orange{background:rgba(249,115,22,.15);color:#fb923c}
+.delivery-flow{display:flex;flex-direction:column;gap:4px}
 </style>
 </head>
 <body>
@@ -267,7 +269,7 @@ textarea{resize:vertical;min-height:72px}
 <div id="modal-root"></div>
 
 <script>
-const API = 'http://localhost:3000/api';
+const API = window.location.origin + '/api';
 let token = localStorage.getItem('mo_token') || '';
 let currentUser = null;
 let currentPage = 'dashboard';
@@ -1282,27 +1284,54 @@ async function finalizeSale() {
   const payment = document.getElementById('pdv-payment').value;
   const client_id = document.getElementById('pdv-client').value;
   const vessel_id = document.getElementById('pdv-vessel').value;
+  const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
   if (payment==='pix') {
-    const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
     const pix = await api('POST','/store/pix-qrcode',{amount:total});
-    if (pix && pix.payload) {
-      modal(`<div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-title">💳 Pagamento PIX</div>
-        <div style="text-align:center;padding:20px">
-          <div style="font-size:28px;font-weight:700;color:var(--success);margin-bottom:12px">${fmt(total)}</div>
-          <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px;word-break:break-all;font-family:monospace;font-size:11px;color:var(--text2)">${pix.payload}</div>
-          <p class="text-xs text-muted">Copie o código acima ou escaneie o QR Code no app do banco</p>
-          <div style="margin-top:12px;font-size:11px;color:var(--text3)">TXID: ${pix.txid}</div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
-          <button class="btn btn-success" onclick="closeModalForce();confirmSale()">✓ Confirmar Pagamento</button>
-        </div>
-      </div>`);
-      return;
-    }
+    const pixPayload = (pix && pix.payload) ? pix.payload : '';
+    const qrImgUrl = pixPayload ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pixPayload)}` : '';
+    modal(`<div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-title">💳 Pagamento PIX — ${fmt(total)}</div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
+        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px" onclick="closeModalForce();confirmSale()">💳 Cobrar Aqui (PIX)</button>
+        <button class="btn btn-success" style="width:100%;padding:12px;font-size:14px" onclick="closeModalForce();sendWhatsApp(${JSON.stringify(pixPayload)},${JSON.stringify(qrImgUrl)})">📲 Enviar via WhatsApp</button>
+      </div>
+      <div style="text-align:center">
+        ${qrImgUrl?`<img src="${qrImgUrl}" style="border-radius:8px;max-width:160px;margin-bottom:10px" onerror="this.style.display='none'">`:'' }
+        <div style="background:var(--surface2);border-radius:8px;padding:10px;word-break:break-all;font-family:monospace;font-size:10px;color:var(--text2)">${pixPayload||'PIX não configurado'}</div>
+        ${pix && pix.txid?`<div style="margin-top:8px;font-size:11px;color:var(--text3)">TXID: ${pix.txid}</div>`:''}
+      </div>
+      <div class="form-actions"><button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button></div>
+    </div>`);
+    return;
   }
   await confirmSale();
+}
+
+async function sendWhatsApp(pixPayload, qrImgUrl) {
+  const client_id = document.getElementById('pdv-client')?.value;
+  const vessel_id = document.getElementById('pdv-vessel')?.value;
+  const payment = 'pix';
+  const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
+  // Create order with pending_payment status
+  const r = await api('POST','/store/orders',{items:cart,client_id:client_id?parseInt(client_id):null,vessel_id:vessel_id?parseInt(vessel_id):null,payment_method:payment,status:'pending_payment'});
+  if (!r || !r.id) { toast('Erro ao criar pedido','error'); return; }
+  // Get client phone
+  let phone = '';
+  if (client_id) {
+    const clients = await api('GET','/clients');
+    const cl = (clients||[]).find(c=>String(c.id)===String(client_id));
+    if (cl && cl.phone) phone = cl.phone.replace(/\D/g,'');
+  }
+  // Build WhatsApp message
+  const itemsList = cart.map(i=>`• ${i.name} x${i.qty} = ${fmt(i.price*i.qty)}`).join('\n');
+  let msg = `*Pedido Marina One — #${r.id}*\n\n${itemsList}\n\n*Total: ${fmt(total)}*\n\nPague via PIX:\n\`${pixPayload}\``;
+  if (qrImgUrl) msg += `\n\nQR Code: ${qrImgUrl}`;
+  const waUrl = phone
+    ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+    : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(waUrl,'_blank');
+  toast(`Pedido #${r.id} criado! WhatsApp aberto.`);
+  cart=[]; pages.store();
 }
 
 async function confirmSale() {
@@ -1378,22 +1407,58 @@ async function deleteItem(id) {
   toast('Item removido'); showStoreTab('items', document.querySelectorAll('.tab')[1]);
 }
 
-async function renderOrders() {
-  const orders = await api('GET','/store/orders');
+async function renderOrders(statusFilter) {
+  statusFilter = statusFilter || window._ordersFilter || 'all';
+  window._ordersFilter = statusFilter;
+  const qs = (statusFilter && statusFilter!=='all') ? `?status=${statusFilter}` : '';
+  const orders = await api('GET','/store/orders'+qs);
+  const filterTabs = [
+    ['all','Todos'],['paid','Pagos'],['pending_payment','Aguard. Pgto'],['open','Abertos']
+  ].map(([v,l])=>`<button class="tab${statusFilter===v?' active':''}" onclick="renderOrders('${v}')">${l}</button>`).join('');
+  function deliveryCell(o) {
+    const btns = [];
+    if (o.status==='pending_payment') {
+      return `<div class="delivery-flow"><span class="badge badge-warning">Aguard. Pgto</span><button class="btn btn-success btn-sm" onclick="orderDelivery(${o.id},{status:'paid',delivery_status:'preparando'})">✅ Confirmar Comprovante</button></div>`;
+    }
+    if (o.status==='paid') {
+      if (!o.delivery_status) {
+        return `<button class="btn btn-ghost btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'preparando'})">▶ Iniciar Preparo</button>`;
+      }
+      if (o.delivery_status==='preparando') {
+        return `<div class="delivery-flow"><span class="badge badge-warning">🍳 Preparando</span><button class="btn btn-primary btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'entregando'})">🚀 Saiu p/ Entrega</button></div>`;
+      }
+      if (o.delivery_status==='entregando') {
+        return `<div class="delivery-flow"><span class="badge badge-orange">🛵 Em Entrega</span><button class="btn btn-success btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'entregue'})">✅ Entregue</button></div>`;
+      }
+      if (o.delivery_status==='entregue') {
+        return `<span class="badge badge-success">✅ Entregue</span>`;
+      }
+    }
+    return statusBadge(o.status);
+  }
   document.getElementById('store-content').innerHTML = `
+  <div class="flex justify-between mb-2" style="align-items:center">
+    <div class="tabs" style="margin-bottom:0">${filterTabs}</div>
+    <button class="btn btn-ghost btn-sm" onclick="renderOrders(window._ordersFilter)">↻ Atualizar</button>
+  </div>
   <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Data</th><th>Cliente</th><th>Embarcação</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Status</th></tr></thead>
+    <thead><tr><th>Data</th><th>Cliente</th><th>Embarcação</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Status / Entrega</th></tr></thead>
     <tbody>${(orders||[]).map(o=>`<tr>
       <td>${fmtDT(o.created_at)}</td>
       <td>${o.client_name||'—'}</td>
       <td>${o.vessel_name||'—'}</td>
-      <td>${Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):o.items}</td>
+      <td style="max-width:220px;white-space:normal;font-size:12px">${Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):o.items}</td>
       <td class="text-success font-bold">${fmt(o.total)}</td>
       <td>${o.payment_method?`<span class="badge badge-gray">${o.payment_method}</span>`:'—'}</td>
-      <td>${statusBadge(o.status)}</td>
+      <td>${deliveryCell(o)}</td>
     </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Sem pedidos</td></tr>'}
     </tbody>
   </table></div></div>`;
+}
+
+async function orderDelivery(id, body) {
+  await api('PUT',`/store/orders/${id}/delivery`,body);
+  renderOrders(window._ordersFilter);
 }
 
 async function renderPixConfig() {
@@ -1539,92 +1604,233 @@ async function saveMaintenance(id) {
 
 // ── PAGE: ANALYTICS ───────────────────────────────────
 pages.analytics = async () => {
-  const [kpis, rev, top] = await Promise.all([
+  Object.values(pageCharts).forEach(c=>c&&c.destroy&&c.destroy()); pageCharts={};
+  const [kpis, ext] = await Promise.all([
     api('GET','/analytics/kpis'),
-    api('GET','/analytics/revenue-chart'),
-    api('GET','/analytics/top-clients')
+    api('GET','/analytics/extended')
   ]);
+  const kpiTile = (label,val,color='') => `<div style="background:var(--surface2);border-radius:8px;padding:12px;border:1px solid var(--border)"><div class="text-xs text-muted mb-1">${label}</div><div class="font-bold${color?' text-'+color:''}">${val}</div></div>`;
+  const sectionLabel = txt => `<div style="grid-column:1/-1;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-top:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">${txt}</div>`;
   setContent(`
-  <div class="grid g4 mb-2">
-    <div class="kpi green"><div class="kpi-label">Ocupação Total</div><div class="kpi-value">${kpis.ocupacao_total}%</div><div class="kpi-sub">${kpis.vagas_ocupadas} de ${kpis.vagas_total} vagas</div></div>
-    <div class="kpi"><div class="kpi-label">Receita Mês</div><div class="kpi-value" style="font-size:18px">${fmt(kpis.receita_mes)}</div><div class="kpi-sub">Loja: ${fmt(kpis.receita_loja)}</div></div>
-    <div class="kpi red"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:18px">${fmt(kpis.inadimplencia)}</div><div class="kpi-sub">${kpis.taxa_inadimplencia}%</div></div>
-    <div class="kpi purple"><div class="kpi-label">LTV Médio</div><div class="kpi-value" style="font-size:18px">${fmt(kpis.ltv_medio)}</div><div class="kpi-sub">por cliente</div></div>
+  <div class="tabs" id="an-tabs">
+    <button class="tab active" onclick="anTab('visao',this)">Visão Geral</button>
+    <button class="tab" onclick="anTab('financeiro',this)">💰 Financeiro</button>
+    <button class="tab" onclick="anTab('ocupacao',this)">🏢 Ocupação</button>
+    <button class="tab" onclick="anTab('operacoes',this)">⚙️ Operações</button>
+    <button class="tab" onclick="anTab('clientes',this)">👥 Clientes</button>
   </div>
-  <div class="grid g4 mb-2">
-    <div class="kpi"><div class="kpi-label">Seca Ocupação</div><div class="kpi-value">${kpis.ocupacao_seca}%</div><div class="kpi-sub">${kpis.vagas_seca_ocupadas}/${kpis.vagas_seca_total}</div></div>
-    <div class="kpi"><div class="kpi-label">Molhada Ocupação</div><div class="kpi-value">${kpis.ocupacao_molhada}%</div><div class="kpi-sub">${kpis.vagas_molhada_ocupadas}/${kpis.vagas_molhada_total}</div></div>
-    <div class="kpi"><div class="kpi-label">SLA Médio</div><div class="kpi-value">${kpis.sla_avg_min} min</div><div class="kpi-sub">Tempo de atendimento</div></div>
-    <div class="kpi"><div class="kpi-label">Ticket Médio Loja</div><div class="kpi-value" style="font-size:18px">${fmt(kpis.ticket_medio_loja)}</div></div>
-  </div>
-  <div class="grid g2 mb-2">
-    <div class="card">
-      <div class="card-title mb-2">Receita Mensal (12 meses)</div>
-      <canvas id="rev-chart-big" height="200"></canvas>
-    </div>
-    <div class="card">
-      <div class="card-title mb-2">Operações por Tipo</div>
-      <canvas id="ops-chart" height="200"></canvas>
-    </div>
-  </div>
-  <div class="grid g2 mb-2">
-    <div class="card">
-      <div class="card-title mb-2">Receita por Categoria</div>
-      <canvas id="cat-chart" height="200"></canvas>
-    </div>
-    <div class="card">
-      <div class="card-title mb-2">Top 10 Clientes (LTV)</div>
-      ${(top||[]).map((c,i)=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <span style="width:20px;text-align:center;font-size:12px;color:var(--text3)">${i+1}</span>
-        <div style="flex:1"><div class="text-sm font-bold">${c.name}</div><div class="text-xs text-muted">${c.vessels} embarcações</div></div>
-        ${tierBadge(c.tier)}
-        <span class="text-success font-bold text-sm">${fmt(c.ltv)}</span>
-      </div>`).join('')}
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title mb-2">KPIs Completos</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
-      ${[
-        ['Clientes Ativos', kpis.total_clientes, null],
-        ['Clientes VIP/Gold', kpis.vip_count, null],
-        ['Embarcações', kpis.total_vessels, null],
-        ['Contratos Ativos', kpis.contratos_ativos, null],
-        ['Receita Seca', fmt(kpis.receita_seca), null],
-        ['Receita Molhada', fmt(kpis.receita_molhada), null],
-        ['Receita Loja', fmt(kpis.receita_loja), null],
-        ['Inadimplência', fmt(kpis.inadimplencia), null],
-        ['Taxa Inadimplência', kpis.taxa_inadimplencia+'%', null],
-        ['OS Abertas', kpis.os_abertas, null],
-        ['OS Urgentes', kpis.os_urgentes, null],
-        ['Custo Manutenção Mês', fmt(kpis.custo_manutencao_mes), null],
-        ['Fila Hoje', kpis.queue_hoje, null],
-        ['Fila Aguardando', kpis.queue_aguardando, null],
-        ['Alertas Não Lidos', kpis.alertas_nao_lidos, null],
-      ].map(([label,val])=>`<div style="background:var(--surface2);border-radius:8px;padding:12px;border:1px solid var(--border)"><div class="text-xs text-muted mb-1">${label}</div><div class="font-bold">${val}</div></div>`).join('')}
-    </div>
-  </div>`);
+  <div id="an-content"></div>`);
 
-  if (rev && rev.length) {
-    pageCharts.rev = new Chart(document.getElementById('rev-chart-big'), {
-      type:'bar',
-      data:{labels:rev.map(r=>r.month),datasets:[{label:'Receita',data:rev.map(r=>r.total),backgroundColor:'rgba(59,130,246,.7)',borderColor:'#3b82f6',borderRadius:6}]},
-      options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}
-    });
-  }
-  if (kpis.ops_por_tipo && kpis.ops_por_tipo.length) {
-    pageCharts.ops = new Chart(document.getElementById('ops-chart'), {
-      type:'doughnut',
-      data:{labels:kpis.ops_por_tipo.map(o=>o.operation_type),datasets:[{data:kpis.ops_por_tipo.map(o=>o.count),backgroundColor:['rgba(59,130,246,.8)','rgba(16,185,129,.8)','rgba(99,102,241,.8)','rgba(245,158,11,.8)']}]},
-      options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8'}}}}
-    });
-  }
-  pageCharts.cat = new Chart(document.getElementById('cat-chart'), {
-    type:'bar',
-    data:{labels:['Armazenagem Seca','Armazenagem Molhada','Loja'],datasets:[{data:[kpis.receita_seca||0,kpis.receita_molhada||0,kpis.receita_loja||0],backgroundColor:['rgba(16,185,129,.7)','rgba(59,130,246,.7)','rgba(245,158,11,.7)'],borderRadius:6}]},
-    options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},y:{grid:{display:false}}}}
-  });
+  window._anKpis = kpis;
+  window._anExt  = ext;
+
+  window.anTab = function(tab, el) {
+    document.querySelectorAll('#an-tabs .tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    Object.values(pageCharts).forEach(c=>c&&c.destroy&&c.destroy()); pageCharts={};
+    const k = window._anKpis || {};
+    const e = window._anExt  || {};
+    const ac = document.getElementById('an-content');
+
+    if (tab==='visao') {
+      ac.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
+        ${sectionLabel('Financeiro')}
+        ${kpiTile('Receita Mês',fmt(k.receita_mes),'success')}
+        ${kpiTile('Receita 3 Meses',fmt(e.receita_3m))}
+        ${kpiTile('Receita 6 Meses',fmt(e.receita_6m))}
+        ${kpiTile('Receita Total',fmt(e.receita_total))}
+        ${kpiTile('Receita Seca Mês',fmt(k.receita_seca))}
+        ${kpiTile('Receita Molhada Mês',fmt(k.receita_molhada))}
+        ${kpiTile('Receita Loja Mês',fmt(k.receita_loja))}
+        ${kpiTile('Despesas Manutenção',fmt(e.despesas_manut),'danger')}
+        ${kpiTile('Margem Bruta Total',fmt(e.margem_bruta),'success')}
+        ${kpiTile('Inadimplência',fmt(k.inadimplencia),'danger')}
+        ${kpiTile('Taxa Inadimplência',k.taxa_inadimplencia+'%')}
+        ${kpiTile('Valor Carteira Mensal',fmt(e.valor_carteira))}
+        ${kpiTile('Valor Carteira Anual',fmt(e.valor_carteira_anual))}
+        ${kpiTile('Ticket Médio Loja',fmt(k.ticket_medio_loja))}
+        ${sectionLabel('Ocupação')}
+        ${kpiTile('Ocupação Total',k.ocupacao_total+'%','success')}
+        ${kpiTile('Ocupação Seca',k.ocupacao_seca+'%')}
+        ${kpiTile('Ocupação Molhada',k.ocupacao_molhada+'%')}
+        ${kpiTile('Vagas Seca Livres',e.spots_seca_livre)}
+        ${kpiTile('Vagas Molhada Livres',e.spots_mol_livre)}
+        ${kpiTile('Contratos Ativos',k.contratos_ativos)}
+        ${kpiTile('Vencem em 7d',e.contratos_vencendo_7d,'warning')}
+        ${kpiTile('Vencem em 30d',e.contratos_vencendo_30d)}
+        ${sectionLabel('Clientes')}
+        ${kpiTile('Clientes Ativos',k.total_clientes)}
+        ${kpiTile('VIP/Gold',k.vip_count)}
+        ${kpiTile('VIP',e.vip_count)}
+        ${kpiTile('Gold',e.gold_count)}
+        ${kpiTile('Silver',e.silver_count)}
+        ${kpiTile('Standard',e.std_count)}
+        ${kpiTile('Clientes Novos Mês',e.clientes_novos_mes)}
+        ${kpiTile('LTV Médio',fmt(k.ltv_medio))}
+        ${kpiTile('LTV Máximo',fmt(e.ltv_max),'success')}
+        ${kpiTile('Embarcações',k.total_vessels)}
+        ${sectionLabel('Operações')}
+        ${kpiTile('Fila Hoje',k.queue_hoje)}
+        ${kpiTile('Aguardando',k.queue_aguardando)}
+        ${kpiTile('Ops Total',e.ops_total)}
+        ${kpiTile('Ops Mês',e.ops_mes)}
+        ${kpiTile('Ops Concluídas Mês',e.ops_completed_mes,'success')}
+        ${kpiTile('Taxa Conclusão',e.taxa_conclusao+'%')}
+        ${kpiTile('SLA Médio',k.sla_avg_min+' min')}
+        ${sectionLabel('Manutenção')}
+        ${kpiTile('OS Abertas',k.os_abertas,'warning')}
+        ${kpiTile('OS Urgentes',k.os_urgentes,'danger')}
+        ${kpiTile('OS Total',e.os_total)}
+        ${kpiTile('OS Concluídas',e.os_concluidas,'success')}
+        ${kpiTile('Taxa Resolução OS',e.taxa_resolucao_os+'%')}
+        ${kpiTile('Custo Manut. Mês',fmt(k.custo_manutencao_mes))}
+        ${kpiTile('Custo Manut. Total',fmt(e.despesas_manut))}
+        ${sectionLabel('Loja')}
+        ${kpiTile('Pedidos Mês',e.pedidos_mes)}
+        ${kpiTile('Pedidos Pendentes',e.pedidos_pendentes,'warning')}
+        ${kpiTile('Alertas Não Lidos',k.alertas_nao_lidos)}
+      </div>`;
+    }
+    else if (tab==='financeiro') {
+      ac.innerHTML = `
+      <div class="grid g4 mb-2">
+        <div class="kpi green"><div class="kpi-label">Receita Mês</div><div class="kpi-value" style="font-size:20px">${fmt(k.receita_mes)}</div><span class="kpi-icon">💰</span></div>
+        <div class="kpi"><div class="kpi-label">Receita 3 Meses</div><div class="kpi-value" style="font-size:20px">${fmt(e.receita_3m)}</div></div>
+        <div class="kpi purple"><div class="kpi-label">Carteira Anual</div><div class="kpi-value" style="font-size:20px">${fmt(e.valor_carteira_anual)}</div></div>
+        <div class="kpi red"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:20px">${fmt(k.inadimplencia)}</div><div class="kpi-sub">${k.taxa_inadimplencia}%</div></div>
+      </div>
+      <div class="grid g2 mb-2">
+        <div class="card"><div class="card-title mb-2">Receita Mensal (12 meses)</div><canvas id="an-rev" height="220"></canvas></div>
+        <div class="card"><div class="card-title mb-2">Loja Mensal (12 meses)</div><canvas id="an-loja" height="220"></canvas></div>
+      </div>
+      <div class="grid g2 mb-2">
+        <div class="card"><div class="card-title mb-2">Cobranças por Status</div><canvas id="an-charges" height="220"></canvas></div>
+        <div class="card"><div class="card-title mb-2">Receita por Categoria</div><canvas id="an-cat" height="220"></canvas></div>
+      </div>`;
+      setTimeout(()=>{
+        if (e.receita_por_mes && e.receita_por_mes.length) {
+          pageCharts.rev = new Chart(document.getElementById('an-rev'),{type:'bar',data:{labels:e.receita_por_mes.map(r=>r.month),datasets:[{label:'Receita',data:e.receita_por_mes.map(r=>r.total),backgroundColor:'rgba(59,130,246,.7)',borderColor:'#3b82f6',borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}});
+        }
+        if (e.loja_por_mes && e.loja_por_mes.length) {
+          pageCharts.loja = new Chart(document.getElementById('an-loja'),{type:'bar',data:{labels:e.loja_por_mes.map(r=>r.month),datasets:[{label:'Loja',data:e.loja_por_mes.map(r=>r.total),backgroundColor:'rgba(245,158,11,.7)',borderColor:'#f59e0b',borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}});
+        }
+        if (e.charges_por_status && e.charges_por_status.length) {
+          const statusColors={'paid':'rgba(16,185,129,.8)','pending':'rgba(245,158,11,.8)','overdue':'rgba(239,68,68,.8)'};
+          pageCharts.charges = new Chart(document.getElementById('an-charges'),{type:'doughnut',data:{labels:e.charges_por_status.map(s=>s.status),datasets:[{data:e.charges_por_status.map(s=>s.total),backgroundColor:e.charges_por_status.map(s=>statusColors[s.status]||'rgba(99,102,241,.8)')}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8'}}}}});
+        }
+        pageCharts.cat = new Chart(document.getElementById('an-cat'),{type:'bar',data:{labels:['Armazenagem Seca','Armazenagem Molhada','Loja'],datasets:[{data:[k.receita_seca||0,k.receita_molhada||0,k.receita_loja||0],backgroundColor:['rgba(16,185,129,.7)','rgba(59,130,246,.7)','rgba(245,158,11,.7)'],borderRadius:6}]},options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},y:{grid:{display:false}}}}});
+      },0);
+    }
+    else if (tab==='ocupacao') {
+      ac.innerHTML = `
+      <div class="grid g4 mb-2">
+        <div class="kpi green"><div class="kpi-label">Ocupação Total</div><div class="kpi-value">${k.ocupacao_total}%</div><div class="kpi-sub">${k.vagas_ocupadas} de ${k.vagas_total} vagas</div></div>
+        <div class="kpi"><div class="kpi-label">Seca</div><div class="kpi-value">${k.ocupacao_seca}%</div><div class="kpi-sub">${k.vagas_seca_ocupadas}/${k.vagas_seca_total} vagas</div></div>
+        <div class="kpi"><div class="kpi-label">Molhada</div><div class="kpi-value">${k.ocupacao_molhada}%</div><div class="kpi-sub">${k.vagas_molhada_ocupadas}/${k.vagas_molhada_total} vagas</div></div>
+        <div class="kpi yellow"><div class="kpi-label">Contratos Vencem 30d</div><div class="kpi-value">${e.contratos_vencendo_30d}</div><div class="kpi-sub">${e.contratos_vencendo_7d} nos próx. 7d</div></div>
+      </div>
+      <div class="grid g2 mb-2">
+        <div class="card"><div class="card-title mb-2">Ocupação por Tipo (Vagas)</div><canvas id="an-spots" height="240"></canvas></div>
+        <div class="card">
+          <div class="card-title mb-2">Detalhes de Ocupação</div>
+          <div style="display:flex;flex-direction:column;gap:14px;padding:8px 0">
+            <div>
+              <div class="flex justify-between text-sm mb-1"><span>Armazenagem Seca</span><span class="font-bold">${k.vagas_seca_ocupadas}/${k.vagas_seca_total}</span></div>
+              <div class="progress-bar"><div class="progress-fill ${k.ocupacao_seca>=80?'green':k.ocupacao_seca>=50?'yellow':'red'}" style="width:${k.ocupacao_seca}%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-sm mb-1"><span>Armazenagem Molhada</span><span class="font-bold">${k.vagas_molhada_ocupadas}/${k.vagas_molhada_total}</span></div>
+              <div class="progress-bar"><div class="progress-fill ${k.ocupacao_molhada>=80?'green':k.ocupacao_molhada>=50?'yellow':'red'}" style="width:${k.ocupacao_molhada}%"></div></div>
+            </div>
+            <div style="margin-top:8px">
+              <div class="flex justify-between text-sm mb-1"><span class="font-bold">Total Geral</span><span class="font-bold text-success">${k.vagas_ocupadas}/${k.vagas_total}</span></div>
+              <div class="progress-bar" style="height:12px"><div class="progress-fill" style="width:${k.ocupacao_total}%"></div></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+              ${kpiTile('Vagas Seca Livres',e.spots_seca_livre)}
+              ${kpiTile('Vagas Molhada Livres',e.spots_mol_livre)}
+              ${kpiTile('Valor Carteira/Mês',fmt(e.valor_carteira),'success')}
+              ${kpiTile('Contratos Ativos',k.contratos_ativos)}
+            </div>
+          </div>
+        </div>
+      </div>`;
+      setTimeout(()=>{
+        pageCharts.spots = new Chart(document.getElementById('an-spots'),{type:'bar',data:{labels:['Seca Ocupadas','Seca Livres','Molhada Ocupadas','Molhada Livres'],datasets:[{data:[k.vagas_seca_ocupadas||0,e.spots_seca_livre||0,k.vagas_molhada_ocupadas||0,e.spots_mol_livre||0],backgroundColor:['rgba(59,130,246,.8)','rgba(16,185,129,.8)','rgba(99,102,241,.8)','rgba(16,185,129,.5)'],borderRadius:8}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}});
+      },0);
+    }
+    else if (tab==='operacoes') {
+      ac.innerHTML = `
+      <div class="grid g4 mb-2">
+        <div class="kpi"><div class="kpi-label">Ops Total</div><div class="kpi-value">${e.ops_total}</div></div>
+        <div class="kpi"><div class="kpi-label">Ops Este Mês</div><div class="kpi-value">${e.ops_mes}</div></div>
+        <div class="kpi green"><div class="kpi-label">Concluídas Mês</div><div class="kpi-value">${e.ops_completed_mes}</div></div>
+        <div class="kpi"><div class="kpi-label">Taxa Conclusão</div><div class="kpi-value">${e.taxa_conclusao}%</div></div>
+      </div>
+      <div class="grid g4 mb-2">
+        <div class="kpi yellow"><div class="kpi-label">OS Total</div><div class="kpi-value">${e.os_total}</div></div>
+        <div class="kpi green"><div class="kpi-label">OS Concluídas</div><div class="kpi-value">${e.os_concluidas}</div></div>
+        <div class="kpi"><div class="kpi-label">Taxa Resolução OS</div><div class="kpi-value">${e.taxa_resolucao_os}%</div></div>
+        <div class="kpi"><div class="kpi-label">SLA Médio</div><div class="kpi-value">${k.sla_avg_min} min</div></div>
+      </div>
+      <div class="grid g2 mb-2">
+        <div class="card"><div class="card-title mb-2">Operações por Tipo</div><canvas id="an-ops-tipo" height="240"></canvas></div>
+        <div class="card"><div class="card-title mb-2">Operações por Mês</div><canvas id="an-ops-mes" height="240"></canvas></div>
+      </div>
+      <div class="card mb-2"><div class="card-title mb-2">Manutenção por Tipo</div>
+        <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Quantidade</th><th>Custo Total</th></tr></thead>
+        <tbody>${(e.manut_por_tipo||[]).map(m=>`<tr><td>${m.type}</td><td>${m.count}</td><td class="text-success">${fmt(m.total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--text3)">Sem dados</td></tr>'}</tbody>
+        </table></div>
+      </div>`;
+      setTimeout(()=>{
+        if (e.ops_por_tipo && e.ops_por_tipo.length) {
+          pageCharts.opsTipo = new Chart(document.getElementById('an-ops-tipo'),{type:'doughnut',data:{labels:e.ops_por_tipo.map(o=>o.operation_type),datasets:[{data:e.ops_por_tipo.map(o=>o.count),backgroundColor:['rgba(59,130,246,.8)','rgba(16,185,129,.8)','rgba(99,102,241,.8)','rgba(245,158,11,.8)','rgba(239,68,68,.8)']}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8'}}}}});
+        }
+        if (e.ops_por_mes && e.ops_por_mes.length) {
+          pageCharts.opsMes = new Chart(document.getElementById('an-ops-mes'),{type:'bar',data:{labels:e.ops_por_mes.map(o=>o.month),datasets:[{label:'Operações',data:e.ops_por_mes.map(o=>o.count),backgroundColor:'rgba(99,102,241,.7)',borderColor:'#6366f1',borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}});
+        }
+      },0);
+    }
+    else if (tab==='clientes') {
+      ac.innerHTML = `
+      <div class="grid g4 mb-2">
+        <div class="kpi"><div class="kpi-label">Clientes Ativos</div><div class="kpi-value">${k.total_clientes}</div></div>
+        <div class="kpi"><div class="kpi-label">LTV Médio</div><div class="kpi-value" style="font-size:20px">${fmt(k.ltv_medio)}</div></div>
+        <div class="kpi green"><div class="kpi-label">LTV Máximo</div><div class="kpi-value" style="font-size:20px">${fmt(e.ltv_max)}</div></div>
+        <div class="kpi"><div class="kpi-label">Novos Mês</div><div class="kpi-value">${e.clientes_novos_mes}</div></div>
+      </div>
+      <div class="grid g2 mb-2">
+        <div class="card"><div class="card-title mb-2">Distribuição por Tier</div><canvas id="an-tier" height="260"></canvas></div>
+        <div class="card"><div class="card-title mb-2">Top 10 Clientes Loja</div>
+          <div class="table-wrap"><table><thead><tr><th>#</th><th>Cliente</th><th>Tier</th><th>Pedidos</th><th>Total Loja</th></tr></thead>
+          <tbody>${(e.top_clientes_loja||[]).map((c,i)=>`<tr>
+            <td style="color:var(--text3)">${i+1}</td>
+            <td class="font-bold">${c.name}</td>
+            <td>${tierBadge(c.tier)}</td>
+            <td>${c.pedidos}</td>
+            <td class="text-success font-bold">${fmt(c.total_loja)}</td>
+          </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Sem dados</td></tr>'}
+          </tbody></table></div>
+        </div>
+      </div>
+      <div class="card"><div class="card-title mb-2">Top 10 Clientes por LTV</div>
+        <div id="an-top-ltv"></div>
+      </div>`;
+      setTimeout(async ()=>{
+        pageCharts.tier = new Chart(document.getElementById('an-tier'),{type:'doughnut',data:{labels:['VIP','Gold','Silver','Standard'],datasets:[{data:[e.vip_count||0,e.gold_count||0,e.silver_count||0,e.std_count||0],backgroundColor:['rgba(255,215,0,.85)','rgba(245,158,11,.8)','rgba(148,163,184,.6)','rgba(100,116,139,.5)']}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8'}}}}});
+        const top = await api('GET','/analytics/top-clients');
+        document.getElementById('an-top-ltv').innerHTML = (top||[]).map((c,i)=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="width:24px;text-align:center;font-size:13px;color:var(--text3);font-weight:700">${i+1}</span>
+          <div style="flex:1"><div class="text-sm font-bold">${c.name}</div><div class="text-xs text-muted">${c.vessels} embarcações · ${c.contracts} contratos</div></div>
+          ${tierBadge(c.tier)}
+          <span class="text-success font-bold">${fmt(c.ltv)}</span>
+        </div>`).join('') || '<div class="text-muted text-sm" style="padding:16px">Sem dados</div>';
+      },0);
+    }
+  };
+
+  anTab('visao', document.querySelector('#an-tabs .tab.active'));
 };
 
 // ── PAGE: ALERTS ──────────────────────────────────────
