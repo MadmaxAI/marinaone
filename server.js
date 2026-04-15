@@ -174,20 +174,30 @@ addRoute('DELETE', '/api/clients/:id', async (req, res, ctx) => {
 });
 
 // ── VESSELS ──────────────────────────────────────────────────────────
+function vesselStatus(vesselId, spotType) {
+  const lastOp = dbGet(`SELECT operation_type FROM queue_operations WHERE vessel_id=? AND status='completed' ORDER BY completed_at DESC LIMIT 1`, [vesselId]);
+  if (lastOp?.operation_type === 'descida') return 'Na água';
+  if (spotType === 'seca')   return 'Na vaga seca';
+  if (spotType === 'molhada') return 'Na vaga molhada';
+  if (lastOp?.operation_type === 'subida') return 'Na vaga seca';
+  return 'Em terra';
+}
 addRoute('GET', '/api/vessels', async (req, res, ctx) => {
   const { search = '', client_id = '' } = ctx.qs;
-  let sql = `SELECT v.*, c.name as client_name, c.tier as client_tier, s.number as spot_number
+  let sql = `SELECT v.*, c.name as client_name, c.tier as client_tier, s.number as spot_number, s.type as spot_type
     FROM vessels v JOIN clients c ON v.client_id=c.id
     LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active'
     LEFT JOIN spots s ON ct.spot_id=s.id WHERE v.active=1`;
   const a = [];
   if (search)    { sql += ' AND (v.name LIKE ? OR v.registration LIKE ? OR c.name LIKE ?)'; a.push(`%${search}%`, `%${search}%`, `%${search}%`); }
   if (client_id) { sql += ' AND v.client_id=?'; a.push(client_id); }
-  sendJson(res, dbAll(sql + ' ORDER BY v.name', a));
+  const rows = dbAll(sql + ' ORDER BY v.name', a);
+  sendJson(res, rows.map(r => ({ ...r, vessel_status: vesselStatus(r.id, r.spot_type) })));
 });
 addRoute('GET', '/api/vessels/:id', async (req, res, ctx) => {
-  const v = dbGet(`SELECT v.*, c.name as client_name FROM vessels v JOIN clients c ON v.client_id=c.id WHERE v.id=?`, [ctx.params.id]);
+  const v = dbGet(`SELECT v.*, c.name as client_name, s.type as spot_type FROM vessels v JOIN clients c ON v.client_id=c.id LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active' LEFT JOIN spots s ON ct.spot_id=s.id WHERE v.id=?`, [ctx.params.id]);
   if (!v) return sendJson(res, { error: 'Não encontrado' }, 404);
+  v.vessel_status = vesselStatus(v.id, v.spot_type);
   v.history     = dbAll(`SELECT * FROM queue_operations WHERE vessel_id=? ORDER BY requested_at DESC LIMIT 20`, [ctx.params.id]);
   v.maintenance = dbAll(`SELECT * FROM maintenance_os WHERE vessel_id=? ORDER BY created_at DESC LIMIT 10`, [ctx.params.id]);
   v.contract    = dbGet(`SELECT ct.*, s.number as spot_number FROM contracts ct LEFT JOIN spots s ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [ctx.params.id]);
@@ -228,8 +238,22 @@ addRoute('GET', '/api/spots', async (req, res, ctx) => {
   if (status) { sql += ' AND s.status=?'; a.push(status); }
   sendJson(res, dbAll(sql + ' ORDER BY s.number', a));
 });
+addRoute('POST', '/api/spots', async (req, res, ctx) => {
+  const b = ctx.body;
+  if (!b.number || !b.type) return sendJson(res, { error: 'Número e tipo obrigatórios' }, 400);
+  const r = dbRun('INSERT INTO spots(number,type,status) VALUES(?,?,?)', [b.number, b.type, 'available']);
+  sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
+});
 addRoute('PUT', '/api/spots/:id', async (req, res, ctx) => {
   dbRun('UPDATE spots SET status=?,vessel_id=? WHERE id=?', [ctx.body.status, ctx.body.vessel_id || null, ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+addRoute('DELETE', '/api/spots/:id', async (req, res, ctx) => {
+  const spot = dbGet('SELECT * FROM spots WHERE id=?', [ctx.params.id]);
+  if (!spot) return sendJson(res, { error: 'Vaga não encontrada' }, 404);
+  if (spot.vessel_id) return sendJson(res, { error: 'Vaga com embarcação associada — remova o contrato primeiro' }, 400);
+  if (spot.status === 'occupied') return sendJson(res, { error: 'Vaga ocupada — cancele o contrato primeiro' }, 400);
+  dbRun('DELETE FROM spots WHERE id=?', [ctx.params.id]);
   sendJson(res, { ok: true });
 });
 
@@ -244,10 +268,19 @@ addRoute('GET', '/api/contracts', async (req, res, ctx) => {
   if (status) { sql += ' AND ct.status=?'; a.push(status); }
   sendJson(res, dbAll(sql + ' ORDER BY ct.start_date DESC', a));
 });
+addRoute('GET', '/api/contracts/:id', async (req, res, ctx) => {
+  const ct = dbGet(`SELECT ct.*, c.name as client_name, c.tier as client_tier,
+    v.name as vessel_name, s.number as spot_number
+    FROM contracts ct JOIN clients c ON ct.client_id=c.id
+    JOIN vessels v ON ct.vessel_id=v.id LEFT JOIN spots s ON ct.spot_id=s.id
+    WHERE ct.id=?`, [ctx.params.id]);
+  if (!ct) return sendJson(res, { error: 'Não encontrado' }, 404);
+  sendJson(res, ct);
+});
 addRoute('POST', '/api/contracts', async (req, res, ctx) => {
   const b = ctx.body;
-  const r = dbRun('INSERT INTO contracts(client_id,vessel_id,spot_id,type,start_date,end_date,monthly_value,status,notes) VALUES(?,?,?,?,?,?,?,?,?)',
-                  [b.client_id, b.vessel_id, b.spot_id || null, b.type, b.start_date, b.end_date || null, b.monthly_value, b.status || 'active', b.notes || null]);
+  const r = dbRun('INSERT INTO contracts(client_id,vessel_id,spot_id,type,start_date,end_date,monthly_value,status,notes,contract_file,contract_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                  [b.client_id, b.vessel_id, b.spot_id || null, b.type, b.start_date, b.end_date || null, b.monthly_value, b.status || 'active', b.notes || null, b.contract_file || null, b.contract_file_name || null]);
   if (b.spot_id) dbRun(`UPDATE spots SET status='occupied',vessel_id=? WHERE id=?`, [b.vessel_id, b.spot_id]);
   for (let i = 0; i < 3; i++) {
     const d = new Date(b.start_date); d.setDate(d.getDate() + 30 * i);
@@ -261,8 +294,11 @@ addRoute('POST', '/api/contracts', async (req, res, ctx) => {
 addRoute('PUT', '/api/contracts/:id', async (req, res, ctx) => {
   const b = ctx.body;
   const old = dbGet('SELECT * FROM contracts WHERE id=?', [ctx.params.id]);
-  dbRun('UPDATE contracts SET status=?,monthly_value=?,end_date=?,notes=? WHERE id=?',
-        [b.status || old.status, b.monthly_value || old.monthly_value, b.end_date || old.end_date, b.notes || old.notes, ctx.params.id]);
+  dbRun('UPDATE contracts SET status=?,monthly_value=?,end_date=?,notes=?,contract_file=?,contract_file_name=? WHERE id=?',
+        [b.status || old.status, b.monthly_value || old.monthly_value, b.end_date || old.end_date, b.notes || old.notes,
+         b.contract_file !== undefined ? (b.contract_file || null) : old.contract_file,
+         b.contract_file_name !== undefined ? (b.contract_file_name || null) : old.contract_file_name,
+         ctx.params.id]);
   if (b.status === 'cancelled' && old.spot_id)
     dbRun(`UPDATE spots SET status='available',vessel_id=NULL WHERE id=?`, [old.spot_id]);
   sendJson(res, { ok: true });
@@ -292,10 +328,25 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
 addRoute('POST', '/api/queue', async (req, res, ctx) => {
   const vessel = dbGet('SELECT * FROM vessels WHERE id=?', [ctx.body.vessel_id]);
   if (!vessel) return sendJson(res, { error: 'Embarcação não encontrada' }, 404);
+  const opType = ctx.body.operation_type;
+  // Enforce descida/subida sequence
+  if (opType === 'descida' || opType === 'subida') {
+    const lastOp = dbGet(`SELECT operation_type FROM queue_operations WHERE vessel_id=? AND status='completed' ORDER BY completed_at DESC LIMIT 1`, [ctx.body.vessel_id]);
+    const lastType = lastOp?.operation_type || null;
+    if (opType === 'descida' && lastType === 'descida')
+      return sendJson(res, { error: 'A embarcação já está na água (última operação foi uma Descida). Registre uma Subida primeiro.' }, 400);
+    if (opType === 'subida' && lastType !== 'descida' && lastType !== null)
+      return sendJson(res, { error: 'A embarcação não está na água (última operação foi uma Subida). Registre uma Descida primeiro.' }, 400);
+    if (opType === 'subida' && lastType === null)
+      return sendJson(res, { error: 'Não há histórico de Descida para esta embarcação.' }, 400);
+  }
+  // Check no pending/in_progress op for same vessel
+  const activeOp = dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [ctx.body.vessel_id]);
+  if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui uma operação em andamento na fila.' }, 400);
   const client = dbGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
   const priority = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
   const r = dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes) VALUES(?,?,?,'waiting',?,?)`,
-                  [ctx.body.vessel_id, vessel.client_id, ctx.body.operation_type, priority, ctx.body.notes || null]);
+                  [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null]);
   sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
 });
 addRoute('PUT', '/api/queue/:id', async (req, res, ctx) => {
@@ -924,6 +975,8 @@ function migrateDb() {
   // Settings table (idempotent)
   try { db.exec(`CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL DEFAULT '',updated_at TEXT DEFAULT (datetime('now')))`); } catch(e) {}
   try { db.exec(`CREATE TABLE IF NOT EXISTS payment_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,charge_id INTEGER NOT NULL,client_id INTEGER,client_name TEXT,description TEXT,amount REAL,payment_method TEXT,pay_notes TEXT,comprovante_data TEXT,comprovante_name TEXT,user_id INTEGER,user_email TEXT,user_name TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP)`); } catch(e) {}
+  try { db.exec(`ALTER TABLE contracts ADD COLUMN contract_file TEXT`); } catch(e) {}
+  try { db.exec(`ALTER TABLE contracts ADD COLUMN contract_file_name TEXT`); } catch(e) {}
   // Seed default settings (INSERT OR IGNORE)
   const defSettings = [
     ['marina_name','Marina One'],['marina_cnpj','00.000.000/0001-00'],
@@ -933,6 +986,7 @@ function migrateDb() {
     ['bank_name','Banco do Brasil'],['bank_agency','1234-5'],['bank_account','00000-0'],
     ['bank_pix_key','11999990000'],['bank_pix_type','telefone'],['bank_pix_beneficiary','Marina One LTDA'],
     ['store_whatsapp','5511999990000'],
+    ['store_whatsapp_template','Olá {cliente}! Segue seu orçamento da {marina}:\n\n🛥️ Embarcação: {embarcacao}\n📋 Itens: {itens}\n💰 Total: {total}\n\nPara pagamento via PIX:\nChave: {pix_key}\n\n{qrcode_link}\n\nApós o pagamento, envie o comprovante para este número. Obrigado!'],
     ['license_plan','professional'],['license_valid_until','2027-12-31'],['license_marina_id','MRN-001'],
   ];
   for (const [k,v] of defSettings) {

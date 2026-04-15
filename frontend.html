@@ -55,6 +55,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .kpi.yellow::before{background:linear-gradient(90deg,var(--warning),#fcd34d)}
 .kpi.red::before{background:linear-gradient(90deg,var(--danger),#f87171)}
 .kpi.purple::before{background:linear-gradient(90deg,var(--accent2),#a78bfa)}
+.kpi-active{box-shadow:0 0 0 2px var(--accent)!important;transform:translateY(-2px)}
 /* TABLE */
 .table-wrap{overflow-x:auto;border-radius:var(--radius)}
 table{width:100%;border-collapse:collapse}
@@ -642,7 +643,8 @@ function renderQueue(queue) {
         ${statusBadge(q.status)}
       </div>
       <div class="text-xs text-muted">
-        ${q.client_name} · Solicitado: ${fmtDT(q.requested_at)}
+        ${q.client_name} · ${q.vessel_type||''} ${q.vessel_length?q.vessel_length+'m':''}
+        · Solicitado: ${fmtDT(q.requested_at)}
         ${q.started_at ? ' · Iniciado: '+fmtDT(q.started_at) : ''}
         ${q.completed_at ? ' · Concluído: '+fmtDT(q.completed_at) : ''}
         ${q.operator ? ' · Op: '+q.operator : ''}
@@ -699,6 +701,7 @@ async function submitQueue() {
   const notes = document.getElementById('q-notes').value;
   const r = await api('POST','/queue',{vessel_id:parseInt(vessel_id),operation_type,notes});
   if (r && r.id) { toast('Operação adicionada à fila'); closeModalForce(); pages.queue(); }
+  else if (r && r.error) toast(r.error, 'error');
 }
 
 // ── PAGE: CLIENTS ─────────────────────────────────────
@@ -821,21 +824,28 @@ pages.vessels = async () => {
     </div>
   </div>
   <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Embarcação</th><th>Tipo</th><th>Cliente</th><th>Vaga</th><th>Registro</th><th>Ano</th><th>Ações</th></tr></thead>
+    <thead><tr><th>Embarcação</th><th>Tipo</th><th>Cliente</th><th>Vaga</th><th>Status</th><th>Registro</th><th>Ações</th></tr></thead>
     <tbody id="vessels-tbody">${renderVesselsRows(vessels||[])}</tbody>
   </table></div></div>`);
 };
 
+const VESSEL_STATUS_BADGE = s => {
+  if (s==='Na água') return `<span class="badge badge-info">🌊 Na água</span>`;
+  if (s==='Na vaga seca') return `<span class="badge badge-success">🏗️ Vaga seca</span>`;
+  if (s==='Na vaga molhada') return `<span class="badge badge-info">⚓ Vaga molhada</span>`;
+  return `<span class="badge badge-gray">🏠 Em terra</span>`;
+};
+
 function renderVesselsRows(vessels) {
   if (!vessels.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
-  return vessels.map(v=>`<tr>
+  return vessels.map(v=>`<tr class="row-link" onclick="viewVessel(${v.id})" title="Clique para ver detalhes">
     <td><div class="font-bold">${v.name}</div><div class="text-xs text-muted">${v.model||''} ${v.manufacturer||''}</div></td>
     <td><span class="badge badge-info">${v.type||'—'}</span></td>
     <td>${v.client_name} ${tierBadge(v.client_tier)}</td>
     <td>${v.spot_number?`<span class="badge badge-success">${v.spot_number}</span>`:'<span class="badge badge-gray">—</span>'}</td>
+    <td>${VESSEL_STATUS_BADGE(v.vessel_status)}</td>
     <td>${v.registration||'—'}</td>
-    <td>${v.year||'—'}</td>
-    <td><div class="flex gap-2">
+    <td onclick="event.stopPropagation()"><div class="flex gap-2">
       <button class="btn btn-ghost btn-sm" onclick="viewVessel(${v.id})">👁</button>
       <button class="btn btn-ghost btn-sm" onclick="openVesselModal(${v.id})">✏️</button>
     </div></td>
@@ -851,7 +861,7 @@ async function searchVessels() {
 async function viewVessel(id) {
   const v = await api('GET', `/vessels/${id}`);
   modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-title">🛥️ ${v.name}</div>
+    <div class="modal-title">🛥️ ${v.name} ${VESSEL_STATUS_BADGE(v.vessel_status)}</div>
     <div class="grid g2 mb-2">
       <div class="card">
         <b>Tipo:</b> ${v.type||'—'} · <b>Ano:</b> ${v.year||'—'}<br>
@@ -862,6 +872,7 @@ async function viewVessel(id) {
       </div>
       <div class="card">
         <b>Proprietário:</b> ${v.client_name}<br>
+        <b>Status atual:</b> ${VESSEL_STATUS_BADGE(v.vessel_status)}<br>
         <b>Contrato:</b> ${v.contract?statusBadge(v.contract.status)+' '+v.contract.type+' — Vaga '+v.contract.spot_number:'Sem contrato ativo'}<br>
         ${v.notes?'<b>Obs:</b> '+v.notes:''}
       </div>
@@ -870,7 +881,11 @@ async function viewVessel(id) {
       <div class="card-title mb-1">Histórico de Operações</div>
       ${(v.history||[]).map(op=>`<div class="flex justify-between items-center" style="padding:7px 0;border-bottom:1px solid var(--border)">${opBadge(op.operation_type)} ${statusBadge(op.status)}<span class="text-xs text-muted">${fmtDT(op.requested_at)}</span></div>`).join('')||'<p class="text-muted text-sm">Sem histórico</p>'}
     </div>
-    <div class="form-actions"><button class="btn btn-ghost" onclick="closeModalForce()">Fechar</button></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="closeModalForce();nav('queue')">⚙️ Fila de Operações</button>
+      <button class="btn btn-ghost" onclick="closeModalForce();openVesselModal(${id})">✏️ Editar</button>
+      <button class="btn btn-ghost" onclick="closeModalForce()">Fechar</button>
+    </div>
   </div>`);
 }
 
@@ -931,7 +946,9 @@ pages.spots = async () => {
     <div class="kpi"><div class="kpi-label">Molhadas Ocupadas</div><div class="kpi-value">${summary.molhada.occupied}</div><div class="kpi-sub">${Math.round(summary.molhada.occupied/summary.molhada.total*100)||0}% ocupação</div></div>
   </div>
   <div class="flex justify-between mb-2">
-    <span></span>
+    <div class="flex gap-2">
+      <button class="btn btn-primary" onclick="openNewSpotModal()">+ Nova Vaga</button>
+    </div>
     <button class="btn-export" onclick="exportVagas()">📥 Excel</button>
   </div>
   <div class="grid g2">
@@ -951,8 +968,8 @@ pages.spots = async () => {
 function spotDetail(id, spot) {
   if (typeof spot === 'string') spot = JSON.parse(spot);
   modal(`<div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-title">Vaga ${spot.number} (${spot.type})</div>
-    <div class="mb-2">Status: ${statusBadge(spot.status)}</div>
+    <div class="modal-title">Vaga ${spot.number} <span class="badge ${spot.type==='seca'?'badge-success':'badge-info'}">${spot.type}</span></div>
+    <div class="mb-2">Status atual: ${statusBadge(spot.status)}</div>
     ${spot.vessel_name ? `<p class="text-sm mb-2"><b>Embarcação:</b> ${spot.vessel_name}<br><b>Proprietário:</b> ${spot.client_name||'—'}</p>` : ''}
     <div class="form-group"><label>Alterar Status</label>
       <select id="spot-status">
@@ -962,6 +979,7 @@ function spotDetail(id, spot) {
       </select>
     </div>
     <div class="form-actions">
+      ${!spot.vessel_id && spot.status !== 'occupied' ? `<button class="btn btn-danger" onclick="deleteSpot(${id})">🗑 Excluir Vaga</button>` : ''}
       <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
       <button class="btn btn-primary" onclick="updateSpot(${id})">Salvar</button>
     </div>
@@ -972,6 +990,43 @@ async function updateSpot(id) {
   const status = document.getElementById('spot-status').value;
   await api('PUT',`/spots/${id}`,{status});
   toast('Vaga atualizada'); closeModalForce(); pages.spots();
+}
+
+async function deleteSpot(id) {
+  if (!confirm('Excluir esta vaga permanentemente?')) return;
+  const r = await api('DELETE', `/spots/${id}`);
+  if (r && r.ok) { toast('Vaga excluída'); closeModalForce(); pages.spots(); }
+  else toast(r?.error || 'Erro ao excluir vaga','error');
+}
+
+function openNewSpotModal() {
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Nova Vaga</div>
+    <div class="form-row cols2">
+      <div class="form-group"><label>Número / Identificação *</label>
+        <input id="ns-number" placeholder="Ex: S-101, M-05...">
+      </div>
+      <div class="form-group"><label>Tipo *</label>
+        <select id="ns-type">
+          <option value="seca">🏗️ Armazenagem Seca</option>
+          <option value="molhada">🌊 Armazenagem Molhada</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveNewSpot()">Criar Vaga</button>
+    </div>
+  </div>`);
+}
+
+async function saveNewSpot() {
+  const number = document.getElementById('ns-number').value.trim();
+  const type   = document.getElementById('ns-type').value;
+  if (!number) { toast('Número obrigatório','error'); return; }
+  const r = await api('POST', '/spots', { number, type });
+  if (r && r.id) { toast('Vaga criada!'); closeModalForce(); pages.spots(); }
+  else toast(r?.error || 'Erro ao criar vaga','error');
 }
 
 // ── PAGE: CONTRACTS ───────────────────────────────────
@@ -997,7 +1052,7 @@ pages.contracts = async () => {
 
 function renderContractRows(contracts) {
   if (!contracts.length) return '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum contrato</td></tr>';
-  return contracts.map(c=>`<tr>
+  return contracts.map(c=>`<tr class="row-link" onclick="viewContract(${c.id})" title="Clique para ver detalhes">
     <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
     <td>${c.vessel_name}</td>
     <td><span class="badge ${c.type==='molhada'?'badge-info':'badge-success'}">${c.type}</span></td>
@@ -1005,10 +1060,101 @@ function renderContractRows(contracts) {
     <td class="font-bold text-success">${fmt(c.monthly_value)}</td>
     <td>${fmtDate(c.start_date)} → ${c.end_date?fmtDate(c.end_date):'Indeterminado'}</td>
     <td>${statusBadge(c.status)}</td>
-    <td><div class="flex gap-2">
+    <td onclick="event.stopPropagation()"><div class="flex gap-2">
+      <button class="btn btn-ghost btn-sm" onclick="viewContract(${c.id})">👁</button>
       ${c.status==='active'?`<button class="btn btn-danger btn-sm" onclick="cancelContract(${c.id})">Cancelar</button>`:''}
     </div></td>
   </tr>`).join('');
+}
+
+async function viewContract(id) {
+  const c = await api('GET', `/contracts/${id}`);
+  if (!c || c.error) { toast('Contrato não encontrado','error'); return; }
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">📋 Contrato #${c.id}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">CLIENTE</div>
+        <div style="font-weight:600">${c.client_name} ${tierBadge(c.client_tier)}</div>
+      </div>
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">EMBARCAÇÃO</div>
+        <div style="font-weight:600">${c.vessel_name}</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">TIPO</div>
+        <span class="badge ${c.type==='molhada'?'badge-info':'badge-success'}">${c.type}</span>
+      </div>
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">VAGA</div>
+        <div style="font-weight:600">${c.spot_number||'—'}</div>
+      </div>
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">STATUS</div>
+        ${statusBadge(c.status)}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">VALOR MENSAL</div>
+        <div style="font-weight:700;font-size:18px;color:var(--success)">${fmt(c.monthly_value)}</div>
+      </div>
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">INÍCIO</div>
+        <div style="font-weight:600">${fmtDate(c.start_date)}</div>
+      </div>
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">TÉRMINO</div>
+        <div style="font-weight:600">${c.end_date ? fmtDate(c.end_date) : 'Indeterminado'}</div>
+      </div>
+    </div>
+    ${c.notes ? `<div class="settings-info-box" style="margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">OBSERVAÇÕES</div>
+      <div style="font-size:13px">${c.notes}</div>
+    </div>` : ''}
+    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📎 Contrato Físico</div>
+    ${c.contract_file ? `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <span style="font-size:24px">📄</span>
+        <div style="flex:1"><div style="font-weight:600">${c.contract_file_name||'Contrato'}</div><div style="font-size:12px;color:var(--text3)">Arquivo digital do contrato físico</div></div>
+        <a href="${c.contract_file}" download="${c.contract_file_name||'contrato'}" class="btn btn-ghost btn-sm">⬇ Download</a>
+        ${c.contract_file.startsWith('data:image') ? `<button class="btn btn-ghost btn-sm" onclick="viewContractFile(${id})">👁 Ver</button>` : ''}
+      </div>` : `
+      <div style="background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:16px;text-align:center;margin-bottom:16px">
+        <div style="color:var(--text3);font-size:13px;margin-bottom:8px">Nenhum arquivo de contrato anexado</div>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer">📎 Anexar Contrato
+          <input type="file" accept=".pdf,image/*" style="display:none" onchange="uploadContractFile(${id},this)">
+        </label>
+      </div>`}
+    <div class="form-actions">
+      ${c.status==='active'?`<button class="btn btn-danger" onclick="closeModalForce();cancelContract(${id})">Cancelar Contrato</button>`:''}
+      <button class="btn btn-ghost" onclick="closeModalForce()">Fechar</button>
+    </div>
+  </div>`);
+}
+
+async function uploadContractFile(contractId, input) {
+  const file = input.files[0]; if (!file) return;
+  const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsDataURL(file); });
+  toast('Salvando arquivo...','warn');
+  const r = await api('PUT', `/contracts/${contractId}`, { contract_file: b64, contract_file_name: file.name });
+  if (r && r.ok) { toast('Arquivo anexado!'); closeModalForce(); viewContract(contractId); }
+  else toast('Erro ao salvar arquivo','error');
+}
+
+async function viewContractFile(contractId) {
+  const c = await api('GET', `/contracts/${contractId}`);
+  if (!c?.contract_file) { toast('Arquivo não encontrado','error'); return; }
+  const isImg = c.contract_file.startsWith('data:image');
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">📄 ${c.contract_file_name||'Contrato'}</div>
+    <div style="text-align:center;padding:8px 0">
+      ${isImg ? `<img src="${c.contract_file}" style="max-width:100%;max-height:65vh;border-radius:8px;border:1px solid var(--border)">` : `<div style="padding:32px"><div style="font-size:40px;margin-bottom:12px">📄</div><a href="${c.contract_file}" download="${c.contract_file_name}" class="btn btn-primary">⬇ Baixar</a></div>`}
+    </div>
+    <div class="form-actions"><button class="btn btn-ghost" onclick="closeModalForce()">Fechar</button></div>
+  </div>`);
 }
 
 async function filterContracts(status, el) {
@@ -1052,6 +1198,10 @@ async function openContractModal() {
       <div class="form-group"><label>Término (opcional)</label><input id="ct-end" type="date"></div>
     </div>
     <div class="form-group"><label>Observações</label><textarea id="ct-notes"></textarea></div>
+    <div class="form-group">
+      <label>Contrato Físico (PDF ou imagem) — opcional</label>
+      <input type="file" id="ct-file" accept=".pdf,image/*" style="padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:100%">
+    </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveContract()">Salvar Contrato</button>
@@ -1060,7 +1210,14 @@ async function openContractModal() {
 }
 
 async function saveContract() {
-  const body = {client_id:parseInt(document.getElementById('ct-client').value),vessel_id:parseInt(document.getElementById('ct-vessel').value),spot_id:document.getElementById('ct-spot').value?parseInt(document.getElementById('ct-spot').value):null,type:document.getElementById('ct-type').value,start_date:document.getElementById('ct-start').value,end_date:document.getElementById('ct-end').value||null,monthly_value:parseFloat(document.getElementById('ct-value').value),notes:document.getElementById('ct-notes').value};
+  const fileInput = document.getElementById('ct-file');
+  const file = fileInput?.files?.[0];
+  let contract_file = null, contract_file_name = null;
+  if (file) {
+    contract_file = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsDataURL(file); });
+    contract_file_name = file.name;
+  }
+  const body = {client_id:parseInt(document.getElementById('ct-client').value),vessel_id:parseInt(document.getElementById('ct-vessel').value),spot_id:document.getElementById('ct-spot').value?parseInt(document.getElementById('ct-spot').value):null,type:document.getElementById('ct-type').value,start_date:document.getElementById('ct-start').value,end_date:document.getElementById('ct-end').value||null,monthly_value:parseFloat(document.getElementById('ct-value').value),notes:document.getElementById('ct-notes').value,contract_file,contract_file_name};
   if (!body.monthly_value) { toast('Valor obrigatório','error'); return; }
   await api('POST','/contracts',body);
   toast('Contrato criado!'); closeModalForce(); pages.contracts();
@@ -1741,12 +1898,26 @@ async function sendWhatsApp(pixPayload, qrImgUrl) {
     const cl = (clients||[]).find(c=>String(c.id)===String(client_id));
     if (cl && cl.phone) phone = cl.phone.replace(/\D/g,'');
   }
-  // Build WhatsApp message
+  // Build WhatsApp message using configurable template
   const marinaName = (sett && sett.marina_name) ? sett.marina_name : 'Marina One';
+  const pixKey = (sett && sett.bank_pix_key) ? sett.bank_pix_key : pixPayload;
   const itemsList = cart.map(i=>`• ${i.name} x${i.qty} = ${fmt(i.price*i.qty)}`).join('\n');
-  let msg = `*Pedido ${marinaName} — #${r.id}*\n\n${itemsList}\n\n*Total: ${fmt(total)}*\n\nPague via PIX:\n\`${pixPayload}\``;
-  if (qrImgUrl) msg += `\n\nQR Code: ${qrImgUrl}`;
-  msg += `\n\n_Após o pagamento, envie o comprovante neste chat para confirmarmos seu pedido._ ✅`;
+  // Get vessel/client names for template
+  const cl = client_id ? (clients||[]).find(c=>String(c.id)===String(client_id)) : null;
+  const vessels = await api('GET','/vessels');
+  const ves = vessel_id ? (vessels||[]).find(v=>String(v.id)===String(vessel_id)) : null;
+  const template = (sett && sett.store_whatsapp_template) ? sett.store_whatsapp_template : '{marina} — Pedido #{id}\n\n{itens}\n\nTotal: {total}\n\nPIX: {pix_key}\n{qrcode_link}';
+  let msg = template
+    .replace('{cliente}', cl?.name || 'Cliente')
+    .replace('{marina}', marinaName)
+    .replace('{embarcacao}', ves?.name || '—')
+    .replace('{itens}', itemsList)
+    .replace('{total}', fmt(total))
+    .replace('{pix_key}', pixKey)
+    .replace('{qrcode_link}', qrImgUrl || '')
+    .replace('{id}', r.id);
+  // Append PIX payload if not already in message
+  if (!msg.includes(pixPayload) && pixPayload) msg += `\n\nCódigo PIX (copia e cola):\n${pixPayload}`;
   // Use client phone if available, otherwise store WhatsApp as sender
   const targetPhone = phone || storeWpp;
   const waUrl = targetPhone
@@ -2072,20 +2243,21 @@ pages.maintenance = async () => {
     if (m.status==='completed') counts.completed++;
     if (m.priority==='urgent') counts.urgent++;
   });
+  const _maintFilter = window._maintFilter || '';
   setContent(`
   <div class="grid g4 mb-2">
-    <div class="kpi"><div class="kpi-label">OS Abertas</div><div class="kpi-value">${counts.open}</div></div>
-    <div class="kpi yellow"><div class="kpi-label">Em Andamento</div><div class="kpi-value">${counts.in_progress}</div></div>
-    <div class="kpi green"><div class="kpi-label">Concluídas</div><div class="kpi-value">${counts.completed}</div></div>
-    <div class="kpi red"><div class="kpi-label">Urgentes</div><div class="kpi-value">${counts.urgent}</div></div>
+    <div class="kpi ${_maintFilter===''?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('',this)" title="Todas as OS">
+      <div class="kpi-label">Total</div><div class="kpi-value">${(items||[]).length}</div><div class="kpi-sub">todas as OS</div><span class="kpi-icon">🔧</span></div>
+    <div class="kpi ${_maintFilter==='open'?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('open',this)" title="OS Abertas">
+      <div class="kpi-label">Abertas</div><div class="kpi-value">${counts.open}</div><div class="kpi-sub">aguardando início</div><span class="kpi-icon">📋</span></div>
+    <div class="kpi yellow ${_maintFilter==='in_progress'?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('in_progress',this)" title="Em Andamento">
+      <div class="kpi-label">Em Andamento</div><div class="kpi-value">${counts.in_progress}</div><div class="kpi-sub">em execução</div><span class="kpi-icon">⚙️</span></div>
+    <div class="kpi green ${_maintFilter==='completed'?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('completed',this)" title="Concluídas">
+      <div class="kpi-label">Concluídas</div><div class="kpi-value">${counts.completed}</div><div class="kpi-sub">finalizadas</div><span class="kpi-icon">✅</span></div>
+    <div class="kpi red ${_maintFilter==='urgent'?'kpi-active':''}" style="cursor:pointer" onclick="filterMaintenanceKpi('urgent',this)" title="Urgentes">
+      <div class="kpi-label">Urgentes</div><div class="kpi-value">${counts.urgent}</div><div class="kpi-sub">alta prioridade</div><span class="kpi-icon">🚨</span></div>
   </div>
-  <div class="flex justify-between mb-2">
-    <div class="tabs">
-      <div class="tab active" onclick="filterMaintenance('',this)">Todas</div>
-      <div class="tab" onclick="filterMaintenance('open',this)">Abertas</div>
-      <div class="tab" onclick="filterMaintenance('in_progress',this)">Em Andamento</div>
-      <div class="tab" onclick="filterMaintenance('completed',this)">Concluídas</div>
-    </div>
+  <div class="flex justify-end mb-2">
     <button class="btn btn-primary" onclick="openMaintenanceModal(null,${JSON.stringify(vessels||[]).replace(/"/g,'&quot;')})">+ Nova OS</button>
   </div>
   <div class="card"><div class="table-wrap"><table>
@@ -2117,6 +2289,18 @@ async function filterMaintenance(status, el) {
   el.classList.add('active');
   const data = await api('GET',`/maintenance${status?'?status='+status:''}`);
   document.getElementById('maint-tbody').innerHTML = renderMaintenanceRows(data||[]);
+}
+async function filterMaintenanceKpi(filter) {
+  window._maintFilter = filter;
+  const all = await api('GET','/maintenance') || [];
+  let data = all;
+  if (filter === 'urgent') data = all.filter(m => m.priority === 'urgent');
+  else if (filter) data = all.filter(m => m.status === filter);
+  document.getElementById('maint-tbody').innerHTML = renderMaintenanceRows(data);
+  // Update active KPI highlights
+  document.querySelectorAll('.kpi-active').forEach(el => el.classList.remove('kpi-active'));
+  // Re-render to show active state properly
+  pages.maintenance();
 }
 
 async function completeMaintenance(id) {
@@ -2199,63 +2383,91 @@ pages.analytics = async () => {
     const ac = document.getElementById('an-content');
 
     if (tab==='visao') {
-      ac.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
-        ${sectionLabel('Financeiro')}
-        ${kpiTile('Receita Mês',fmt(k.receita_mes),'success')}
-        ${kpiTile('Receita 3 Meses',fmt(e.receita_3m))}
-        ${kpiTile('Receita 6 Meses',fmt(e.receita_6m))}
-        ${kpiTile('Receita Total',fmt(e.receita_total))}
-        ${kpiTile('Receita Seca Mês',fmt(k.receita_seca))}
-        ${kpiTile('Receita Molhada Mês',fmt(k.receita_molhada))}
-        ${kpiTile('Receita Loja Mês',fmt(k.receita_loja))}
-        ${kpiTile('Despesas Manutenção',fmt(e.despesas_manut),'danger')}
-        ${kpiTile('Margem Bruta Total',fmt(e.margem_bruta),'success')}
-        ${kpiTile('Inadimplência',fmt(k.inadimplencia),'danger')}
-        ${kpiTile('Taxa Inadimplência',k.taxa_inadimplencia+'%')}
-        ${kpiTile('Valor Carteira Mensal',fmt(e.valor_carteira))}
-        ${kpiTile('Valor Carteira Anual',fmt(e.valor_carteira_anual))}
-        ${kpiTile('Ticket Médio Loja',fmt(k.ticket_medio_loja))}
-        ${sectionLabel('Ocupação')}
-        ${kpiTile('Ocupação Total',k.ocupacao_total+'%','success')}
-        ${kpiTile('Ocupação Seca',k.ocupacao_seca+'%')}
-        ${kpiTile('Ocupação Molhada',k.ocupacao_molhada+'%')}
-        ${kpiTile('Vagas Seca Livres',e.spots_seca_livre)}
-        ${kpiTile('Vagas Molhada Livres',e.spots_mol_livre)}
-        ${kpiTile('Contratos Ativos',k.contratos_ativos)}
-        ${kpiTile('Vencem em 7d',e.contratos_vencendo_7d,'warning')}
-        ${kpiTile('Vencem em 30d',e.contratos_vencendo_30d)}
-        ${sectionLabel('Clientes')}
-        ${kpiTile('Clientes Ativos',k.total_clientes)}
-        ${kpiTile('VIP/Gold',k.vip_count)}
-        ${kpiTile('VIP',e.vip_count)}
-        ${kpiTile('Gold',e.gold_count)}
-        ${kpiTile('Silver',e.silver_count)}
-        ${kpiTile('Standard',e.std_count)}
-        ${kpiTile('Clientes Novos Mês',e.clientes_novos_mes)}
-        ${kpiTile('LTV Médio',fmt(k.ltv_medio))}
-        ${kpiTile('LTV Máximo',fmt(e.ltv_max),'success')}
-        ${kpiTile('Embarcações',k.total_vessels)}
-        ${sectionLabel('Operações')}
-        ${kpiTile('Fila Hoje',k.queue_hoje)}
-        ${kpiTile('Aguardando',k.queue_aguardando)}
-        ${kpiTile('Ops Total',e.ops_total)}
-        ${kpiTile('Ops Mês',e.ops_mes)}
-        ${kpiTile('Ops Concluídas Mês',e.ops_completed_mes,'success')}
-        ${kpiTile('Taxa Conclusão',e.taxa_conclusao+'%')}
-        ${kpiTile('SLA Médio',k.sla_avg_min+' min')}
-        ${sectionLabel('Manutenção')}
-        ${kpiTile('OS Abertas',k.os_abertas,'warning')}
-        ${kpiTile('OS Urgentes',k.os_urgentes,'danger')}
-        ${kpiTile('OS Total',e.os_total)}
-        ${kpiTile('OS Concluídas',e.os_concluidas,'success')}
-        ${kpiTile('Taxa Resolução OS',e.taxa_resolucao_os+'%')}
-        ${kpiTile('Custo Manut. Mês',fmt(k.custo_manutencao_mes))}
-        ${kpiTile('Custo Manut. Total',fmt(e.despesas_manut))}
-        ${sectionLabel('Loja')}
-        ${kpiTile('Pedidos Mês',e.pedidos_mes)}
-        ${kpiTile('Pedidos Pendentes',e.pedidos_pendentes,'warning')}
-        ${kpiTile('Alertas Não Lidos',k.alertas_nao_lidos)}
+      const ocp = k.ocupacao_total || 0;
+      ac.innerHTML = `
+      <!-- ROW 1: Financeiro KPIs -->
+      <div class="grid g4 mb-2">
+        <div class="kpi green"><div class="kpi-label">Receita do Mês</div><div class="kpi-value" style="font-size:22px">${fmt(k.receita_mes)}</div><div class="kpi-sub">Mês atual</div><span class="kpi-icon">💰</span></div>
+        <div class="kpi yellow"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:22px">${fmt(k.inadimplencia)}</div><div class="kpi-sub">${k.taxa_inadimplencia}% da carteira</div><span class="kpi-icon">⚠️</span></div>
+        <div class="kpi purple"><div class="kpi-label">Carteira Anual</div><div class="kpi-value" style="font-size:22px">${fmt(e.valor_carteira_anual)}</div><div class="kpi-sub">${fmt(e.valor_carteira)}/mês</div><span class="kpi-icon">📊</span></div>
+        <div class="kpi"><div class="kpi-label">Contratos Ativos</div><div class="kpi-value" style="font-size:22px">${k.contratos_ativos}</div><div class="kpi-sub">${e.contratos_vencendo_7d} vencem em 7d</div><span class="kpi-icon">📋</span></div>
+      </div>
+      <!-- ROW 2: Receita por categoria + Ocupação donut -->
+      <div class="grid g2 mb-2">
+        <div class="card">
+          <div class="card-header"><div class="card-title">💰 Receita Mensal por Categoria</div></div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 0">
+            <canvas id="an-v-cat" style="max-width:200px;max-height:200px"></canvas>
+            <div style="flex:1;min-width:160px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:#10b981;border-radius:3px;flex-shrink:0"></span><div style="flex:1"><div class="text-xs text-muted">Armazenagem Seca</div><div class="font-bold text-success">${fmt(k.receita_seca||0)}</div></div></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:#3b82f6;border-radius:3px;flex-shrink:0"></span><div style="flex:1"><div class="text-xs text-muted">Armazenagem Molhada</div><div class="font-bold" style="color:#3b82f6">${fmt(k.receita_molhada||0)}</div></div></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:#f59e0b;border-radius:3px;flex-shrink:0"></span><div style="flex:1"><div class="text-xs text-muted">Loja / PDV</div><div class="font-bold" style="color:#f59e0b">${fmt(k.receita_loja||0)}</div></div></div>
+              <div style="border-top:1px solid var(--border);padding-top:8px"><div class="text-xs text-muted">Margem Bruta (total)</div><div class="font-bold text-success">${fmt(e.margem_bruta||0)}</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🏢 Ocupação de Vagas</div></div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 0">
+            <canvas id="an-v-ocp" style="max-width:200px;max-height:200px"></canvas>
+            <div style="flex:1;min-width:160px;display:flex;flex-direction:column;gap:10px">
+              <div><div class="flex justify-between text-sm mb-1"><span>Armazenagem Seca</span><span class="font-bold">${k.vagas_seca_ocupadas||0}/${k.vagas_seca_total||0}</span></div><div class="progress-bar"><div class="progress-fill green" style="width:${k.ocupacao_seca||0}%"></div></div></div>
+              <div><div class="flex justify-between text-sm mb-1"><span>Armazenagem Molhada</span><span class="font-bold">${k.vagas_molhada_ocupadas||0}/${k.vagas_molhada_total||0}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${k.ocupacao_molhada||0}%;background:#3b82f6"></div></div></div>
+              <div style="border-top:1px solid var(--border);padding-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                ${kpiTile('Livres Seca',e.spots_seca_livre||0)}
+                ${kpiTile('Livres Molhada',e.spots_mol_livre||0)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ROW 3: Operações + Clientes + OS -->
+      <div class="grid g3 mb-2">
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚙️ Operações</div></div>
+          <canvas id="an-v-ops" height="160"></canvas>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+            ${kpiTile('Fila Hoje',k.queue_hoje||0)}
+            ${kpiTile('SLA Médio',(k.sla_avg_min||0)+' min')}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">👥 Clientes (${k.total_clientes||0})</div></div>
+          <canvas id="an-v-tier" height="160"></canvas>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+            ${kpiTile('LTV Médio',fmt(k.ltv_medio||0),'success')}
+            ${kpiTile('Novos Mês',e.clientes_novos_mes||0)}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🔧 Manutenção</div></div>
+          <canvas id="an-v-os" height="160"></canvas>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+            ${kpiTile('OS Urgentes',k.os_urgentes||0,'danger')}
+            ${kpiTile('Custo Mês',fmt(k.custo_manutencao_mes||0))}
+          </div>
+        </div>
+      </div>
+      <!-- ROW 4: Receita trend -->
+      <div class="card mb-2">
+        <div class="card-header"><div class="card-title">📈 Receita Mensal — Últimos 12 meses</div></div>
+        <canvas id="an-v-rev" height="120"></canvas>
       </div>`;
+      setTimeout(()=>{
+        // Receita por categoria donut
+        pageCharts.vCat = new Chart(document.getElementById('an-v-cat'),{type:'doughnut',data:{labels:['Seca','Molhada','Loja'],datasets:[{data:[k.receita_seca||0,k.receita_molhada||0,k.receita_loja||0],backgroundColor:['rgba(16,185,129,.85)','rgba(59,130,246,.85)','rgba(245,158,11,.85)'],borderWidth:2,borderColor:'var(--surface)'}]},options:{responsive:true,cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+        // Ocupação donut
+        const ocpUsed=k.vagas_ocupadas||0, ocpFree=(k.vagas_total||0)-ocpUsed;
+        pageCharts.vOcp = new Chart(document.getElementById('an-v-ocp'),{type:'doughnut',data:{labels:['Ocupadas','Livres'],datasets:[{data:[ocpUsed,ocpFree],backgroundColor:['rgba(59,130,246,.85)','rgba(16,185,129,.4)'],borderWidth:2,borderColor:'var(--surface)'}]},options:{responsive:true,cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${ctx.raw}`}},centerText:{display:true,text:(k.ocupacao_total||0)+'%'}}}});
+        // Operações bar
+        if (e.ops_por_tipo?.length) pageCharts.vOps = new Chart(document.getElementById('an-v-ops'),{type:'bar',data:{labels:e.ops_por_tipo.map(o=>o.operation_type),datasets:[{data:e.ops_por_tipo.map(o=>o.count),backgroundColor:['rgba(59,130,246,.8)','rgba(16,185,129,.8)','rgba(99,102,241,.8)'],borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}});
+        // Tier donut
+        pageCharts.vTier = new Chart(document.getElementById('an-v-tier'),{type:'doughnut',data:{labels:['VIP','Gold','Silver','Std'],datasets:[{data:[e.vip_count||0,e.gold_count||0,e.silver_count||0,e.std_count||0],backgroundColor:['rgba(255,215,0,.9)','rgba(245,158,11,.8)','rgba(148,163,184,.6)','rgba(100,116,139,.5)'],borderWidth:2,borderColor:'var(--surface)'}]},options:{responsive:true,cutout:'55%',plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:11}}}}}});
+        // OS status bar
+        pageCharts.vOs = new Chart(document.getElementById('an-v-os'),{type:'bar',data:{labels:['Abertas','Andamento','Concluídas'],datasets:[{data:[k.os_abertas||0,(e.os_total||0)-(e.os_concluidas||0)-(k.os_abertas||0),e.os_concluidas||0],backgroundColor:['rgba(245,158,11,.8)','rgba(59,130,246,.8)','rgba(16,185,129,.8)'],borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}});
+        // Revenue trend
+        if (e.receita_por_mes?.length) pageCharts.vRev = new Chart(document.getElementById('an-v-rev'),{type:'line',data:{labels:e.receita_por_mes.map(r=>r.month),datasets:[{label:'Receita',data:e.receita_por_mes.map(r=>r.total),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.15)',fill:true,tension:.4,pointBackgroundColor:'#3b82f6',pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}});
+      },0);
     }
     else if (tab==='financeiro') {
       ac.innerHTML = `
@@ -2445,56 +2657,42 @@ async function renderAlertsPage(filter) {
   // Filter
   let filtered = allAlerts;
   if (_alertsFilter === 'unread')   filtered = allAlerts.filter(a => !a.read_at);
-  else if (_alertsFilter === 'read') filtered = allAlerts.filter(a => a.read_at);
+  else if (_alertsFilter === 'read')    filtered = allAlerts.filter(a => !!a.read_at);
   else if (_alertsFilter === 'warning') filtered = allAlerts.filter(a => a.severity==='warning');
   else if (_alertsFilter === 'error')   filtered = allAlerts.filter(a => a.severity==='error');
+  else if (_alertsFilter === 'info')    filtered = allAlerts.filter(a => a.severity==='info');
 
-  const tabDef = [
-    ['all',    `Todos`,         allAlerts.length],
-    ['unread', `🔴 Não Lidos`,   unread.length],
-    ['warning','⚠️ Atenção',     bySev.warning],
-    ['error',  '🚨 Críticos',    bySev.error],
-    ['read',   '✓ Lidos',        allAlerts.length - unread.length],
+  // Unified clickable KPI-filter cards (no separate tabs bar)
+  const kpiCards = [
+    { v:'all',     label:'Todos',       count:allAlerts.length,   sub:`${unread.length} não lidos`,   icon:'🔔', color:'' },
+    { v:'unread',  label:'Não Lidos',   count:unread.length,       sub:'Aguardando revisão',            icon:'🔴', color:unread.length>0?'yellow':'' },
+    { v:'error',   label:'Críticos',    count:bySev.error,         sub:'Alta prioridade',               icon:'🚨', color:bySev.error>0?'red':'' },
+    { v:'warning', label:'Atenção',     count:bySev.warning,       sub:'Requerem ação',                 icon:'⚠️', color:bySev.warning>0?'yellow':'' },
+    { v:'info',    label:'Informativos',count:bySev.info||0,        sub:'Apenas informação',             icon:'ℹ️', color:'' },
+    { v:'read',    label:'Lidos',       count:allAlerts.length - unread.length, sub:'Arquivados', icon:'✓', color:'green' },
   ];
-  const tabs = tabDef.map(([v,l,c])=>`
-    <button class="fin-status-tab${_alertsFilter===v?' active':''}" onclick="renderAlertsPage('${v}')">
-      ${l} <span class="tab-count">${c}</span>
-    </button>`).join('');
 
   setContent(`
-  <div class="grid g4 mb-2">
-    <div class="kpi ${unread.length>0?'yellow':'green'}">
-      <div class="kpi-label">Não Lidos</div>
-      <div class="kpi-value">${unread.length}</div>
-      <div class="kpi-sub">${allAlerts.length} total</div><span class="kpi-icon">🔔</span>
-    </div>
-    <div class="kpi ${bySev.error>0?'red':''}">
-      <div class="kpi-label">Críticos</div>
-      <div class="kpi-value">${bySev.error}</div>
-      <div class="kpi-sub">Alta prioridade</div><span class="kpi-icon">🚨</span>
-    </div>
-    <div class="kpi ${bySev.warning>0?'yellow':''}">
-      <div class="kpi-label">Atenção</div>
-      <div class="kpi-value">${bySev.warning}</div>
-      <div class="kpi-sub">Requerem ação</div><span class="kpi-icon">⚠️</span>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Informativos</div>
-      <div class="kpi-value">${bySev.info||0}</div>
-      <div class="kpi-sub">Apenas informação</div><span class="kpi-icon">ℹ️</span>
-    </div>
+  <div class="grid g3 mb-2" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">
+    ${kpiCards.map(c=>`
+    <div class="kpi ${c.color} ${_alertsFilter===c.v?'kpi-active':''}" style="cursor:pointer;transition:transform .15s,box-shadow .15s" onclick="renderAlertsPage('${c.v}')" title="Filtrar: ${c.label}">
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-value">${c.count}</div>
+      <div class="kpi-sub">${c.sub}</div>
+      <span class="kpi-icon">${c.icon}</span>
+    </div>`).join('')}
   </div>
 
   ${topTypes.length ? `
-  <div class="card mb-2">
-    <div class="card-header"><div class="card-title">📊 Tipos de Alertas</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 0">
-      ${topTypes.map(([t,c])=>`<span style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px"><strong>${c}</strong> ${t}</span>`).join('')}
+  <div class="card mb-2" style="padding:10px 16px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Tipos:</span>
+      ${topTypes.map(([t,c])=>`<span style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px"><strong>${c}</strong> ${t}</span>`).join('')}
     </div>
   </div>` : ''}
 
-  <div class="flex justify-between items-center mb-2" style="gap:8px;flex-wrap:wrap">
-    <div class="fin-status-tabs">${tabs}</div>
+  <div class="flex justify-between items-center mb-2">
+    <div style="font-size:12px;color:var(--text3)">${filtered.length} alerta${filtered.length!==1?'s':''} · <strong style="color:var(--text)">${kpiCards.find(c=>c.v===_alertsFilter)?.label||'Todos'}</strong></div>
     <button class="btn btn-ghost btn-sm" onclick="markAllRead()">✓ Marcar todos como lidos</button>
   </div>
   <div id="alerts-list">${renderAlerts(filtered)}</div>`);
@@ -2617,7 +2815,7 @@ async function renderSettings(tab) {
     <div class="settings-card">
       <div class="settings-card-title">📲 WhatsApp</div>
       <div class="settings-info-box">
-        💡 <strong>Como funciona:</strong> Ao clicar em "Enviar via WhatsApp" no PDV, o sistema abrirá o chat do cliente (se tiver telefone cadastrado). Se não tiver, usará o número da Loja/PDV como fallback para a mensagem ser enviada manualmente.
+        💡 <strong>Como funciona:</strong> Ao clicar em "Enviar via WhatsApp" no PDV, o sistema abrirá o chat do cliente (se tiver telefone cadastrado). Se não tiver, usará o número da Loja/PDV como fallback.
       </div>
       <div class="form-row cols2">
         <div class="form-group">
@@ -2632,7 +2830,25 @@ async function renderSettings(tab) {
         </div>
       </div>
       <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
-        <button class="btn btn-primary" onclick="saveSettings(['marina_whatsapp','store_whatsapp'])">💾 Salvar WhatsApp</button>
+        <button class="btn btn-primary" onclick="saveSettings(['marina_whatsapp','store_whatsapp'])">💾 Salvar Números</button>
+      </div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-title">💬 Template de Mensagem PDV</div>
+      <div class="settings-info-box" style="margin-bottom:12px">
+        <strong>Variáveis disponíveis:</strong><br>
+        <code style="font-size:11px;line-height:1.8">
+          {cliente} — nome do cliente &nbsp;·&nbsp; {marina} — nome da marina<br>
+          {embarcacao} — nome da embarcação &nbsp;·&nbsp; {itens} — lista de itens do pedido<br>
+          {total} — valor total &nbsp;·&nbsp; {pix_key} — chave PIX &nbsp;·&nbsp; {qrcode_link} — link do QR Code
+        </code>
+      </div>
+      <div class="form-group">
+        <label>Mensagem padrão enviada ao cliente via WhatsApp</label>
+        <textarea id="s-store_whatsapp_template" rows="8" style="font-family:monospace;font-size:12px">${(s.store_whatsapp_template||'').replace(/</g,'&lt;')}</textarea>
+      </div>
+      <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
+        <button class="btn btn-primary" onclick="saveSettings(['store_whatsapp_template'])">💾 Salvar Template</button>
       </div>
     </div>`;
 
