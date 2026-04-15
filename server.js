@@ -637,6 +637,24 @@ addRoute('GET', '/api/analytics/extended', async (req, res) => {
   });
 });
 
+// ── SETTINGS ─────────────────────────────────────────────────────────
+addRoute('GET', '/api/settings', async (req, res) => {
+  const rows = dbAll(`SELECT key,value FROM settings`);
+  const obj = {};
+  rows.forEach(r => { obj[r.key] = r.value; });
+  sendJson(res, obj);
+});
+addRoute('PUT', '/api/settings', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const body = ctx.body || {};
+  for (const [k, v] of Object.entries(body)) {
+    dbRun(`INSERT INTO settings(key,value,updated_at) VALUES(?,?,datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,
+          [k, String(v)]);
+  }
+  sendJson(res, { ok: true });
+});
+
 // ── DB INIT & SEED ────────────────────────────────────────────────────
 function initDb() {
   db = new DatabaseSync(DB_PATH);
@@ -654,6 +672,7 @@ function initDb() {
   CREATE TABLE IF NOT EXISTS store_pix_config(id INTEGER PRIMARY KEY AUTOINCREMENT,key TEXT NOT NULL,key_type TEXT NOT NULL,merchant_name TEXT NOT NULL,city TEXT NOT NULL,active INTEGER DEFAULT 1);
   CREATE TABLE IF NOT EXISTS maintenance_os(id INTEGER PRIMARY KEY AUTOINCREMENT,vessel_id INTEGER,os_number TEXT NOT NULL,type TEXT NOT NULL,description TEXT NOT NULL,status TEXT DEFAULT 'open',priority TEXT DEFAULT 'normal',scheduled_date TEXT,completed_date TEXT,estimated_hours REAL,actual_hours REAL,cost REAL DEFAULT 0,technician TEXT,parts_used TEXT,notes TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,message TEXT NOT NULL,severity TEXT DEFAULT 'info',entity_type TEXT,entity_id INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP,read_at TEXT);
+  CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL DEFAULT '',updated_at TEXT DEFAULT (datetime('now')));
   `);
 }
 
@@ -870,6 +889,22 @@ function migrateDb() {
   // Add new columns to store_orders (ignore error if already exist)
   try { db.exec(`ALTER TABLE store_orders ADD COLUMN delivery_status TEXT DEFAULT NULL`); } catch(e) {}
   try { db.exec(`ALTER TABLE store_orders ADD COLUMN whatsapp_sent INTEGER DEFAULT 0`); } catch(e) {}
+  // Settings table (idempotent)
+  try { db.exec(`CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL DEFAULT '',updated_at TEXT DEFAULT (datetime('now')))`); } catch(e) {}
+  // Seed default settings (INSERT OR IGNORE)
+  const defSettings = [
+    ['marina_name','Marina One'],['marina_cnpj','00.000.000/0001-00'],
+    ['marina_address','Av. do Porto, 100 - São Paulo, SP'],['marina_phone','(11) 99999-0000'],
+    ['marina_whatsapp','5511999990000'],['marina_email','contato@marinaone.com'],
+    ['marina_city','São Paulo'],['marina_state','SP'],['marina_cep','01000-000'],
+    ['bank_name','Banco do Brasil'],['bank_agency','1234-5'],['bank_account','00000-0'],
+    ['bank_pix_key','11999990000'],['bank_pix_type','telefone'],['bank_pix_beneficiary','Marina One LTDA'],
+    ['store_whatsapp','5511999990000'],
+    ['license_plan','professional'],['license_valid_until','2027-12-31'],['license_marina_id','MRN-001'],
+  ];
+  for (const [k,v] of defSettings) {
+    try { dbRun(`INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)`,[k,v]); } catch(e) {}
+  }
   // Add client users
   const pwd = sha256('senha123');
   const logins = [

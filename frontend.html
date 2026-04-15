@@ -218,6 +218,16 @@ textarea{resize:vertical;min-height:72px}
 /* STORE GESTAO */
 .gestao-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
 .gestao-section-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+/* EXCEL EXPORT */
+.btn-export{background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.3);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-weight:600;transition:.15s}
+.btn-export:hover{background:rgba(34,197,94,.22);border-color:#22c55e}
+/* SETTINGS PAGE */
+.settings-tab-bar{display:flex;gap:4px;margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px}
+.settings-tab{flex:1;padding:8px 12px;border-radius:7px;border:none;background:none;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;transition:.15s;text-align:center}
+.settings-tab.active{background:var(--accent);color:#fff}
+.settings-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.settings-card-title{font-size:14px;font-weight:700;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.settings-info-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6}
 /* CLICKABLE TILES */
 .kpi.clickable{cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s}
 .kpi.clickable:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 8px 24px rgba(0,0,0,.4)}
@@ -271,6 +281,8 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <div class="nav-section">Análise</div>
       <button class="nav-item" onclick="nav('analytics')" data-page="analytics"><span class="icon">📊</span>Analytics</button>
       <button class="nav-item" onclick="nav('alerts')" data-page="alerts"><span class="icon">🔔</span>Alertas<span class="nav-badge" id="alerts-badge" style="display:none"></span></button>
+      <div class="nav-section">Sistema</div>
+      <button class="nav-item" onclick="nav('settings')" data-page="settings"><span class="icon">⚙️</span>Configurações</button>
     </div>
   </nav>
 
@@ -369,7 +381,7 @@ async function refreshBadges() {
 }
 
 // ── NAV ──────────────────────────────────────────────
-const pageTitles = {dashboard:'Dashboard',queue:'Fila de Operações',clients:'Clientes',vessels:'Embarcações',spots:'Vagas',contracts:'Contratos',financial:'Financeiro',store:'Loja / PDV',maintenance:'Manutenção',analytics:'Analytics',alerts:'Alertas'};
+const pageTitles = {dashboard:'Dashboard',queue:'Fila de Operações',clients:'Clientes',vessels:'Embarcações',spots:'Vagas',contracts:'Contratos',financial:'Financeiro',store:'Loja / PDV',maintenance:'Manutenção',analytics:'Analytics',alerts:'Alertas',settings:'Configurações'};
 
 function nav(page) {
   currentPage = page;
@@ -435,6 +447,80 @@ async function toast(msg, type='success') {
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3000);
+}
+
+// ── EXPORT TO EXCEL (CSV with BOM for UTF-8 in Excel) ────────────────
+function exportCSV(rows, columns, filename) {
+  if (!rows || !rows.length) { toast('Nenhum dado para exportar', 'error'); return; }
+  const header = columns.map(c => `"${c.label}"`).join(';');
+  const body = rows.map(row =>
+    columns.map(c => {
+      const v = typeof c.val === 'function' ? c.val(row) : (row[c.key] ?? '');
+      return `"${String(v).replace(/"/g,'""')}"`;
+    }).join(';')
+  ).join('\n');
+  const csv = '\uFEFF' + header + '\n' + body;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename + '.csv'; a.click();
+  URL.revokeObjectURL(url);
+  toast(`📥 Exportado: ${filename}.csv`);
+}
+async function exportClientes() {
+  const data = await api('GET','/clients') || [];
+  exportCSV(data,[
+    {label:'ID',key:'id'},{label:'Nome',key:'name'},{label:'E-mail',key:'email'},
+    {label:'Telefone',key:'phone'},{label:'CPF',key:'cpf'},{label:'Plano',key:'tier'},
+    {label:'LTV',val:r=>(r.ltv||0).toFixed(2)},{label:'Ativo',val:r=>r.active?'Sim':'Não'},
+    {label:'Cadastro',key:'created_at'},
+  ],'clientes');
+}
+async function exportEmbarcacoes() {
+  const data = await api('GET','/vessels') || [];
+  exportCSV(data,[
+    {label:'ID',key:'id'},{label:'Nome',key:'name'},{label:'Cliente',key:'client_name'},
+    {label:'Tipo',key:'type'},{label:'Comprimento',key:'length'},{label:'Boca',key:'beam'},
+    {label:'Calado',key:'draft'},{label:'Ano',key:'year'},{label:'Registro',key:'registration'},
+    {label:'Modelo',key:'model'},{label:'Fabricante',key:'manufacturer'},{label:'Motor',key:'engine'},
+    {label:'Cadastro',key:'created_at'},
+  ],'embarcacoes');
+}
+async function exportVagas() {
+  const data = await api('GET','/spots') || [];
+  exportCSV(data,[
+    {label:'Número',key:'number'},{label:'Tipo',key:'type'},
+    {label:'Status',val:r=>r.status==='available'?'Disponível':r.status==='occupied'?'Ocupada':'Manutenção'},
+    {label:'Embarcação',key:'vessel_name'},{label:'Cliente',key:'client_name'},
+  ],'vagas');
+}
+async function exportContratos() {
+  const data = await api('GET','/contracts') || [];
+  exportCSV(data,[
+    {label:'ID',key:'id'},{label:'Cliente',key:'client_name'},{label:'Embarcação',key:'vessel_name'},
+    {label:'Vaga',key:'spot_number'},{label:'Tipo',key:'type'},{label:'Início',key:'start_date'},
+    {label:'Término',key:'end_date'},{label:'Mensalidade',val:r=>(r.monthly_value||0).toFixed(2)},
+    {label:'Status',key:'status'},{label:'Criado em',key:'created_at'},
+  ],'contratos');
+}
+async function exportFinanceiro() {
+  const data = await api('GET','/financial/charges') || [];
+  exportCSV(data,[
+    {label:'ID',key:'id'},{label:'Cliente',key:'client_name'},{label:'Descrição',key:'description'},
+    {label:'Valor',val:r=>(r.amount||0).toFixed(2)},{label:'Vencimento',key:'due_date'},
+    {label:'Pagamento',key:'paid_date'},{label:'Método',key:'payment_method'},
+    {label:'Status',val:r=>r.status==='paid'?'Pago':r.status==='overdue'?'Vencido':'Pendente'},
+  ],'financeiro');
+}
+async function saveSettings(keys) {
+  const body = {};
+  for (const k of keys) {
+    const el = document.getElementById('s-'+k);
+    if (el) body[k] = el.value;
+  }
+  const r = await api('PUT','/settings',body);
+  if (r && r.ok) toast('✅ Configurações salvas!');
+  else toast('Erro ao salvar','error');
 }
 
 // ── NAVIGATION HELPERS ───────────────────────────────
@@ -627,7 +713,10 @@ pages.clients = async () => {
         <option value="silver">Silver</option><option value="standard">Standard</option>
       </select>
     </div>
-    <button class="btn btn-primary" onclick="openClientModal()">+ Novo Cliente</button>
+    <div class="flex gap-2">
+      <button class="btn-export" onclick="exportClientes()">📥 Excel</button>
+      <button class="btn btn-primary" onclick="openClientModal()">+ Novo Cliente</button>
+    </div>
   </div>
   <div class="card"><div class="table-wrap"><table>
     <thead><tr><th>Cliente</th><th>Tier</th><th>Contato</th><th>Embarcações</th><th>LTV</th><th>Ações</th></tr></thead>
@@ -725,7 +814,10 @@ pages.vessels = async () => {
   setContent(`
   <div class="flex justify-between mb-2">
     <input id="vessel-search" placeholder="Buscar embarcação, registro, cliente..." oninput="searchVessels()" style="max-width:320px">
-    <button class="btn btn-primary" onclick="openVesselModal(null,${JSON.stringify(clients||[]).replace(/"/g,'&quot;')})">+ Nova Embarcação</button>
+    <div class="flex gap-2">
+      <button class="btn-export" onclick="exportEmbarcacoes()">📥 Excel</button>
+      <button class="btn btn-primary" onclick="openVesselModal(null,${JSON.stringify(clients||[]).replace(/"/g,'&quot;')})">+ Nova Embarcação</button>
+    </div>
   </div>
   <div class="card"><div class="table-wrap"><table>
     <thead><tr><th>Embarcação</th><th>Tipo</th><th>Cliente</th><th>Vaga</th><th>Registro</th><th>Ano</th><th>Ações</th></tr></thead>
@@ -837,6 +929,10 @@ pages.spots = async () => {
     <div class="kpi green"><div class="kpi-label">Molhadas Disponíveis</div><div class="kpi-value">${summary.molhada.available}</div><div class="kpi-sub">de ${summary.molhada.total} vagas</div></div>
     <div class="kpi"><div class="kpi-label">Molhadas Ocupadas</div><div class="kpi-value">${summary.molhada.occupied}</div><div class="kpi-sub">${Math.round(summary.molhada.occupied/summary.molhada.total*100)||0}% ocupação</div></div>
   </div>
+  <div class="flex justify-between mb-2">
+    <span></span>
+    <button class="btn-export" onclick="exportVagas()">📥 Excel</button>
+  </div>
   <div class="grid g2">
     <div class="card">
       <div class="card-header"><div class="card-title">🏗️ Vagas Secas (${summary.seca.total})</div>
@@ -887,7 +983,10 @@ pages.contracts = async () => {
       <div class="tab" onclick="filterContracts('active',this)">Ativos</div>
       <div class="tab" onclick="filterContracts('cancelled',this)">Cancelados</div>
     </div>
-    <button class="btn btn-primary" onclick="openContractModal()">+ Novo Contrato</button>
+    <div class="flex gap-2">
+      <button class="btn-export" onclick="exportContratos()">📥 Excel</button>
+      <button class="btn btn-primary" onclick="openContractModal()">+ Novo Contrato</button>
+    </div>
   </div>
   <div class="card"><div class="table-wrap"><table>
     <thead><tr><th>Cliente</th><th>Embarcação</th><th>Tipo</th><th>Vaga</th><th>Mensal</th><th>Vigência</th><th>Status</th><th>Ações</th></tr></thead>
@@ -1021,7 +1120,10 @@ pages.financial = async () => {
         <span style="font-size:11px;color:var(--text3)">${fmt(tot.paid)}</span>
       </button>
     </div>
-    <button class="btn btn-primary" onclick="openChargeModal()">+ Nova Cobrança</button>
+    <div class="flex gap-2">
+      <button class="btn-export" onclick="exportFinanceiro()">📥 Excel</button>
+      <button class="btn btn-primary" onclick="openChargeModal()">+ Nova Cobrança</button>
+    </div>
   </div>
 
   <div id="fin-tree"></div>`);
@@ -1455,22 +1557,30 @@ async function sendWhatsApp(pixPayload, qrImgUrl) {
   // Create order with pending_payment status
   const r = await api('POST','/store/orders',{items:cart,client_id:client_id?parseInt(client_id):null,vessel_id:vessel_id?parseInt(vessel_id):null,payment_method:payment,status:'pending_payment'});
   if (!r || !r.id) { toast('Erro ao criar pedido','error'); return; }
-  // Get client phone
+  // Load configured store WhatsApp + client phone
+  const [clients, sett] = await Promise.all([
+    api('GET','/clients'),
+    api('GET','/settings'),
+  ]);
+  const storeWpp = (sett && sett.store_whatsapp) ? sett.store_whatsapp.replace(/\D/g,'') : '';
   let phone = '';
   if (client_id) {
-    const clients = await api('GET','/clients');
     const cl = (clients||[]).find(c=>String(c.id)===String(client_id));
     if (cl && cl.phone) phone = cl.phone.replace(/\D/g,'');
   }
   // Build WhatsApp message
+  const marinaName = (sett && sett.marina_name) ? sett.marina_name : 'Marina One';
   const itemsList = cart.map(i=>`• ${i.name} x${i.qty} = ${fmt(i.price*i.qty)}`).join('\n');
-  let msg = `*Pedido Marina One — #${r.id}*\n\n${itemsList}\n\n*Total: ${fmt(total)}*\n\nPague via PIX:\n\`${pixPayload}\``;
+  let msg = `*Pedido ${marinaName} — #${r.id}*\n\n${itemsList}\n\n*Total: ${fmt(total)}*\n\nPague via PIX:\n\`${pixPayload}\``;
   if (qrImgUrl) msg += `\n\nQR Code: ${qrImgUrl}`;
-  const waUrl = phone
-    ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+  msg += `\n\n_Após o pagamento, envie o comprovante neste chat para confirmarmos seu pedido._ ✅`;
+  // Use client phone if available, otherwise store WhatsApp as sender
+  const targetPhone = phone || storeWpp;
+  const waUrl = targetPhone
+    ? `https://wa.me/${targetPhone}?text=${encodeURIComponent(msg)}`
     : `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(waUrl,'_blank');
-  toast(`Pedido #${r.id} criado! WhatsApp aberto.`);
+  toast(`📲 Pedido #${r.id} criado! WhatsApp aberto${phone?' para o cliente':' — copie e envie ao cliente'}.`);
   cart=[]; pages.store();
 }
 
@@ -1663,10 +1773,29 @@ async function orderDelivery(id, body) {
 }
 
 async function renderStoreGestao() {
-  const cfg = await api('GET','/store/pix-config') || {};
-  const stats = await api('GET','/store/stats') || {};
+  const [cfgRaw, statsRaw, settRaw] = await Promise.all([
+    api('GET','/store/pix-config'),
+    api('GET','/store/stats'),
+    api('GET','/settings'),
+  ]);
+  const cfg = cfgRaw || {}; const stats = statsRaw || {}; const sett = settRaw || {};
   document.getElementById('store-content').innerHTML = `
   <div style="max-width:700px">
+
+    <div class="gestao-section">
+      <div class="gestao-section-title">📲 WhatsApp da Loja / PDV</div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Número que aparece nos envios de cobrança PIX. Se o cliente tiver telefone cadastrado, o link abrirá no celular dele. Caso contrário, usa este número como fallback.</p>
+      <div class="form-group"><label>Número WhatsApp (DDI+DDD+número)</label>
+        <input id="store-wpp" value="${sett.store_whatsapp||''}" placeholder="5511999990000">
+      </div>
+      ${sett.store_whatsapp
+        ? `<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)"><span style="color:var(--success)">✅</span> Configurado: <strong>+${sett.store_whatsapp}</strong></div>`
+        : `<div style="background:rgba(245,158,11,.1);border:1px solid var(--warning);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--warning)">⚠️ WhatsApp não configurado — os envios abrirão sem destinatário pré-definido</div>`}
+      <div class="form-actions" style="margin-top:0;padding-top:0;border-top:none;justify-content:flex-start">
+        <button class="btn btn-primary" onclick="saveStoreWpp()">💾 Salvar WhatsApp</button>
+        ${sett.store_whatsapp?`<a href="https://wa.me/${sett.store_whatsapp}" target="_blank" class="btn btn-ghost">🧪 Testar</a>`:''}
+      </div>
+    </div>
 
     <div class="gestao-section">
       <div class="gestao-section-title">💳 Configuração PIX</div>
@@ -1713,9 +1842,18 @@ async function renderStoreGestao() {
         <button class="btn btn-ghost" onclick="showStoreTab('items',document.querySelectorAll('#store-tabs .tab')[3])">📦 Gerenciar Estoque</button>
         <button class="btn btn-ghost" onclick="showStoreTab('orders',document.querySelectorAll('#store-tabs .tab')[2])">📋 Ver Todos os Pedidos</button>
         <button class="btn btn-ghost" onclick="showStoreTab('dashboard',document.querySelectorAll('#store-tabs .tab')[0])">📊 Dashboard</button>
+        <button class="btn btn-ghost" onclick="nav('settings')">⚙️ Configurações do Sistema</button>
       </div>
     </div>
   </div>`;
+}
+
+async function saveStoreWpp() {
+  const wpp = (document.getElementById('store-wpp')?.value||'').replace(/\D/g,'');
+  if (!wpp || wpp.length < 10) { toast('Número inválido — use DDI+DDD+número (ex: 5511999990000)','error'); return; }
+  await api('PUT','/settings',{store_whatsapp: wpp});
+  toast('✅ WhatsApp da loja salvo!');
+  renderStoreGestao();
 }
 
 async function savePixConfig() {
@@ -2120,6 +2258,138 @@ async function markRead(id) {
 async function markAllRead() {
   await api('PUT','/alerts/read-all');
   toast('Todos os alertas marcados como lidos'); refreshBadges(); pages.alerts();
+}
+
+// ── PAGE: SETTINGS ────────────────────────────────────
+let _settingsTab = 'marina';
+pages.settings = async () => { renderSettings(_settingsTab); };
+
+async function renderSettings(tab) {
+  _settingsTab = tab || 'marina';
+  const s = await api('GET','/settings') || {};
+
+  const tabs = [
+    ['marina',   '🏢 Marina'],
+    ['financeiro','💰 Financeiro'],
+    ['notificacoes','📲 Notificações'],
+    ['licenca',  '🔑 Licença'],
+  ];
+  const tabBar = tabs.map(([t,l])=>`<button class="settings-tab${_settingsTab===t?' active':''}" onclick="renderSettings('${t}')">${l}</button>`).join('');
+
+  let content = '';
+
+  if (_settingsTab === 'marina') {
+    content = `
+    <div class="settings-card">
+      <div class="settings-card-title">🏢 Dados da Marina</div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Nome da Marina *</label><input id="s-marina_name" value="${s.marina_name||''}"></div>
+        <div class="form-group"><label>CNPJ</label><input id="s-marina_cnpj" value="${s.marina_cnpj||''}" placeholder="00.000.000/0001-00"></div>
+      </div>
+      <div class="form-group"><label>Endereço</label><input id="s-marina_address" value="${s.marina_address||''}"></div>
+      <div class="form-row cols3">
+        <div class="form-group"><label>Cidade</label><input id="s-marina_city" value="${s.marina_city||''}"></div>
+        <div class="form-group"><label>Estado</label><input id="s-marina_state" value="${s.marina_state||''}" placeholder="SP"></div>
+        <div class="form-group"><label>CEP</label><input id="s-marina_cep" value="${s.marina_cep||''}" placeholder="00000-000"></div>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Telefone</label><input id="s-marina_phone" value="${s.marina_phone||''}" placeholder="(11) 99999-0000"></div>
+        <div class="form-group"><label>E-mail</label><input id="s-marina_email" value="${s.marina_email||''}" placeholder="contato@marina.com"></div>
+      </div>
+      <div class="form-group"><label>WhatsApp (com DDI, ex: 5511999990000)</label><input id="s-marina_whatsapp" value="${s.marina_whatsapp||''}" placeholder="5511999990000"></div>
+      <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
+        <button class="btn btn-primary" onclick="saveSettings(['marina_name','marina_cnpj','marina_address','marina_city','marina_state','marina_cep','marina_phone','marina_email','marina_whatsapp'])">💾 Salvar Dados da Marina</button>
+      </div>
+    </div>`;
+
+  } else if (_settingsTab === 'financeiro') {
+    content = `
+    <div class="settings-card">
+      <div class="settings-card-title">🏦 Dados Bancários — Mensalidades</div>
+      <div class="settings-info-box">Exibidos nas cobranças e comunicados enviados aos clientes para pagamento das mensalidades.</div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Banco</label><input id="s-bank_name" value="${s.bank_name||''}" placeholder="Banco do Brasil"></div>
+        <div class="form-group"><label>Agência</label><input id="s-bank_agency" value="${s.bank_agency||''}" placeholder="1234-5"></div>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Conta Corrente</label><input id="s-bank_account" value="${s.bank_account||''}" placeholder="00000-0"></div>
+        <div class="form-group"><label>Beneficiário</label><input id="s-bank_pix_beneficiary" value="${s.bank_pix_beneficiary||''}"></div>
+      </div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-title">💳 Chave PIX — Mensalidades</div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Chave PIX</label><input id="s-bank_pix_key" value="${s.bank_pix_key||''}"></div>
+        <div class="form-group"><label>Tipo de Chave</label>
+          <select id="s-bank_pix_type">
+            ${['cpf','cnpj','email','telefone','aleatoria'].map(t=>`<option value="${t}" ${s.bank_pix_type===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
+        <button class="btn btn-primary" onclick="saveSettings(['bank_name','bank_agency','bank_account','bank_pix_beneficiary','bank_pix_key','bank_pix_type'])">💾 Salvar Dados Financeiros</button>
+      </div>
+    </div>`;
+
+  } else if (_settingsTab === 'notificacoes') {
+    content = `
+    <div class="settings-card">
+      <div class="settings-card-title">📲 WhatsApp</div>
+      <div class="settings-info-box">
+        💡 <strong>Como funciona:</strong> Ao clicar em "Enviar via WhatsApp" no PDV, o sistema abrirá o chat do cliente (se tiver telefone cadastrado). Se não tiver, usará o número da Loja/PDV como fallback para a mensagem ser enviada manualmente.
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>WhatsApp da Marina (DDI+DDD+número)</label>
+          <input id="s-marina_whatsapp" value="${s.marina_whatsapp||''}" placeholder="5511999990000">
+          <small style="color:var(--text3);font-size:11px">Usado em cobranças e comunicados gerais</small>
+        </div>
+        <div class="form-group">
+          <label>WhatsApp da Loja / PDV</label>
+          <input id="s-store_whatsapp" value="${s.store_whatsapp||''}" placeholder="5511999990000">
+          <small style="color:var(--text3);font-size:11px">Usado nos envios de PIX do PDV</small>
+        </div>
+      </div>
+      <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
+        <button class="btn btn-primary" onclick="saveSettings(['marina_whatsapp','store_whatsapp'])">💾 Salvar WhatsApp</button>
+      </div>
+    </div>`;
+
+  } else if (_settingsTab === 'licenca') {
+    const valid = s.license_valid_until || '—';
+    const expired = valid !== '—' && new Date(valid) < new Date();
+    content = `
+    <div class="settings-card">
+      <div class="settings-card-title">🔑 Licença Marina One</div>
+      <div class="grid g3" style="gap:12px;margin-bottom:20px">
+        <div class="settings-info-box" style="margin-bottom:0;text-align:center">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.8px">Plano</div>
+          <div style="font-size:20px;font-weight:700;color:var(--accent);text-transform:capitalize">${s.license_plan||'standard'}</div>
+        </div>
+        <div class="settings-info-box" style="margin-bottom:0;text-align:center">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.8px">Válido Até</div>
+          <div style="font-size:18px;font-weight:700;color:${expired?'var(--danger)':'var(--success)'}">${valid}</div>
+        </div>
+        <div class="settings-info-box" style="margin-bottom:0;text-align:center">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.8px">ID da Marina</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);font-family:monospace">${s.license_marina_id||'—'}</div>
+        </div>
+      </div>
+      ${expired?'<div style="background:rgba(239,68,68,.1);border:1px solid var(--danger);border-radius:8px;padding:12px;font-size:12px;color:var(--danger);margin-bottom:16px">⚠️ Licença expirada. Entre em contato para renovação.</div>':''}
+      <div class="settings-info-box">
+        <strong>Marina One SaaS</strong> — Sistema de Gestão Integrada de Marina<br>
+        Versão: <strong>1.0.0</strong> · Node.js + SQLite · Licença individual por marina<br><br>
+        📧 Suporte: <a href="mailto:suporte@marinaone.com" style="color:var(--accent)">suporte@marinaone.com</a><br>
+        🌐 Site: <a href="https://marinaone.com.br" target="_blank" style="color:var(--accent)">marinaone.com.br</a>
+      </div>
+    </div>`;
+  }
+
+  setContent(`
+    <div style="max-width:740px">
+      <div class="settings-tab-bar">${tabBar}</div>
+      ${content}
+    </div>`);
 }
 
 // ── INIT ──────────────────────────────────────────────
