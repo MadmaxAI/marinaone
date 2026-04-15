@@ -126,6 +126,7 @@ textarea{resize:vertical;min-height:72px}
 .alert-content{flex:1}
 .alert-msg{font-size:13px;color:var(--text)}
 .alert-meta{font-size:11px;color:var(--text3);margin-top:3px}
+.alert-item .alert-content:hover{color:var(--text)}
 /* TABS */
 .tabs{display:flex;gap:4px;background:var(--surface2);padding:4px;border-radius:10px;margin-bottom:20px;width:fit-content}
 .tab{padding:7px 16px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--text3);transition:.15s}
@@ -1269,12 +1270,84 @@ function toggleFinMonth(key) {
 }
 
 async function markPaid(id) {
-  const method = prompt('Forma de pagamento (pix, dinheiro, cartao, transferencia):','pix');
-  if (!method) return;
-  await api('PUT',`/financial/charges/${id}`,{status:'paid',payment_method:method});
-  toast('Pagamento registrado!');
-  _allCharges = await api('GET','/financial/charges') || [];
-  renderFinTree();
+  const charge = (_allCharges || []).find(c => c.id === id) || {};
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">✅ Registrar Pagamento</div>
+    <div class="settings-info-box" style="margin-bottom:16px">
+      <strong>${charge.client_name || '—'}</strong> · ${charge.description || '—'} · <strong style="color:var(--success)">${fmt(charge.amount || 0)}</strong>
+    </div>
+    <div class="form-row cols2">
+      <div class="form-group">
+        <label>Forma de Pagamento *</label>
+        <select id="pay-method">
+          <option value="pix">PIX</option>
+          <option value="dinheiro">Dinheiro</option>
+          <option value="cartao">Cartão</option>
+          <option value="transferencia">Transferência</option>
+          <option value="boleto">Boleto</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Data do Pagamento</label>
+        <input type="date" id="pay-date" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Descrição / Observações *</label>
+      <textarea id="pay-notes" rows="2" placeholder="Ex: Mensalidade abril/2026 — PIX recebido às 14h..." style="resize:vertical"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Comprovante (imagem ou PDF) *</label>
+      <input type="file" id="pay-comprovante" accept="image/*,.pdf" style="padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:100%">
+      <div id="pay-preview" style="margin-top:8px"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-success" id="btn-confirm-pay" onclick="confirmMarkPaid(${id})">✅ Confirmar Pagamento</button>
+    </div>
+  </div>`);
+  document.getElementById('pay-comprovante').addEventListener('change', function() {
+    const file = this.files[0]; if (!file) return;
+    const prev = document.getElementById('pay-preview');
+    if (file.type.startsWith('image/')) {
+      const r = new FileReader();
+      r.onload = e => { prev.innerHTML = `<img src="${e.target.result}" style="max-height:120px;border-radius:6px;border:1px solid var(--border)">`; };
+      r.readAsDataURL(file);
+    } else {
+      prev.innerHTML = `<span style="font-size:12px;color:var(--text2)">📎 ${file.name} (${(file.size/1024).toFixed(1)} KB)</span>`;
+    }
+  });
+}
+
+async function confirmMarkPaid(id) {
+  const method    = document.getElementById('pay-method')?.value;
+  const payDate   = document.getElementById('pay-date')?.value;
+  const notes     = document.getElementById('pay-notes')?.value?.trim();
+  const fileInput = document.getElementById('pay-comprovante');
+  const file      = fileInput?.files?.[0];
+  if (!notes) { toast('Descrição é obrigatória','error'); return; }
+  if (!file)  { toast('Comprovante é obrigatório','error'); return; }
+  const b64 = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  const btn = document.getElementById('btn-confirm-pay');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvando...'; }
+  const r = await api('PUT', `/financial/charges/${id}`, {
+    status: 'paid', payment_method: method, paid_date: payDate,
+    pay_notes: notes, comprovante_data: b64, comprovante_name: file.name,
+  });
+  if (r && r.ok) {
+    toast('✅ Pagamento registrado com comprovante!');
+    closeModalForce();
+    _allCharges = await api('GET','/financial/charges') || [];
+    renderFinTree();
+  } else {
+    toast('Erro ao registrar pagamento','error');
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Confirmar Pagamento'; }
+  }
 }
 
 async function openChargeModal() {
@@ -2227,37 +2300,145 @@ pages.analytics = async () => {
 };
 
 // ── PAGE: ALERTS ──────────────────────────────────────
-pages.alerts = async () => {
-  const alerts = await api('GET','/alerts');
-  setContent(`
-  <div class="flex justify-between mb-2">
-    <span class="text-sm text-muted">${alerts.filter(a=>!a.read_at).length} alertas não lidos</span>
-    <button class="btn btn-ghost btn-sm" onclick="markAllRead()">✓ Marcar todos como lidos</button>
-  </div>
-  <div id="alerts-list">${renderAlerts(alerts||[])}</div>`);
+// Map entity_type → nav page (and optional sub-filter)
+const ALERT_NAV = {
+  contrato:     a => nav('contracts'),
+  contract:     a => nav('contracts'),
+  inadimplencia:a => { _finStatusFilter='overdue'; nav('financial'); },
+  overdue:      a => { _finStatusFilter='overdue'; nav('financial'); },
+  financial:    a => { _finStatusFilter=''; nav('financial'); },
+  cobranca:     a => { _finStatusFilter=''; nav('financial'); },
+  vaga:         a => nav('spots'),
+  spot:         a => nav('spots'),
+  manutencao:   a => nav('maintenance'),
+  maintenance:  a => nav('maintenance'),
+  vessel:       a => nav('vessels'),
+  embarcacao:   a => nav('vessels'),
+  client:       a => nav('clients'),
+  cliente:      a => nav('clients'),
+  estoque:      a => { window._storeTab='items'; nav('store'); },
+  loja:         a => { window._storeTab='dashboard'; nav('store'); },
 };
 
-function renderAlerts(alerts) {
-  if (!alerts.length) return '<div class="empty-state"><div class="icon">🔔</div><p>Nenhum alerta</p></div>';
-  return alerts.map(a=>`
-  <div class="alert-item ${a.severity}" style="${a.read_at?'opacity:.5':''}">
-    <div class="alert-icon">${{info:'ℹ️',warning:'⚠️',error:'🚨'}[a.severity]||'🔔'}</div>
-    <div class="alert-content">
-      <div class="alert-msg">${a.message}</div>
-      <div class="alert-meta">${fmtDT(a.created_at)} · ${a.type}${a.read_at?' · Lido':''}</div>
-    </div>
-    ${!a.read_at?`<button class="btn btn-ghost btn-sm" onclick="markRead(${a.id})">✓ Ler</button>`:''}
-  </div>`).join('');
+function navigateFromAlert(entityType, id) {
+  const fn = ALERT_NAV[entityType?.toLowerCase()];
+  if (fn) fn({ id });
+  else toast('Não há página associada a este alerta','error');
 }
 
-async function markRead(id) {
+let _alertsFilter = 'all';
+pages.alerts = async () => { renderAlertsPage(_alertsFilter); };
+
+async function renderAlertsPage(filter) {
+  _alertsFilter = filter || 'all';
+  const allAlerts = await api('GET','/alerts') || [];
+
+  const unread  = allAlerts.filter(a => !a.read_at);
+  const bySev   = { info: 0, warning: 0, error: 0 };
+  allAlerts.forEach(a => { bySev[a.severity] = (bySev[a.severity]||0) + 1; });
+
+  // Type breakdown
+  const byType = {};
+  allAlerts.forEach(a => { byType[a.type] = (byType[a.type]||0) + 1; });
+  const topTypes = Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // Filter
+  let filtered = allAlerts;
+  if (_alertsFilter === 'unread')   filtered = allAlerts.filter(a => !a.read_at);
+  else if (_alertsFilter === 'read') filtered = allAlerts.filter(a => a.read_at);
+  else if (_alertsFilter === 'warning') filtered = allAlerts.filter(a => a.severity==='warning');
+  else if (_alertsFilter === 'error')   filtered = allAlerts.filter(a => a.severity==='error');
+
+  const tabDef = [
+    ['all',    `Todos`,         allAlerts.length],
+    ['unread', `🔴 Não Lidos`,   unread.length],
+    ['warning','⚠️ Atenção',     bySev.warning],
+    ['error',  '🚨 Críticos',    bySev.error],
+    ['read',   '✓ Lidos',        allAlerts.length - unread.length],
+  ];
+  const tabs = tabDef.map(([v,l,c])=>`
+    <button class="fin-status-tab${_alertsFilter===v?' active':''}" onclick="renderAlertsPage('${v}')">
+      ${l} <span class="tab-count">${c}</span>
+    </button>`).join('');
+
+  setContent(`
+  <div class="grid g4 mb-2">
+    <div class="kpi ${unread.length>0?'yellow':'green'}">
+      <div class="kpi-label">Não Lidos</div>
+      <div class="kpi-value">${unread.length}</div>
+      <div class="kpi-sub">${allAlerts.length} total</div><span class="kpi-icon">🔔</span>
+    </div>
+    <div class="kpi ${bySev.error>0?'red':''}">
+      <div class="kpi-label">Críticos</div>
+      <div class="kpi-value">${bySev.error}</div>
+      <div class="kpi-sub">Alta prioridade</div><span class="kpi-icon">🚨</span>
+    </div>
+    <div class="kpi ${bySev.warning>0?'yellow':''}">
+      <div class="kpi-label">Atenção</div>
+      <div class="kpi-value">${bySev.warning}</div>
+      <div class="kpi-sub">Requerem ação</div><span class="kpi-icon">⚠️</span>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Informativos</div>
+      <div class="kpi-value">${bySev.info||0}</div>
+      <div class="kpi-sub">Apenas informação</div><span class="kpi-icon">ℹ️</span>
+    </div>
+  </div>
+
+  ${topTypes.length ? `
+  <div class="card mb-2">
+    <div class="card-header"><div class="card-title">📊 Tipos de Alertas</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 0">
+      ${topTypes.map(([t,c])=>`<span style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px"><strong>${c}</strong> ${t}</span>`).join('')}
+    </div>
+  </div>` : ''}
+
+  <div class="flex justify-between items-center mb-2" style="gap:8px;flex-wrap:wrap">
+    <div class="fin-status-tabs">${tabs}</div>
+    <button class="btn btn-ghost btn-sm" onclick="markAllRead()">✓ Marcar todos como lidos</button>
+  </div>
+  <div id="alerts-list">${renderAlerts(filtered)}</div>`);
+}
+
+function renderAlerts(alerts) {
+  if (!alerts.length) return '<div class="empty-state"><div class="icon">🔔</div><p>Nenhum alerta nesta categoria</p></div>';
+  const sevIcon = { info:'ℹ️', warning:'⚠️', error:'🚨' };
+  return alerts.map(a => {
+    const hasNav = ALERT_NAV[a.entity_type?.toLowerCase()];
+    return `
+  <div class="alert-item ${a.severity}" style="${a.read_at?'opacity:.6':''}">
+    <div class="alert-icon">${sevIcon[a.severity]||'🔔'}</div>
+    <div class="alert-content" style="flex:1;${hasNav?'cursor:pointer':''}" ${hasNav?`onclick="markRead(${a.id},false);navigateFromAlert('${a.entity_type}',${a.entity_id||'null'})" title="Clique para ir ao registro"`:''}>
+      <div class="alert-msg">${a.message}${hasNav?` <span style="font-size:11px;color:var(--accent)">→ ver</span>`:''}${a.read_at?'':' <span style="width:8px;height:8px;background:var(--danger);border-radius:50%;display:inline-block;margin-left:4px"></span>'}</div>
+      <div class="alert-meta">${fmtDT(a.created_at)} · <strong>${a.type}</strong>${a.entity_type?' · '+a.entity_type:''}${a.read_at?` · <span style="color:var(--text3)">Lido ${fmtDT(a.read_at)}</span>`:''}</div>
+    </div>
+    <div class="flex gap-1" style="flex-shrink:0">
+      ${!a.read_at
+        ? `<button class="btn btn-ghost btn-sm" onclick="markRead(${a.id},true)" title="Marcar como lido">✓ Lido</button>`
+        : `<button class="btn btn-ghost btn-sm" onclick="markUnread(${a.id})" title="Marcar como não lido" style="opacity:.7">↩ Não lido</button>`}
+    </div>
+  </div>`;
+  }).join('');
+}
+
+async function markRead(id, refresh=true) {
   await api('PUT',`/alerts/${id}/read`);
-  refreshBadges(); pages.alerts();
+  refreshBadges();
+  if (refresh) renderAlertsPage(_alertsFilter);
+}
+
+async function markUnread(id) {
+  await api('PUT',`/alerts/${id}/unread`);
+  toast('Alerta marcado como não lido');
+  refreshBadges();
+  renderAlertsPage(_alertsFilter);
 }
 
 async function markAllRead() {
   await api('PUT','/alerts/read-all');
-  toast('Todos os alertas marcados como lidos'); refreshBadges(); pages.alerts();
+  toast('Todos os alertas marcados como lidos');
+  refreshBadges();
+  renderAlertsPage(_alertsFilter);
 }
 
 // ── PAGE: SETTINGS ────────────────────────────────────

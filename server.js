@@ -332,11 +332,23 @@ addRoute('POST', '/api/financial/charges', async (req, res, ctx) => {
 addRoute('PUT', '/api/financial/charges/:id', async (req, res, ctx) => {
   const b   = ctx.body;
   const old = dbGet('SELECT * FROM financial_charges WHERE id=?', [ctx.params.id]);
+  if (!old) return sendJson(res, { error: 'Cobrança não encontrada' }, 404);
   const ns  = b.status || old.status;
   const paid_date = (ns === 'paid' && !old.paid_date) ? todayStr() : (b.paid_date || old.paid_date || null);
+  const newNotes = b.pay_notes || b.notes || old.notes || null;
   dbRun('UPDATE financial_charges SET status=?,paid_date=?,payment_method=?,notes=? WHERE id=?',
-        [ns, paid_date, b.payment_method || old.payment_method || null, b.notes || old.notes || null, ctx.params.id]);
-  if (ns === 'paid') recalcLtv(old.client_id);
+        [ns, paid_date, b.payment_method || old.payment_method || null, newNotes, ctx.params.id]);
+  // Payment log — only when transitioning to paid
+  if (ns === 'paid' && old.status !== 'paid') {
+    const clientRow = old.client_id ? dbGet('SELECT name FROM clients WHERE id=?', [old.client_id]) : null;
+    dbRun(`INSERT INTO payment_logs(charge_id,client_id,client_name,description,amount,payment_method,pay_notes,comprovante_data,comprovante_name,user_id,user_email,user_name)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [old.id, old.client_id, clientRow?.name || null, old.description, old.amount,
+           b.payment_method || null, b.pay_notes || null,
+           b.comprovante_data || null, b.comprovante_name || null,
+           ctx.user?.user_id || null, ctx.user?.email || null, ctx.user?.name || null]);
+    recalcLtv(old.client_id);
+  }
   checkOverdue();
   sendJson(res, { ok: true });
 });
@@ -509,6 +521,20 @@ addRoute('PUT', '/api/alerts/:id/read', async (req, res, ctx) => {
   dbRun('UPDATE alerts SET read_at=? WHERE id=?', [nowStr(), ctx.params.id]);
   sendJson(res, { ok: true });
 });
+addRoute('PUT', '/api/alerts/:id/unread', async (req, res, ctx) => {
+  dbRun('UPDATE alerts SET read_at=NULL WHERE id=?', [ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+addRoute('GET', '/api/financial/payment-logs', async (req, res, ctx) => {
+  const logs = dbAll(`SELECT * FROM payment_logs ORDER BY created_at DESC LIMIT 200`);
+  // Strip comprovante_data from list (too large), keep name only
+  sendJson(res, logs.map(l => ({ ...l, comprovante_data: l.comprovante_data ? '[anexo]' : null })));
+});
+addRoute('GET', '/api/financial/payment-logs/:id/comprovante', async (req, res, ctx) => {
+  const log = dbGet(`SELECT comprovante_data, comprovante_name FROM payment_logs WHERE id=?`, [ctx.params.id]);
+  if (!log || !log.comprovante_data) return sendJson(res, { error: 'Sem comprovante' }, 404);
+  sendJson(res, log);
+});
 
 // ── ANALYTICS ─────────────────────────────────────────────────────────
 addRoute('GET', '/api/analytics/kpis', async (req, res) => {
@@ -673,6 +699,7 @@ function initDb() {
   CREATE TABLE IF NOT EXISTS maintenance_os(id INTEGER PRIMARY KEY AUTOINCREMENT,vessel_id INTEGER,os_number TEXT NOT NULL,type TEXT NOT NULL,description TEXT NOT NULL,status TEXT DEFAULT 'open',priority TEXT DEFAULT 'normal',scheduled_date TEXT,completed_date TEXT,estimated_hours REAL,actual_hours REAL,cost REAL DEFAULT 0,technician TEXT,parts_used TEXT,notes TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,message TEXT NOT NULL,severity TEXT DEFAULT 'info',entity_type TEXT,entity_id INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP,read_at TEXT);
   CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL DEFAULT '',updated_at TEXT DEFAULT (datetime('now')));
+  CREATE TABLE IF NOT EXISTS payment_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,charge_id INTEGER NOT NULL,client_id INTEGER,client_name TEXT,description TEXT,amount REAL,payment_method TEXT,pay_notes TEXT,comprovante_data TEXT,comprovante_name TEXT,user_id INTEGER,user_email TEXT,user_name TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
   `);
 }
 
@@ -891,6 +918,7 @@ function migrateDb() {
   try { db.exec(`ALTER TABLE store_orders ADD COLUMN whatsapp_sent INTEGER DEFAULT 0`); } catch(e) {}
   // Settings table (idempotent)
   try { db.exec(`CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL DEFAULT '',updated_at TEXT DEFAULT (datetime('now')))`); } catch(e) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS payment_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,charge_id INTEGER NOT NULL,client_id INTEGER,client_name TEXT,description TEXT,amount REAL,payment_method TEXT,pay_notes TEXT,comprovante_data TEXT,comprovante_name TEXT,user_id INTEGER,user_email TEXT,user_name TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP)`); } catch(e) {}
   // Seed default settings (INSERT OR IGNORE)
   const defSettings = [
     ['marina_name','Marina One'],['marina_cnpj','00.000.000/0001-00'],
