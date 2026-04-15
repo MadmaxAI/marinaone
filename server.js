@@ -199,15 +199,15 @@ addRoute('GET', '/api/vessels', async (req, res, ctx) => {
   if (client_id) { sql += ' AND v.client_id=?'; a.push(client_id); }
   let rows = dbAll(sql + ' ORDER BY v.name', a);
   rows = rows.map(r => ({ ...r, vessel_status: vesselStatus(r.id, r.spot_type) }));
-  // Filter by operation eligibility
+  // Filter by operation eligibility — use isVesselInWater for correctness
+  // (covers all water states: Na água, Na vaga molhada, etc.)
   if (eligible_for === 'descida') {
-    // Can descida: vessel is NOT in water (last completed op ≠ descida)
-    rows = rows.filter(r => r.vessel_status !== 'Na água');
-    // Also exclude vessels with an active queue op
+    // Descida: vessel must NOT be in water; also no active op for this vessel
+    rows = rows.filter(r => !isVesselInWater(r.id, r.spot_type));
     rows = rows.filter(r => !dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id]));
   } else if (eligible_for === 'subida') {
-    // Can subida: vessel IS in water (last completed op = descida)
-    rows = rows.filter(r => r.vessel_status === 'Na água');
+    // Subida: vessel must be in water (Na água OR Na vaga molhada); also no active op
+    rows = rows.filter(r => isVesselInWater(r.id, r.spot_type));
     rows = rows.filter(r => !dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id]));
   } else if (eligible_for === 'atracacao') {
     // Atracação: no sequence restriction, just no active op
