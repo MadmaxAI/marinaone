@@ -174,13 +174,19 @@ addRoute('DELETE', '/api/clients/:id', async (req, res, ctx) => {
 });
 
 // ── VESSELS ──────────────────────────────────────────────────────────
-function vesselStatus(vesselId, spotType) {
+// Returns true if the vessel is currently in the water
+function isVesselInWater(vesselId, spotType) {
   const lastOp = dbGet(`SELECT operation_type FROM queue_operations WHERE vessel_id=? AND status='completed' ORDER BY completed_at DESC LIMIT 1`, [vesselId]);
-  if (lastOp?.operation_type === 'descida') return 'Na água';
-  if (spotType === 'seca')   return 'Na vaga seca';
-  if (spotType === 'molhada') return 'Na vaga molhada';
-  if (lastOp?.operation_type === 'subida') return 'Na vaga seca';
-  return 'Em terra';
+  const t = lastOp?.operation_type;
+  if (t === 'descida' || t === 'atracacao') return true;   // last op put it in water
+  if (t === 'subida') return false;                          // last op put it on land
+  // No completed ops: molhada berth → in water, otherwise on land
+  return spotType === 'molhada';
+}
+function vesselStatus(vesselId, spotType) {
+  const inWater = isVesselInWater(vesselId, spotType);
+  if (inWater) return spotType === 'molhada' ? 'Na vaga molhada' : 'Na água';
+  return spotType === 'seca' ? 'Na vaga seca' : 'Em terra';
 }
 addRoute('GET', '/api/vessels', async (req, res, ctx) => {
   const { search = '', client_id = '', eligible_for = '' } = ctx.qs;
@@ -320,10 +326,24 @@ addRoute('PUT', '/api/contracts/:id', async (req, res, ctx) => {
 });
 
 // ── QUEUE ─────────────────────────────────────────────────────────────
+function enrichQueueRow(q) {
+  const spot = dbGet(`SELECT s.type FROM spots s JOIN contracts ct ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [q.vessel_id]);
+  const spotType = spot?.type || null;
+  const inWater  = isVesselInWater(q.vessel_id, spotType);
+  const vs       = vesselStatus(q.vessel_id, spotType);
+  // Flag if this op is inconsistent with the vessel's current state
+  let inconsistent = false;
+  if (q.status === 'waiting' || q.status === 'in_progress') {
+    if (q.operation_type === 'descida' && inWater)  inconsistent = true;
+    if (q.operation_type === 'subida'  && !inWater) inconsistent = true;
+  }
+  return { ...q, vessel_status: vs, is_inconsistent: inconsistent };
+}
 addRoute('GET', '/api/queue/history', async (req, res) => {
-  sendJson(res, dbAll(`SELECT q.*, v.name as vessel_name, c.name as client_name
+  const rows = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, c.name as client_name, c.tier as client_tier
     FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
-    WHERE q.status IN ('completed','cancelled') ORDER BY q.requested_at DESC LIMIT 50`));
+    WHERE q.status IN ('completed','cancelled') ORDER BY q.requested_at DESC LIMIT 50`);
+  sendJson(res, rows.map(enrichQueueRow));
 });
 addRoute('GET', '/api/queue', async (req, res, ctx) => {
   const { status = '' } = ctx.qs;
@@ -338,27 +358,24 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
   } else {
     sql += ` AND q.status NOT IN ('completed','cancelled')`;
   }
-  sendJson(res, dbAll(sql + ' ORDER BY q.priority DESC, q.requested_at ASC', a));
+  const rows = dbAll(sql + ' ORDER BY q.priority DESC, q.requested_at ASC', a);
+  sendJson(res, rows.map(enrichQueueRow));
 });
 addRoute('POST', '/api/queue', async (req, res, ctx) => {
   const vessel = dbGet('SELECT * FROM vessels WHERE id=?', [ctx.body.vessel_id]);
   if (!vessel) return sendJson(res, { error: 'Embarcação não encontrada' }, 404);
-  const opType = ctx.body.operation_type;
-  // Enforce descida/subida sequence
-  if (opType === 'descida' || opType === 'subida') {
-    const lastOp = dbGet(`SELECT operation_type FROM queue_operations WHERE vessel_id=? AND status='completed' ORDER BY completed_at DESC LIMIT 1`, [ctx.body.vessel_id]);
-    const lastType = lastOp?.operation_type || null;
-    if (opType === 'descida' && lastType === 'descida')
-      return sendJson(res, { error: 'A embarcação já está na água (última operação foi uma Descida). Registre uma Subida primeiro.' }, 400);
-    if (opType === 'subida' && lastType !== 'descida' && lastType !== null)
-      return sendJson(res, { error: 'A embarcação não está na água (última operação foi uma Subida). Registre uma Descida primeiro.' }, 400);
-    if (opType === 'subida' && lastType === null)
-      return sendJson(res, { error: 'Não há histórico de Descida para esta embarcação.' }, 400);
-  }
-  // Check no pending/in_progress op for same vessel
+  const opType  = ctx.body.operation_type;
+  const spot    = dbGet(`SELECT s.type FROM spots s JOIN contracts ct ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [ctx.body.vessel_id]);
+  const spotType = spot?.type || null;
+  // Enforce descida/subida sequence using isVesselInWater
+  if (opType === 'descida' && isVesselInWater(ctx.body.vessel_id, spotType))
+    return sendJson(res, { error: 'A embarcação já está na água. Registre uma Subida antes de fazer outra Descida.' }, 400);
+  if (opType === 'subida' && !isVesselInWater(ctx.body.vessel_id, spotType))
+    return sendJson(res, { error: 'A embarcação não está na água. Registre uma Descida antes de fazer uma Subida.' }, 400);
+  // Block duplicate active ops for same vessel
   const activeOp = dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [ctx.body.vessel_id]);
-  if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui uma operação em andamento na fila.' }, 400);
-  const client = dbGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
+  if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui uma operação ativa na fila (cancele-a primeiro).' }, 400);
+  const client   = dbGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
   const priority = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
   const r = dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes) VALUES(?,?,?,'waiting',?,?)`,
                   [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null]);

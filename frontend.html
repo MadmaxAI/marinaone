@@ -631,31 +631,48 @@ pages.queue = async () => {
 
 function renderQueue(queue) {
   if (!queue.length) return '<div class="empty-state"><div class="icon">📋</div><p>Sem operações na fila</p></div>';
-  return queue.map(q => `
-  <div class="queue-card" id="qcard-${q.id}">
-    <div class="queue-priority ${q.priority?'high':'normal'}"></div>
-    <div style="flex:1">
-      <div class="flex items-center gap-2 mb-1">
+  return queue.map(q => {
+    const inconsistent = q.is_inconsistent;
+    const borderColor  = inconsistent ? 'var(--danger)' : (q.priority ? 'var(--warning)' : 'var(--border)');
+    const opDirections = { descida:'⬇ terra → água', subida:'⬆ água → terra', atracacao:'⚓ Atracação' };
+    return `
+  <div class="queue-card" id="qcard-${q.id}" style="border-left:3px solid ${borderColor}${inconsistent?';background:rgba(239,68,68,.05)':''}">
+    <div style="flex:1;min-width:0">
+      <div class="flex items-center gap-2 mb-1" style="flex-wrap:wrap">
         <span class="font-bold">${q.vessel_name}</span>
         ${tierBadge(q.client_tier)}
         ${opBadge(q.operation_type)}
+        <span style="font-size:11px;color:var(--text3)">${opDirections[q.operation_type]||''}</span>
         ${statusBadge(q.status)}
+        ${inconsistent ? `<span class="badge badge-danger" title="Operação inconsistente com o estado atual da embarcação">⚠ Inválida</span>` : ''}
+      </div>
+      <div class="flex items-center gap-2 mb-1" style="flex-wrap:wrap">
+        ${VESSEL_STATUS_BADGE(q.vessel_status)}
+        <span class="text-xs text-muted">${q.client_name} · ${q.vessel_type||''}${q.vessel_length?' '+q.vessel_length+'m':''}</span>
       </div>
       <div class="text-xs text-muted">
-        ${q.client_name} · ${q.vessel_type||''} ${q.vessel_length?q.vessel_length+'m':''}
-        · Solicitado: ${fmtDT(q.requested_at)}
-        ${q.started_at ? ' · Iniciado: '+fmtDT(q.started_at) : ''}
+        Solicitado: ${fmtDT(q.requested_at)}
+        ${q.started_at   ? ' · Iniciado: '+fmtDT(q.started_at)   : ''}
         ${q.completed_at ? ' · Concluído: '+fmtDT(q.completed_at) : ''}
         ${q.operator ? ' · Op: '+q.operator : ''}
-        ${q.notes ? ' · '+q.notes : ''}
+        ${q.notes    ? ' · '+q.notes : ''}
+        ${inconsistent ? ' · <span style="color:var(--danger);font-weight:600">Esta operação é inválida para o estado atual da embarcação — cancele-a.</span>' : ''}
       </div>
     </div>
-    <div class="flex gap-2">
-      ${q.status==='waiting' ? `<button class="btn btn-warning btn-sm" onclick="updateQueue(${q.id},'in_progress')">▶ Iniciar</button>` : ''}
-      ${q.status==='in_progress' ? `<button class="btn btn-success btn-sm" onclick="updateQueue(${q.id},'completed')">✓ Concluir</button>` : ''}
-      ${!['completed','cancelled'].includes(q.status) ? `<button class="btn btn-danger btn-sm" onclick="updateQueue(${q.id},'cancelled')">✕</button>` : ''}
+    <div class="flex gap-2" style="flex-shrink:0;align-items:flex-start">
+      ${q.status==='waiting' && !inconsistent ? `<button class="btn btn-warning btn-sm" onclick="updateQueue(${q.id},'in_progress')">▶ Iniciar</button>` : ''}
+      ${q.status==='in_progress' && !inconsistent ? `<button class="btn btn-success btn-sm" onclick="updateQueue(${q.id},'completed')">✓ Concluir</button>` : ''}
+      ${!['completed','cancelled'].includes(q.status) ? `<button class="btn btn-danger btn-sm" onclick="cancelQueueOp(${q.id})" title="Cancelar operação">✕ Cancelar</button>` : ''}
     </div>
-  </div>`).join('');
+  </div>`;
+  }).join('');
+}
+
+async function cancelQueueOp(id) {
+  if (!confirm('Cancelar esta operação?')) return;
+  await api('PUT', `/queue/${id}`, { status: 'cancelled' });
+  toast('Operação cancelada');
+  pages.queue();
 }
 
 async function filterQueue(type, el) {
