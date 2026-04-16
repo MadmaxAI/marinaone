@@ -2561,22 +2561,36 @@ function openStoreConfirmPayment(orderId, paymentMethod) {
       <input id="cpy-notes" placeholder="Ex: cliente pagou via PIX, comprovante em anexo...">
     </div>
     <div class="form-group">
-      <label>Comprovante ${isPix?'(obrigatório)':'(opcional)'}</label>
+      <label>Comprovante ${isPix?'<strong style="color:var(--danger)">(obrigatório)</strong>':'(opcional)'}</label>
       <input type="file" id="cpy-file" accept="image/*,.pdf"
-        style="padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:100%"
-        onchange="previewStoreComprovante()">
+        style="padding:8px;background:var(--surface2);border:1px solid ${isPix?'var(--danger)':'var(--border)'};border-radius:6px;color:var(--text);width:100%"
+        onchange="previewStoreComprovante(${isPix})">
+      ${isPix?`<div style="font-size:11px;color:var(--danger);margin-top:4px">📎 Anexe o comprovante PIX recebido do cliente para liberar o botão</div>`:''}
       <div id="cpy-preview" style="margin-top:8px"></div>
     </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
-      <button class="btn btn-success" id="cpy-btn" onclick="submitStoreConfirmPayment(${orderId},${isPix})">✅ Confirmar Pagamento</button>
+      <button class="btn btn-success" id="cpy-btn" ${isPix?'disabled style="opacity:0.45;cursor:not-allowed"':''} onclick="submitStoreConfirmPayment(${orderId},${isPix})">✅ Confirmar Pagamento</button>
     </div>
   </div>`);
 }
 
-function previewStoreComprovante() {
+function previewStoreComprovante(isPix) {
   const file = document.getElementById('cpy-file')?.files?.[0];
   const prev = document.getElementById('cpy-preview');
+  const btn  = document.getElementById('cpy-btn');
+  // Para PIX: habilita botão só quando há arquivo
+  if (isPix && btn) {
+    if (file) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor  = 'pointer';
+    } else {
+      btn.disabled = true;
+      btn.style.opacity = '0.45';
+      btn.style.cursor  = 'not-allowed';
+    }
+  }
   if (!file || !prev) return;
   if (file.type.startsWith('image/')) {
     const reader = new FileReader();
