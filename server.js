@@ -436,42 +436,44 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
   const activeOp = dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [ctx.body.vessel_id]);
   if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui uma operação ativa na fila (cancele-a primeiro).' }, 400);
 
-  // ── Operation hours validation ─────────────────────────────────────
+  // ── Operation hours validation (minutes-of-day arithmetic, timezone-safe) ─
   const cfg = {};
   dbAll(`SELECT key,value FROM settings WHERE key IN ('ops_start_time','ops_end_time','maneuver_time_min')`)
     .forEach(r => { cfg[r.key] = r.value; });
-  const opsStart   = cfg.ops_start_time   || '07:00';
-  const opsEnd     = cfg.ops_end_time     || '18:00';
+  const opsStart    = cfg.ops_start_time  || '07:00';
+  const opsEnd      = cfg.ops_end_time    || '18:00';
   const maneuverMin = parseInt(cfg.maneuver_time_min) || 0;
-  const [sh, sm] = opsStart.split(':').map(Number);
-  const [eh, em] = opsEnd.split(':').map(Number);
-  const now = new Date();
-  const todayOpsStart = new Date(now); todayOpsStart.setHours(sh, sm, 0, 0);
-  const todayOpsEnd   = new Date(now); todayOpsEnd.setHours(eh, em, 0, 0);
-  // Calculate estimated start for the new op (end of last queued op + maneuver)
+  const hhmm2min = s => { const [h,m] = (s||'00:00').split(':').map(Number); return h*60+m; };
+  const fmtMin   = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const now      = new Date();
+  const nowMin   = now.getHours()*60 + now.getMinutes();
+  const startMin = hhmm2min(opsStart);
+  const endMin   = hhmm2min(opsEnd);
+  // Cursor = earliest possible start for the new operation (minutes-of-day)
+  let cursorMin = Math.max(nowMin, startMin);
   const queuedActive = dbAll(`SELECT q.*, v.size as vessel_size FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id WHERE q.status NOT IN ('completed','cancelled') ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
-  let cursor = now < todayOpsStart ? new Date(todayOpsStart) : new Date(now);
   for (const op of queuedActive) {
     const dur = getAvgDuration(op.vessel_size, op.operation_type);
     if (op.status === 'in_progress' && op.started_at) {
-      const opEnd = new Date(op.started_at);
-      opEnd.setMinutes(opEnd.getMinutes() + dur);
-      if (opEnd > cursor) cursor = new Date(opEnd);
+      // Parse SQLite datetime safely: replace space with T so JS treats it as local
+      const sa  = new Date(String(op.started_at).replace(' ','T'));
+      const saMin = isNaN(sa) ? nowMin : sa.getHours()*60 + sa.getMinutes();
+      const opEndMin = saMin + dur;
+      if (opEndMin > cursorMin) cursorMin = opEndMin;
     } else if (op.status === 'waiting') {
-      cursor.setMinutes(cursor.getMinutes() + dur);
+      cursorMin += dur;
     }
-    cursor.setMinutes(cursor.getMinutes() + maneuverMin);
+    cursorMin += maneuverMin;
   }
   const newDur = getAvgDuration(vessel.size, opType);
-  const estimatedEnd = new Date(cursor); estimatedEnd.setMinutes(estimatedEnd.getMinutes() + newDur);
+  const estimatedEndMin = cursorMin + newDur;
   // Block if estimated end exceeds ops_end_time
-  if (estimatedEnd > todayOpsEnd) {
-    const fmt2 = d => d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-    return sendJson(res, { error: `Operação não pode ser incluída: previsão de término às ${fmt2(estimatedEnd)}, após o horário de encerramento das operações (${opsEnd}). Durção estimada: ${newDur} min. Tente agendar para o próximo dia útil.` }, 400);
+  if (estimatedEndMin > endMin) {
+    return sendJson(res, { error: `Operação não pode ser incluída: previsão de término às ${fmtMin(estimatedEndMin)}, após o horário de encerramento das operações (${opsEnd}). Duração estimada: ${newDur} min.` }, 400);
   }
   // Warn if requested before ops start time
   let warning = null;
-  if (now < todayOpsStart) {
+  if (nowMin < startMin) {
     warning = `Solicitação recebida antes do horário de início das operações (${opsStart}). A operação foi agendada para iniciar a partir das ${opsStart}.`;
   }
   // ──────────────────────────────────────────────────────────────────
@@ -1240,6 +1242,10 @@ function migrateDb() {
     ['maneuver_time_min','10'],
     ['ops_start_time','07:00'],
     ['ops_end_time','18:00'],
+    // Operation checklists (JSON arrays)
+    ['checklist_descida','["Verificar condições do cais e amarras","Conferir equipamentos de içamento","Checar comunicação com a equipe","Confirmar profundidade e maré","Verificar documentação da embarcação"]'],
+    ['checklist_subida','["Verificar condições do cais e amarras","Confirmar disponibilidade de vaga em terra","Checar equipamentos de içamento","Avisar cliente sobre retirada","Inspecionar casco antes de içar"]'],
+    ['checklist_atracacao','["Verificar disponibilidade da vaga","Conferir amarras e defensas","Checar condições climáticas","Confirmar calado da embarcação","Orientar tripulação sobre manobra"]'],
   ];
   for (const [k,v] of defSettings) {
     try { dbRun(`INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)`,[k,v]); } catch(e) {}
