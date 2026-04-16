@@ -1337,12 +1337,48 @@ migrateDb();
 try { seedDb(); }
 catch (e) { console.error('[Seed Error]', e.message); process.exit(1); }
 
-server.listen(PORT, () => {
-  console.log('='.repeat(50));
-  console.log('  ⚓  Marina One — Sistema de Gestao de Marina');
-  console.log('='.repeat(50));
-  console.log(`\n✅ Rodando em: http://localhost:${PORT}`);
-  console.log(`   Acesse  : http://localhost:${PORT}/frontend.html`);
-  console.log(`   Login   : admin@marina.com / marina123`);
-  console.log('\n   Ctrl+C para encerrar.\n');
+function startServer() {
+  server.listen(PORT, () => {
+    console.log('='.repeat(50));
+    console.log('  ⚓  Marina One — Sistema de Gestao de Marina');
+    console.log('='.repeat(50));
+    console.log(`\n✅ Rodando em: http://localhost:${PORT}`);
+    console.log(`   Acesse  : http://localhost:${PORT}/frontend.html`);
+    console.log(`   Login   : admin@marina.com / marina123`);
+    console.log('\n   Ctrl+C para encerrar.\n');
+  });
+}
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`⚠️  Porta ${PORT} em uso — encerrando processo anterior...`);
+    const { execSync } = require('child_process');
+    try {
+      if (process.platform === 'win32') {
+        // Encontra e mata o processo usando a porta no Windows
+        const out = execSync(`netstat -ano | findstr :${PORT}`, { encoding: 'utf8' });
+        const pids = [...new Set(
+          out.split('\n')
+            .map(l => l.trim().split(/\s+/).pop())
+            .filter(p => p && /^\d+$/.test(p) && p !== '0' && Number(p) !== process.pid)
+        )];
+        for (const pid of pids) {
+          try { execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' }); } catch(_) {}
+        }
+      } else {
+        execSync(`fuser -k ${PORT}/tcp`, { stdio: 'ignore' });
+      }
+    } catch(_) {}
+    // Aguarda um momento e tenta novamente
+    setTimeout(() => {
+      server.removeAllListeners('error');
+      server.on('error', (e) => { console.error('❌ Erro ao iniciar servidor:', e.message); process.exit(1); });
+      startServer();
+    }, 1000);
+  } else {
+    console.error('❌ Erro ao iniciar servidor:', err.message);
+    process.exit(1);
+  }
 });
+
+startServer();
