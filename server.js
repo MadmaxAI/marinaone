@@ -97,12 +97,31 @@ function crc16(data) {
   return crc.toString(16).toUpperCase().padStart(4, '0');
 }
 function buildPix(key, name, city, amount, txid) {
-  const tlv = (t, v) => `${t}${String(v.length).padStart(2, '0')}${v}`;
-  const ma = tlv('00', 'BR.GOV.BCB.PIX') + tlv('01', key);
-  let p = tlv('00','01') + tlv('26',ma) + tlv('52','0000') + tlv('53','986') +
-          tlv('54', amount.toFixed(2)) + tlv('58','BR') +
-          tlv('59', name.slice(0,25)) + tlv('60', city.slice(0,15)) +
-          tlv('62', tlv('05', txid.slice(0,25)));
+  // PIX (EMV QR Code) — BCB spec v2.2.0
+  // Sanitize: strip accents + non-ASCII (required by BCB spec for name/city)
+  const sanitize = (s, max) => (s||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^\x20-\x7E]/g,'').replace(/\s+/g,' ').trim().slice(0, max).toUpperCase();
+  const tlv = (id, val) => `${id}${String(val.length).padStart(2,'0')}${val}`;
+  const safeName  = sanitize(name, 25) || 'LOJA';
+  const safeCity  = sanitize(city, 15) || 'CIDADE';
+  // txid: only alphanumeric, no spaces, max 25
+  const safeTxid  = (txid||'').replace(/[^A-Za-z0-9]/g,'').slice(0, 25) || 'MARINA001';
+  // Merchant Account Information (tag 26)
+  const ma = tlv('00','BR.GOV.BCB.PIX') + tlv('01', key);
+  // Additional Data Field Template (tag 62) — Reference Label (05)
+  const ad = tlv('05', safeTxid);
+  let p = tlv('00','01')                   // Payload Format Indicator
+        + tlv('01','12')                   // Point of Initiation: 12 = unique/one-time
+        + tlv('26', ma)                    // Merchant Account Information (PIX)
+        + tlv('52','0000')                 // Merchant Category Code
+        + tlv('53','986')                  // Transaction Currency (986 = BRL)
+        + (amount > 0 ? tlv('54', amount.toFixed(2)) : '')  // Transaction Amount
+        + tlv('58','BR')                   // Country Code
+        + tlv('59', safeName)              // Merchant Name (max 25)
+        + tlv('60', safeCity)              // Merchant City (max 15)
+        + tlv('62', ad);                   // Additional Data (txid)
+  // CRC16/CCITT-FALSE over the entire payload + '6304' (tag+length of CRC field)
   p += tlv('63', crc16(p + '6304'));
   return p;
 }
@@ -620,9 +639,11 @@ addRoute('POST', '/api/store/orders', async (req, res, ctx) => {
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
   const discount = b.discount || 0;
   const total    = subtotal - discount;
+  // Ficha (conta do cliente) → always pending_payment until manually settled
+  const forcedStatus = b.payment_method === 'ficha' ? 'pending_payment' : (b.status || 'open');
   const r = dbRun('INSERT INTO store_orders(vessel_id,client_id,items,subtotal,discount,total,status,payment_method,notes) VALUES(?,?,?,?,?,?,?,?,?)',
                   [b.vessel_id || null, b.client_id || null, JSON.stringify(items), subtotal, discount, total,
-                   b.status || 'open', b.payment_method || null, b.notes || null]);
+                   forcedStatus, b.payment_method || null, b.notes || null]);
   for (const item of items) dbRun('UPDATE store_items SET stock=MAX(0,stock-?) WHERE id=?', [item.qty, item.item_id]);
   checkStock();
   sendJson(res, { id: Number(r.lastInsertRowid), total }, 201);
@@ -642,6 +663,45 @@ addRoute('PUT', '/api/store/orders/:id/delivery', async (req, res, ctx) => {
   params.push(ctx.params.id);
   dbRun(`UPDATE store_orders SET ${updates.join(',')} WHERE id=?`, params);
   sendJson(res, { ok: true });
+});
+addRoute('PUT', '/api/store/orders/:id/confirm-payment', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const b = ctx.body || {};
+  dbRun(`UPDATE store_orders SET
+    status='paid', delivery_status='preparando',
+    payment_method=COALESCE(?,payment_method),
+    pay_notes=?, paid_date=COALESCE(?,DATE('now')),
+    comprovante_data=?, comprovante_name=?
+    WHERE id=?`,
+    [b.payment_method||null, b.pay_notes||null, b.paid_date||null,
+     b.comprovante_data||null, b.comprovante_name||null, ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+addRoute('GET', '/api/store/client-accounts', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const rows = dbAll(`SELECT o.*, c.name as client_name, c.phone as client_phone, c.tier as client_tier,
+    v.name as vessel_name
+    FROM store_orders o
+    LEFT JOIN clients c ON o.client_id=c.id
+    LEFT JOIN vessels v ON o.vessel_id=v.id
+    WHERE o.status='pending_payment'
+    ORDER BY o.created_at ASC`);
+  for (const r of rows) { try { r.items = JSON.parse(r.items); } catch {} }
+  // Group by client
+  const map = {};
+  for (const o of rows) {
+    const key = o.client_id || 0;
+    if (!map[key]) map[key] = {
+      client_id: o.client_id, client_name: o.client_name||'Balcão',
+      client_phone: o.client_phone, client_tier: o.client_tier,
+      orders: [], total: 0
+    };
+    map[key].orders.push(o);
+    map[key].total += o.total;
+  }
+  const accounts = Object.values(map).sort((a,b) => b.total - a.total);
+  const grand_total = accounts.reduce((s,a) => s+a.total, 0);
+  sendJson(res, { accounts, grand_total });
 });
 addRoute('GET', '/api/store/stats', async (req, res) => {
   const td = todayStr();
@@ -1211,6 +1271,10 @@ function migrateDb() {
   // Add new columns to store_orders (ignore error if already exist)
   try { db.exec(`ALTER TABLE store_orders ADD COLUMN delivery_status TEXT DEFAULT NULL`); } catch(e) {}
   try { db.exec(`ALTER TABLE store_orders ADD COLUMN whatsapp_sent INTEGER DEFAULT 0`); } catch(e) {}
+  try { db.exec(`ALTER TABLE store_orders ADD COLUMN comprovante_data TEXT`); } catch(e) {}
+  try { db.exec(`ALTER TABLE store_orders ADD COLUMN comprovante_name TEXT`); } catch(e) {}
+  try { db.exec(`ALTER TABLE store_orders ADD COLUMN pay_notes TEXT`); } catch(e) {}
+  try { db.exec(`ALTER TABLE store_orders ADD COLUMN paid_date TEXT`); } catch(e) {}
   // Settings table (idempotent)
   try { db.exec(`CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL DEFAULT '',updated_at TEXT DEFAULT (datetime('now')))`); } catch(e) {}
   try { db.exec(`CREATE TABLE IF NOT EXISTS payment_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,charge_id INTEGER NOT NULL,client_id INTEGER,client_name TEXT,description TEXT,amount REAL,payment_method TEXT,pay_notes TEXT,comprovante_data TEXT,comprovante_name TEXT,user_id INTEGER,user_email TEXT,user_name TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP)`); } catch(e) {}

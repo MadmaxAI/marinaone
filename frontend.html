@@ -2162,6 +2162,7 @@ pages.store = async () => {
     <div class="tab${_storeTab==='dashboard'?' active':''}" onclick="showStoreTab('dashboard',this)">📊 Dashboard</div>
     <div class="tab${_storeTab==='pdv'?' active':''}" onclick="showStoreTab('pdv',this)">🛒 PDV</div>
     <div class="tab${_storeTab==='orders'?' active':''}" onclick="showStoreTab('orders',this)">📋 Pedidos</div>
+    <div class="tab${_storeTab==='contas'?' active':''}" onclick="showStoreTab('contas',this)">📒 Contas</div>
     <div class="tab${_storeTab==='items'?' active':''}" onclick="showStoreTab('items',this)">📦 Estoque</div>
     <div class="tab${_storeTab==='gestao'?' active':''}" onclick="showStoreTab('gestao',this)">⚙️ Gestão</div>
   </div>
@@ -2177,6 +2178,7 @@ async function showStoreTab(tab, el) {
   if (tab==='dashboard') await renderStoreDashboard();
   else if (tab==='pdv') await renderPDV();
   else if (tab==='orders') await renderOrders();
+  else if (tab==='contas') await renderClientAccounts();
   else if (tab==='items') await renderStoreItems();
   else if (tab==='gestao') await renderStoreGestao();
 }
@@ -2400,26 +2402,71 @@ function cartQty(idx, delta) {
   renderCartItems();
 }
 
+let _saleIdConfirmed = false;
+
 async function finalizeSale() {
   if (!cart.length) { toast('Carrinho vazio','error'); return; }
-  const payment = document.getElementById('pdv-payment').value;
+  const payment   = document.getElementById('pdv-payment').value;
   const client_id = document.getElementById('pdv-client').value;
   const vessel_id = document.getElementById('pdv-vessel').value;
-  const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
-  if (payment==='pix') {
+  const total     = cart.reduce((s,i)=>s+i.price*i.qty,0);
+
+  // ── Ficha exige cliente identificado (check antes do diálogo de identificação) ──
+  if (payment === 'ficha' && !client_id) {
+    toast('Selecione um cliente para lançar na conta do cliente','error'); return;
+  }
+
+  // ── Confirmação de venda sem identificação (não se aplica a ficha, que já exige cliente) ──
+  if (!_saleIdConfirmed && payment !== 'ficha' && (!client_id || !vessel_id)) {
+    const missing = [];
+    if (!client_id) missing.push('cliente');
+    if (!vessel_id) missing.push('embarcação');
+    modal(`<div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-title">⚠️ Venda sem Identificação</div>
+      <div class="settings-info-box" style="margin-bottom:16px">
+        <strong>${missing.join(' e ')}</strong> não ${missing.length>1?'foram identificados':'foi identificado'}.<br>
+        A venda será registrada como <strong>Balcão / Loja</strong>. Deseja continuar?
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="closeModalForce()">◄ Voltar e Identificar</button>
+        <button class="btn btn-warning" onclick="closeModalForce();_saleIdConfirmed=true;finalizeSale()">✔ Continuar sem Identificação</button>
+      </div>
+    </div>`);
+    return;
+  }
+  _saleIdConfirmed = false;
+
+  // ── Ficha (conta do cliente) ────────────────────────────────────────
+  if (payment === 'ficha') {
+    const r = await api('POST','/store/orders',{
+      items: cart, client_id: parseInt(client_id),
+      vessel_id: vessel_id ? parseInt(vessel_id) : null,
+      payment_method: 'ficha', status: 'pending_payment'
+    });
+    if (r && r.id) { toast(`📒 Pedido #${r.id} lançado na conta do cliente!`); cart=[]; pages.store(); }
+    return;
+  }
+
+  // ── PIX ─────────────────────────────────────────────────────────────
+  if (payment === 'pix') {
     const pix = await api('POST','/store/pix-qrcode',{amount:total});
-    const pixPayload = (pix && pix.payload) ? pix.payload : '';
-    const qrImgUrl = pixPayload ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pixPayload)}` : '';
+    if (!pix || pix.error) { toast(pix?.error||'PIX não configurado — vá em Gestão → Config. PIX','error'); return; }
+    const pixPayload = pix.payload || '';
+    const qrImgUrl  = pixPayload ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(pixPayload)}` : '';
+    // Store payload in window for sendWhatsApp (avoids JSON-in-onclick encoding issues)
+    window._pixPayload = pixPayload;
+    window._pixQrUrl   = qrImgUrl;
     modal(`<div class="modal" onclick="event.stopPropagation()">
       <div class="modal-title">💳 Pagamento PIX — ${fmt(total)}</div>
       <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
-        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px" onclick="closeModalForce();confirmSale()">💳 Cobrar Aqui (PIX)</button>
-        <button class="btn btn-success" style="width:100%;padding:12px;font-size:14px" onclick="closeModalForce();sendWhatsApp(${JSON.stringify(pixPayload)},${JSON.stringify(qrImgUrl)})">📲 Enviar via WhatsApp</button>
+        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px" onclick="closeModalForce();confirmSale()">💳 Cobrar Aqui (PIX) — já pago</button>
+        <button class="btn btn-success" style="width:100%;padding:12px;font-size:14px" onclick="closeModalForce();sendWhatsApp()">📲 Enviar via WhatsApp — aguardar pagamento</button>
       </div>
       <div style="text-align:center">
-        ${qrImgUrl?`<img src="${qrImgUrl}" style="border-radius:8px;max-width:160px;margin-bottom:10px" onerror="this.style.display='none'">`:'' }
-        <div style="background:var(--surface2);border-radius:8px;padding:10px;word-break:break-all;font-family:monospace;font-size:10px;color:var(--text2)">${pixPayload||'PIX não configurado'}</div>
-        ${pix && pix.txid?`<div style="margin-top:8px;font-size:11px;color:var(--text3)">TXID: ${pix.txid}</div>`:''}
+        ${qrImgUrl?`<img src="${qrImgUrl}" style="border-radius:8px;max-width:200px;margin-bottom:10px;border:2px solid var(--border)" onerror="this.style.display='none'">`:'' }
+        <div style="background:var(--surface2);border-radius:8px;padding:10px;word-break:break-all;font-family:monospace;font-size:10px;color:var(--text2);text-align:left">${pixPayload||'PIX não configurado'}</div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="navigator.clipboard.writeText('${pixPayload.replace(/'/g,"\\'")}');toast('✅ Código PIX copiado!')">📋 Copiar código PIX</button>
+        ${pix.txid?`<div style="margin-top:6px;font-size:11px;color:var(--text3)">TXID: ${pix.txid}</div>`:''}
       </div>
       <div class="form-actions"><button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button></div>
     </div>`);
@@ -2428,69 +2475,203 @@ async function finalizeSale() {
   await confirmSale();
 }
 
-async function sendWhatsApp(pixPayload, qrImgUrl) {
-  const client_id = document.getElementById('pdv-client')?.value;
-  const vessel_id = document.getElementById('pdv-vessel')?.value;
-  const payment = 'pix';
-  const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
+async function sendWhatsApp() {
+  const pixPayload = window._pixPayload || '';
+  const qrImgUrl   = window._pixQrUrl   || '';
+  const client_id  = document.getElementById('pdv-client')?.value;
+  const vessel_id  = document.getElementById('pdv-vessel')?.value;
+  const total      = cart.reduce((s,i)=>s+i.price*i.qty,0);
   // Create order with pending_payment status
-  const r = await api('POST','/store/orders',{items:cart,client_id:client_id?parseInt(client_id):null,vessel_id:vessel_id?parseInt(vessel_id):null,payment_method:payment,status:'pending_payment'});
+  const r = await api('POST','/store/orders',{
+    items: cart, client_id: client_id?parseInt(client_id):null,
+    vessel_id: vessel_id?parseInt(vessel_id):null,
+    payment_method: 'pix', status: 'pending_payment'
+  });
   if (!r || !r.id) { toast('Erro ao criar pedido','error'); return; }
-  // Load configured store WhatsApp + client phone
-  const [clients, sett] = await Promise.all([
-    api('GET','/clients'),
-    api('GET','/settings'),
-  ]);
-  const storeWpp = (sett && sett.store_whatsapp) ? sett.store_whatsapp.replace(/\D/g,'') : '';
+  const [clients, sett] = await Promise.all([api('GET','/clients'), api('GET','/settings')]);
+  const storeWpp  = sett?.store_whatsapp?.replace(/\D/g,'') || '';
   let phone = '';
   if (client_id) {
     const cl = (clients||[]).find(c=>String(c.id)===String(client_id));
-    if (cl && cl.phone) phone = cl.phone.replace(/\D/g,'');
+    if (cl?.phone) phone = cl.phone.replace(/\D/g,'');
   }
-  // Build WhatsApp message using configurable template
-  const marinaName = (sett && sett.marina_name) ? sett.marina_name : 'Marina One';
-  const pixKey = (sett && sett.bank_pix_key) ? sett.bank_pix_key : pixPayload;
-  const itemsList = cart.map(i=>`• ${i.name} x${i.qty} = ${fmt(i.price*i.qty)}`).join('\n');
-  // Get vessel/client names for template
-  const cl = client_id ? (clients||[]).find(c=>String(c.id)===String(client_id)) : null;
-  const vessels = await api('GET','/vessels');
-  const ves = vessel_id ? (vessels||[]).find(v=>String(v.id)===String(vessel_id)) : null;
-  const template = (sett && sett.store_whatsapp_template) ? sett.store_whatsapp_template : '{marina} — Pedido #{id}\n\n{itens}\n\nTotal: {total}\n\nPIX: {pix_key}\n{qrcode_link}';
+  const marinaName = sett?.marina_name || 'Marina One';
+  const pixKey     = sett?.bank_pix_key || pixPayload;
+  const itemsList  = cart.map(i=>`• ${i.name} x${i.qty} = ${fmt(i.price*i.qty)}`).join('\n');
+  const cl  = client_id ? (clients||[]).find(c=>String(c.id)===String(client_id)) : null;
+  const ves = vessel_id ? (await api('GET','/vessels')||[]).find(v=>String(v.id)===String(vessel_id)) : null;
+  const template = sett?.store_whatsapp_template || '{marina} — Pedido #{id}\n\n{itens}\n\nTotal: {total}\n\nPIX: {pix_key}\n{qrcode_link}';
   let msg = template
-    .replace('{cliente}', cl?.name || 'Cliente')
-    .replace('{marina}', marinaName)
-    .replace('{embarcacao}', ves?.name || '—')
-    .replace('{itens}', itemsList)
-    .replace('{total}', fmt(total))
-    .replace('{pix_key}', pixKey)
-    .replace('{qrcode_link}', qrImgUrl || '')
-    .replace('{id}', r.id);
-  // Append PIX payload if not already in message
+    .replace('{cliente}',   cl?.name||'Cliente')
+    .replace('{marina}',    marinaName)
+    .replace('{embarcacao}',ves?.name||'—')
+    .replace('{itens}',     itemsList)
+    .replace('{total}',     fmt(total))
+    .replace('{pix_key}',   pixKey)
+    .replace('{qrcode_link}',qrImgUrl||'')
+    .replace('{id}',        r.id);
   if (!msg.includes(pixPayload) && pixPayload) msg += `\n\nCódigo PIX (copia e cola):\n${pixPayload}`;
-  // Use client phone if available, otherwise store WhatsApp as sender
   const targetPhone = phone || storeWpp;
   const waUrl = targetPhone
     ? `https://wa.me/${targetPhone}?text=${encodeURIComponent(msg)}`
     : `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(waUrl,'_blank');
-  toast(`📲 Pedido #${r.id} criado! WhatsApp aberto${phone?' para o cliente':' — copie e envie ao cliente'}.`);
+  toast(`📲 Pedido #${r.id} em aguardando pagamento. WhatsApp aberto${phone?' para o cliente':''}.`,'warn');
   cart=[]; pages.store();
 }
 
 async function confirmSale() {
-  const payment = document.getElementById('pdv-payment')?.value || 'dinheiro';
+  const payment   = document.getElementById('pdv-payment')?.value || 'dinheiro';
   const client_id = document.getElementById('pdv-client')?.value;
   const vessel_id = document.getElementById('pdv-vessel')?.value;
-  // Pagamento no balcão = já pago → entra direto em Em Preparo
   const r = await api('POST','/store/orders',{
     items: cart,
     client_id: client_id ? parseInt(client_id) : null,
     vessel_id:  vessel_id  ? parseInt(vessel_id)  : null,
-    payment_method: payment,
-    status: 'paid',
-    delivery_status: 'preparando'
+    payment_method: payment, status: 'paid', delivery_status: 'preparando'
   });
-  if (r && r.id) { toast(`Venda finalizada — Em Preparo! Total: ${fmt(r.total)}`); cart=[]; pages.store(); }
+  if (r && r.id) { toast(`✅ Venda finalizada! Total: ${fmt(r.total)}`); cart=[]; pages.store(); }
+}
+
+// ── Confirmar Pagamento PIX com Comprovante ───────────────────────────
+function openStoreConfirmPayment(orderId, paymentMethod) {
+  const isPix = paymentMethod === 'pix';
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">✅ Confirmar Pagamento — Pedido #${orderId}</div>
+    <div class="settings-info-box" style="margin-bottom:16px">
+      Registre o recebimento do pagamento${isPix?' e anexe o comprovante PIX':''}.
+    </div>
+    <div class="form-row cols2">
+      <div class="form-group">
+        <label>Forma de Pagamento</label>
+        <select id="cpy-method">
+          <option value="pix" ${isPix?'selected':''}>PIX</option>
+          <option value="dinheiro" ${!isPix&&paymentMethod==='dinheiro'?'selected':''}>Dinheiro</option>
+          <option value="cartao">Cartão</option>
+          <option value="ficha">Conta</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Data do Pagamento</label>
+        <input type="date" id="cpy-date" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Observações</label>
+      <input id="cpy-notes" placeholder="Ex: cliente pagou via PIX, comprovante em anexo...">
+    </div>
+    <div class="form-group">
+      <label>Comprovante ${isPix?'(obrigatório)':'(opcional)'}</label>
+      <input type="file" id="cpy-file" accept="image/*,.pdf"
+        style="padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:100%"
+        onchange="previewStoreComprovante()">
+      <div id="cpy-preview" style="margin-top:8px"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-success" id="cpy-btn" onclick="submitStoreConfirmPayment(${orderId},${isPix})">✅ Confirmar Pagamento</button>
+    </div>
+  </div>`);
+}
+
+function previewStoreComprovante() {
+  const file = document.getElementById('cpy-file')?.files?.[0];
+  const prev = document.getElementById('cpy-preview');
+  if (!file || !prev) return;
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = e => { prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:160px;border-radius:6px;border:1px solid var(--border)">`; };
+    reader.readAsDataURL(file);
+  } else {
+    prev.innerHTML = `<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--text2)">📄 ${file.name}</div>`;
+  }
+}
+
+async function submitStoreConfirmPayment(orderId, isPix) {
+  const method  = document.getElementById('cpy-method')?.value;
+  const date    = document.getElementById('cpy-date')?.value;
+  const notes   = document.getElementById('cpy-notes')?.value?.trim();
+  const file    = document.getElementById('cpy-file')?.files?.[0];
+  if (isPix && !file) { toast('Anexe o comprovante PIX para confirmar','error'); return; }
+  const btn = document.getElementById('cpy-btn');
+  if (btn) { btn.disabled=true; btn.textContent='⏳ Salvando...'; }
+  let comprovante_data = null, comprovante_name = null;
+  if (file) {
+    comprovante_data = await new Promise(resolve => {
+      const r = new FileReader(); r.onload = e => resolve(e.target.result); r.readAsDataURL(file);
+    });
+    comprovante_name = file.name;
+  }
+  const res = await api('PUT', `/store/orders/${orderId}/confirm-payment`, {
+    payment_method: method, pay_notes: notes, paid_date: date,
+    comprovante_data, comprovante_name
+  });
+  if (res && res.ok) {
+    toast('✅ Pagamento confirmado!');
+    closeModalForce();
+    renderOrders(window._ordersFilter);
+  } else {
+    toast('Erro ao confirmar pagamento','error');
+    if (btn) { btn.disabled=false; btn.textContent='✅ Confirmar Pagamento'; }
+  }
+}
+
+// ── Conta do Cliente ──────────────────────────────────────────────────
+async function renderClientAccounts() {
+  document.getElementById('store-content').innerHTML = '<div class="spinner"></div>';
+  const data = await api('GET','/store/client-accounts') || { accounts:[], grand_total:0 };
+  const { accounts, grand_total } = data;
+
+  const accountsHtml = accounts.length ? accounts.map(a => {
+    const ordersHtml = a.orders.map(o => {
+      const items = Array.isArray(o.items) ? o.items.map(i=>`${i.name}×${i.qty}`).join(', ') : o.items;
+      const isPix = o.payment_method === 'pix';
+      return `<tr>
+        <td style="font-size:12px">${fmtDT(o.created_at)}</td>
+        <td style="font-size:12px;max-width:200px;white-space:normal">${items}</td>
+        <td>${o.vessel_name||'—'}</td>
+        <td class="text-success font-bold">${fmt(o.total)}</td>
+        <td><span class="badge badge-gray">${o.payment_method||'—'}</span></td>
+        <td>
+          <button class="btn btn-success btn-sm" onclick="openStoreConfirmPayment(${o.id},'${o.payment_method||'dinheiro'}')">
+            ✅ Quitar
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+    return `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header" style="margin-bottom:12px">
+        <div>
+          <div class="font-bold" style="font-size:15px">${tierBadge(a.client_tier)} ${a.client_name}</div>
+          ${a.client_phone?`<div class="text-xs text-muted">${a.client_phone}</div>`:''}
+        </div>
+        <div style="text-align:right">
+          <div class="text-success font-bold" style="font-size:18px">${fmt(a.total)}</div>
+          <div class="text-xs text-muted">${a.orders.length} pedido${a.orders.length>1?'s':''} em aberto</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table style="width:100%">
+          <thead><tr><th>Data</th><th>Itens</th><th>Embarcação</th><th>Total</th><th>Pgto</th><th>Ação</th></tr></thead>
+          <tbody>${ordersHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('') : `<div class="empty-state"><div class="icon">📒</div><p>Nenhuma conta em aberto</p></div>`;
+
+  document.getElementById('store-content').innerHTML = `
+  <div class="flex justify-between mb-3" style="align-items:center">
+    <div>
+      <span style="font-size:16px;font-weight:700">📒 Contas em Aberto</span>
+      <span style="font-size:12px;color:var(--text3);margin-left:8px">(Ficha + PIX aguardando)</span>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:13px;color:var(--text3)">Total em aberto</div>
+      <div class="text-danger font-bold" style="font-size:22px">${fmt(grand_total)}</div>
+    </div>
+  </div>
+  ${accountsHtml}`;
 }
 
 const CAT_ICONS = { manutencao:'🔧', equipamento:'⚓', bebida:'🥤', alimento:'🍫', limpeza:'🧴', outros:'📦' };
@@ -2777,7 +2958,7 @@ async function renderOrders(stageFilter) {
     if (stage === 'aguardando') {
       return `<div class="delivery-flow">
         ${orderStageBadge('aguardando')}
-        <button class="btn btn-success btn-sm" onclick="orderDelivery(${o.id},{status:'paid',delivery_status:'preparando'})">✅ Confirmar Pagamento</button>
+        <button class="btn btn-success btn-sm" onclick="openStoreConfirmPayment(${o.id},'${o.payment_method||'pix'}')">✅ Confirmar Pagamento</button>
       </div>`;
     }
     if (stage === 'preparando') {
