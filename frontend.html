@@ -240,6 +240,14 @@ tr.row-link{cursor:pointer}
 tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)!important}
 .dash-spot-tile{cursor:pointer;transition:.15s}
 .dash-spot-tile:hover{background:var(--surface3)!important;border-color:var(--accent)!important}
+/* ── Table Sort ── */
+.th-sort{cursor:pointer;user-select:none;white-space:nowrap}
+.th-sort:hover{color:var(--accent)}
+.th-sort .si{font-size:10px;margin-left:3px;opacity:.3;transition:.1s;display:inline-block}
+.th-sort:hover .si{opacity:.7}
+.th-sort .si.on{opacity:1;color:var(--accent)}
+.tbl-search{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;color:var(--text);outline:none;flex:1;max-width:240px}
+.tbl-search:focus{border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -1230,12 +1238,29 @@ pages.clients = async () => {
     </div>
   </div>
   <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Cliente</th><th>Tier</th><th>Contato</th><th>Embarcações</th><th>LTV</th><th>Ações</th></tr></thead>
+    <thead><tr id="clients-thead">${_clientsTheadCells()}</tr></thead>
     <tbody id="clients-tbody">${renderClientsRows(clients||[])}</tbody>
   </table></div></div>`);
 };
 
 function renderClientsRows(clients) {
+  window._clientsRaw = clients;
+  const TK = 'clients';
+  _sortFns[TK] = () => {
+    const sorted = _applySort(window._clientsRaw||[], TK);
+    const tb = document.getElementById('clients-tbody');
+    const th = document.getElementById('clients-thead');
+    if (tb) tb.innerHTML = _renderClientsTbody(sorted);
+    if (th) th.innerHTML = _clientsTheadCells();
+  };
+  return _renderClientsTbody(_applySort(clients, TK));
+}
+function _clientsTheadCells() {
+  const TK = 'clients';
+  return _th(TK,'name','Cliente') + _th(TK,'tier','Tier') + '<th>Contato</th>' +
+    _th(TK,'vessel_count','Embarcações') + _th(TK,'ltv','LTV') + '<th>Ações</th>';
+}
+function _renderClientsTbody(clients) {
   if (!clients.length) return '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Nenhum cliente encontrado</td></tr>';
   return clients.map(c=>`<tr>
     <td><div class="font-bold">${c.name}</div><div class="text-xs text-muted">${c.cpf||'—'}</div></td>
@@ -1331,7 +1356,7 @@ pages.vessels = async () => {
     </div>
   </div>
   <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Embarcação</th><th>Tipo</th><th>Cliente</th><th>Vaga</th><th>Status</th><th>Registro</th><th>Ações</th></tr></thead>
+    <thead><tr id="vessels-thead">${_vesselsTheadCells()}</tr></thead>
     <tbody id="vessels-tbody">${renderVesselsRows(vessels||[])}</tbody>
   </table></div></div>`);
 };
@@ -1344,6 +1369,23 @@ const VESSEL_STATUS_BADGE = s => {
 };
 
 function renderVesselsRows(vessels) {
+  window._vesselsRaw = vessels;
+  const TK = 'vessels';
+  _sortFns[TK] = () => {
+    const sorted = _applySort(window._vesselsRaw||[], TK);
+    const tb = document.getElementById('vessels-tbody');
+    const th = document.getElementById('vessels-thead');
+    if (tb) tb.innerHTML = _renderVesselsTbody(sorted);
+    if (th) th.innerHTML = _vesselsTheadCells();
+  };
+  return _renderVesselsTbody(_applySort(vessels, TK));
+}
+function _vesselsTheadCells() {
+  const TK = 'vessels';
+  return _th(TK,'name','Embarcação') + _th(TK,'type','Tipo') + _th(TK,'client_name','Cliente') +
+    '<th>Vaga</th>' + _th(TK,'vessel_status','Status') + '<th>Registro</th>' + '<th>Ações</th>';
+}
+function _renderVesselsTbody(vessels) {
   if (!vessels.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
   return vessels.map(v=>`<tr class="row-link" onclick="viewVessel(${v.id})" title="Clique para ver detalhes">
     <td><div class="font-bold">${v.name}</div><div class="text-xs text-muted">${v.model||''} ${v.manufacturer||''}</div></td>
@@ -1549,24 +1591,44 @@ async function saveNewSpot() {
 pages.contracts = async () => {
   const contracts = await api('GET', '/contracts');
   setContent(`
-  <div class="flex justify-between mb-2">
+  <div class="flex justify-between mb-2" style="flex-wrap:wrap;gap:8px">
     <div class="tabs">
       <div class="tab active" onclick="filterContracts('',this)">Todos</div>
       <div class="tab" onclick="filterContracts('active',this)">Ativos</div>
       <div class="tab" onclick="filterContracts('cancelled',this)">Cancelados</div>
     </div>
-    <div class="flex gap-2">
+    <div class="flex gap-2" style="align-items:center">
+      <input class="tbl-search" id="contract-search" placeholder="🔍 Cliente, embarcação..." oninput="searchContracts()">
       <button class="btn-export" onclick="exportContratos()">📥 Excel</button>
       <button class="btn btn-primary" onclick="openContractModal()">+ Novo Contrato</button>
     </div>
   </div>
   <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Cliente</th><th>Embarcação</th><th>Tipo</th><th>Vaga</th><th>Mensal</th><th>Vigência</th><th>Status</th><th>Ações</th></tr></thead>
+    <thead><tr id="contracts-thead">${_contractsTheadCells()}</tr></thead>
     <tbody id="contracts-tbody">${renderContractRows(contracts||[])}</tbody>
   </table></div></div>`);
 };
 
 function renderContractRows(contracts) {
+  window._contractsRaw = contracts;
+  const TK = 'contracts';
+  _sortFns[TK] = () => {
+    const q = document.getElementById('contract-search')?.value||'';
+    const list = _applySort(_applySearch(window._contractsRaw||[], q, ['client_name','vessel_name','spot_number']), TK);
+    const tb = document.getElementById('contracts-tbody');
+    const th = document.getElementById('contracts-thead');
+    if (tb) tb.innerHTML = _renderContractsTbody(list);
+    if (th) th.innerHTML = _contractsTheadCells();
+  };
+  return _renderContractsTbody(_applySort(contracts, TK));
+}
+function _contractsTheadCells() {
+  const TK = 'contracts';
+  return _th(TK,'client_name','Cliente') + '<th>Embarcação</th>' + _th(TK,'type','Tipo') +
+    '<th>Vaga</th>' + _th(TK,'monthly_value','Mensal') + _th(TK,'start_date','Vigência') +
+    _th(TK,'status','Status') + '<th>Ações</th>';
+}
+function _renderContractsTbody(contracts) {
   if (!contracts.length) return '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum contrato</td></tr>';
   return contracts.map(c=>`<tr class="row-link" onclick="viewContract(${c.id})" title="Clique para ver detalhes">
     <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
@@ -1581,6 +1643,15 @@ function renderContractRows(contracts) {
       ${c.status==='active'?`<button class="btn btn-danger btn-sm" onclick="cancelContract(${c.id})">Cancelar</button>`:''}
     </div></td>
   </tr>`).join('');
+}
+async function searchContracts() {
+  const q = document.getElementById('contract-search')?.value||'';
+  const filtered = _applySearch(window._contractsRaw||[], q, ['client_name','vessel_name','spot_number']);
+  const sorted = _applySort(filtered, 'contracts');
+  const tb = document.getElementById('contracts-tbody');
+  const th = document.getElementById('contracts-thead');
+  if (tb) tb.innerHTML = _renderContractsTbody(sorted);
+  if (th) th.innerHTML = _contractsTheadCells();
 }
 
 async function viewContract(id) {
@@ -1677,7 +1748,10 @@ async function filterContracts(status, el) {
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   const data = await api('GET',`/contracts${status?'?status='+status:''}`);
-  document.getElementById('contracts-tbody').innerHTML = renderContractRows(data||[]);
+  const tb = document.getElementById('contracts-tbody');
+  const th = document.getElementById('contracts-thead');
+  if (tb) tb.innerHTML = renderContractRows(data||[]);
+  if (th) th.innerHTML = _contractsTheadCells();
 }
 
 async function cancelContract(id) {
@@ -1892,10 +1966,7 @@ function renderFinMonths(monthsObj, year) {
       </div>
       <div id="fin-m-${key}" style="display:${exp?'block':'none'}">
         <div class="card" style="margin-top:6px;padding:0;overflow:hidden">
-          <div class="table-wrap"><table>
-            <thead><tr><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead>
-            <tbody>${renderChargeRows(arr)}</tbody>
-          </table></div>
+          <div class="table-wrap"><table>${renderChargeRows(arr, year+'_'+month)}</table></div>
         </div>
       </div>
     </div>`;
@@ -1904,8 +1975,28 @@ function renderFinMonths(monthsObj, year) {
   return html;
 }
 
-function renderChargeRows(charges) {
-  if (!charges||!charges.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sem cobranças</td></tr>';
+function renderChargeRows(charges, monthKey) {
+  if (!charges||!charges.length) return '<thead><tr><th colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sem cobranças</th></tr></thead><tbody></tbody>';
+  const TK = 'charges_'+(monthKey||'all');
+  if (!window._chargesCache) window._chargesCache = {};
+  window._chargesCache[TK] = charges;
+  _sortFns[TK] = () => {
+    const sorted = _applySort(window._chargesCache[TK]||[], TK);
+    const tb = document.getElementById('charges-tbody-'+TK);
+    const th = document.getElementById('charges-thead-'+TK);
+    if (tb) tb.innerHTML = _renderChargesTbody(sorted);
+    if (th) th.innerHTML = _chargesTheadCells(TK);
+  };
+  const sorted = _applySort(charges, TK);
+  return `<thead><tr id="charges-thead-${TK}">${_chargesTheadCells(TK)}</tr></thead>
+    <tbody id="charges-tbody-${TK}">${_renderChargesTbody(sorted)}</tbody>`;
+}
+function _chargesTheadCells(TK) {
+  return _th(TK,'client_name','Cliente') + '<th>Descrição</th>' +
+    _th(TK,'amount','Valor') + _th(TK,'due_date','Vencimento') +
+    _th(TK,'paid_date','Pagamento') + _th(TK,'status','Status') + '<th>Ações</th>';
+}
+function _renderChargesTbody(charges) {
   return charges.map(c=>`<tr class="row-link" onclick="viewChargeDetail(${c.id})" title="Clique para ver detalhes">
     <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
     <td>${c.description}</td>
@@ -2155,6 +2246,39 @@ async function saveCharge() {
 // ── PAGE: STORE ───────────────────────────────────────
 let cart = [];
 let _storeTab = 'dashboard';
+
+// ── Table sort/filter utilities ─────────────────────────────────────
+const _sorts = {}, _sortFns = {};
+function _applySort(arr, key) {
+  const s = _sorts[key];
+  if (!s || !s.col) return arr;
+  return [...arr].sort((a,b) => {
+    let va = a[s.col] ?? '', vb = b[s.col] ?? '';
+    const na = Number(va), nb = Number(vb);
+    if (String(va)!=='' && String(vb)!=='' && !isNaN(na) && !isNaN(nb)) { va=na; vb=nb; }
+    else { va=String(va).toLowerCase(); vb=String(vb).toLowerCase(); }
+    const r = va<vb?-1:va>vb?1:0;
+    return s.dir==='asc'?r:-r;
+  });
+}
+function _applySearch(arr, q, fields) {
+  if (!q) return arr;
+  const lq = q.toLowerCase();
+  return arr.filter(row => fields.some(f => String(row[f]??'').toLowerCase().includes(lq)));
+}
+function _si(key, col) {
+  const s = _sorts[key];
+  if (!s || s.col!==col) return '<span class="si">⇅</span>';
+  return s.dir==='asc'?'<span class="si on">↑</span>':'<span class="si on">↓</span>';
+}
+function _th(key, col, label) {
+  return `<th class="th-sort" onclick="_onSort('${key}','${col}')">${label}${_si(key,col)}</th>`;
+}
+function _onSort(key, col) {
+  const s = _sorts[key]||{};
+  _sorts[key] = {col, dir: s.col===col && s.dir==='asc'?'desc':'asc'};
+  _sortFns[key]?.();
+}
 pages.store = async () => {
   cart = [];
   setContent(`
@@ -2215,14 +2339,15 @@ async function renderStoreDashboard() {
   const recentRows = (s.recent||[]).map(o=>{
     const items = Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):String(o.items||'');
     return `<tr class="row-link" onclick="goToOrders('todos')" title="Ver todos os pedidos">
+      <td class="font-bold text-xs" style="color:var(--text3)">#${o.id}</td>
       <td>${fmtDT(o.created_at)}</td>
       <td>${o.client_name||'Balcão'}</td>
-      <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${items}</td>
+      <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${items}</td>
       <td class="text-success font-bold">${fmt(o.total)}</td>
       <td>${o.payment_method?`<span class="badge badge-gray">${o.payment_method}</span>`:'—'}</td>
       <td>${o.delivery_status?`<span class="badge badge-info">${o.delivery_status}</span>`:statusBadge(o.status)}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Sem vendas ainda</td></tr>';
+  }).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Sem vendas ainda</td></tr>';
 
   const semana = s.vendas_semana||[];
   const chartLabels = semana.map(d=>d.day.slice(5));
@@ -2262,7 +2387,7 @@ async function renderStoreDashboard() {
     <div class="card" style="padding:0;overflow:hidden">
       <div style="padding:16px 20px 12px;font-size:14px;font-weight:600">🕐 Últimas Vendas</div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Data</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pgto</th><th>Status</th></tr></thead>
+        <thead><tr><th>#</th><th>Data</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pgto</th><th>Status</th></tr></thead>
         <tbody>${recentRows}</tbody>
       </table></div>
     </div>
@@ -2639,8 +2764,8 @@ async function renderClientAccounts() {
   const accountsHtml = accounts.length ? accounts.map(a => {
     const ordersHtml = a.orders.map(o => {
       const items = Array.isArray(o.items) ? o.items.map(i=>`${i.name}×${i.qty}`).join(', ') : o.items;
-      const isPix = o.payment_method === 'pix';
       return `<tr>
+        <td class="font-bold text-xs" style="color:var(--text3)">#${o.id}</td>
         <td style="font-size:12px">${fmtDT(o.created_at)}</td>
         <td style="font-size:12px;max-width:200px;white-space:normal">${items}</td>
         <td>${o.vessel_name||'—'}</td>
@@ -2667,7 +2792,7 @@ async function renderClientAccounts() {
       </div>
       <div class="table-wrap">
         <table style="width:100%">
-          <thead><tr><th>Data</th><th>Itens</th><th>Embarcação</th><th>Total</th><th>Pgto</th><th>Ação</th></tr></thead>
+          <thead><tr><th>#</th><th>Data</th><th>Itens</th><th>Embarcação</th><th>Total</th><th>Pgto</th><th>Ação</th></tr></thead>
           <tbody>${ordersHtml}</tbody>
         </table>
       </div>
@@ -2941,12 +3066,23 @@ async function renderOrders(stageFilter) {
   stageFilter = stageFilter || window._ordersFilter || 'todos';
   window._ordersFilter = stageFilter;
 
-  // Busca todos os pedidos (filtramos client-side pelo estágio unificado)
-  const allOrders = await api('GET', '/store/orders') || [];
+  // Fetch data; use cache when only re-sorting/filtering client-side
+  if (!window._ordersRaw || stageFilter !== window._ordersFilterLast) {
+    window._ordersRaw = await api('GET', '/store/orders') || [];
+    window._ordersFilterLast = stageFilter;
+  }
+  const allOrders = window._ordersRaw;
+  const q = (document.getElementById('orders-search')?.value || '').toLowerCase().trim();
+  const stageFiltered = stageFilter === 'todos' ? allOrders : allOrders.filter(o => orderStage(o) === stageFilter);
+  const searched = q ? stageFiltered.filter(o =>
+    String(o.id).includes(q) ||
+    (o.client_name||'balcão').toLowerCase().includes(q) ||
+    (o.vessel_name||'').toLowerCase().includes(q) ||
+    (Array.isArray(o.items)?o.items.map(i=>i.name).join(' '):String(o.items||'')).toLowerCase().includes(q) ||
+    (o.payment_method||'').toLowerCase().includes(q)
+  ) : stageFiltered;
+  const filtered = _applySort(searched, 'orders');
 
-  const filtered = stageFilter === 'todos' ? allOrders : allOrders.filter(o => orderStage(o) === stageFilter);
-
-  // Contagens por estágio
   const cnt = {
     todos:      allOrders.length,
     aguardando: allOrders.filter(o=>orderStage(o)==='aguardando').length,
@@ -2963,7 +3099,7 @@ async function renderOrders(stageFilter) {
     ['entregue',   '✅ Entregue',       'tab-count-paid'],
   ];
   const filterTabs = tabDef.map(([v,l,cc])=>`
-    <button class="fin-status-tab${stageFilter===v?' active':''}" onclick="renderOrders('${v}')">
+    <button class="fin-status-tab${stageFilter===v?' active':''}" onclick="window._ordersFilterLast=null;renderOrders('${v}')">
       ${l} <span class="tab-count ${cc}">${cnt[v]}</span>
     </button>`).join('');
 
@@ -2987,32 +3123,50 @@ async function renderOrders(stageFilter) {
         <button class="btn btn-success btn-sm" onclick="orderDelivery(${o.id},{delivery_status:'entregue'})">✅ Confirmar Entrega</button>
       </div>`;
     }
-    if (stage === 'entregue') {
-      return orderStageBadge('entregue');
-    }
+    if (stage === 'entregue') return orderStageBadge('entregue');
     return orderStageBadge(stage);
   }
+  window._ordersDeliveryCell = deliveryCell;
 
-  document.getElementById('store-content').innerHTML = `
-  <div class="flex justify-between mb-2" style="align-items:center;flex-wrap:wrap;gap:8px">
-    <div class="fin-status-tabs">${filterTabs}</div>
-    <button class="btn btn-ghost btn-sm" onclick="renderOrders(window._ordersFilter)">↻ Atualizar</button>
-  </div>
-  <div class="card"><div class="table-wrap"><table>
-    <thead><tr>
-      <th>Data</th><th>Cliente</th><th>Embarcação</th><th>Itens</th>
-      <th>Total</th><th>Pgto</th><th>Etapa / Ação</th>
-    </tr></thead>
-    <tbody>${filtered.map(o=>`<tr>
+  const TK = 'orders';
+  _sortFns[TK] = () => {
+    const rows = _applySort(searched, TK);
+    const tbody = document.getElementById('orders-tbody');
+    const thead = document.getElementById('orders-thead');
+    if (tbody) tbody.innerHTML = _renderOrdersTbody(rows);
+    if (thead) thead.innerHTML = _ordersTheadCells(TK);
+  };
+
+  function _ordersTheadCells(k) {
+    return _th(k,'id','#') + _th(k,'created_at','Data') + _th(k,'client_name','Cliente') +
+      '<th>Embarcação</th><th>Itens</th>' + _th(k,'total','Total') + _th(k,'payment_method','Pgto') + '<th>Etapa / Ação</th>';
+  }
+  function _renderOrdersTbody(rows) {
+    const dc = window._ordersDeliveryCell || deliveryCell;
+    return rows.map(o=>`<tr>
+      <td class="font-bold text-xs" style="color:var(--text3)">#${o.id}</td>
       <td>${fmtDT(o.created_at)}</td>
       <td>${o.client_name||'<span class="text-muted">Balcão</span>'}</td>
       <td>${o.vessel_name||'—'}</td>
-      <td style="max-width:220px;white-space:normal;font-size:12px">${Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):o.items}</td>
+      <td style="max-width:200px;white-space:normal;font-size:12px">${Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):o.items}</td>
       <td class="text-success font-bold">${fmt(o.total)}</td>
       <td>${o.payment_method?`<span class="badge badge-gray">${o.payment_method}</span>`:'—'}</td>
-      <td>${deliveryCell(o)}</td>
-    </tr>`).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhum pedido nesta etapa</td></tr>`}
-    </tbody>
+      <td>${dc(o)}</td>
+    </tr>`).join('')||`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum pedido nesta etapa</td></tr>`;
+  }
+
+  const savedQ = q;
+  document.getElementById('store-content').innerHTML = `
+  <div class="flex justify-between mb-2" style="align-items:center;flex-wrap:wrap;gap:8px">
+    <div class="fin-status-tabs">${filterTabs}</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input class="tbl-search" id="orders-search" placeholder="🔍 #pedido, cliente, item..." value="${savedQ.replace(/"/g,'&quot;')}" oninput="window._ordersFilterLast=null;renderOrders(window._ordersFilter)">
+      <button class="btn btn-ghost btn-sm" onclick="window._ordersRaw=null;window._ordersFilterLast=null;renderOrders(window._ordersFilter)">↻</button>
+    </div>
+  </div>
+  <div class="card"><div class="table-wrap"><table>
+    <thead><tr id="orders-thead">${_ordersTheadCells(TK)}</tr></thead>
+    <tbody id="orders-tbody">${_renderOrdersTbody(filtered)}</tbody>
   </table></div></div>`;
 }
 
@@ -3168,18 +3322,42 @@ pages.maintenance = async () => {
     <div class="kpi red clickable ${_maintFilter==='urgent'?'kpi-active':''}" onclick="filterMaintenanceKpi('urgent')">
       <div class="kpi-label">Urgentes</div><div class="kpi-value">${counts.urgent}</div><div class="kpi-sub">alta prioridade</div><span class="kpi-icon">🚨</span></div>
   </div>
-  <div class="flex justify-between items-center mb-2">
-    <div style="font-size:12px;color:var(--text3)">${displayItems.length} OS${_maintFilter?' · filtro ativo':''}
-      ${_maintFilter?`<button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="filterMaintenanceKpi('')">✕ Limpar filtro</button>`:''}</div>
-    <button class="btn btn-primary" onclick="openMaintenanceModal(null,${JSON.stringify(vessels||[]).replace(/"/g,'&quot;')})">+ Nova OS</button>
+  <div class="flex justify-between items-center mb-2" style="flex-wrap:wrap;gap:8px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:12px;color:var(--text3)">${displayItems.length} OS${_maintFilter?' · filtro ativo':''}</span>
+      ${_maintFilter?`<button class="btn btn-ghost btn-sm" onclick="filterMaintenanceKpi('')">✕ Limpar filtro</button>`:''}
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input class="tbl-search" id="maint-search" placeholder="🔍 OS, embarcação, descrição..." oninput="searchMaintenance()">
+      <button class="btn btn-primary" onclick="openMaintenanceModal(null,${JSON.stringify(vessels||[]).replace(/"/g,'&quot;')})">+ Nova OS</button>
+    </div>
   </div>
   <div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>OS</th><th>Embarcação</th><th>Tipo</th><th>Descrição</th><th>Prioridade</th><th>Agendado</th><th>Custo</th><th>Status</th><th>Ações</th></tr></thead>
+    <thead><tr id="maint-thead">${_maintTheadCells()}</tr></thead>
     <tbody id="maint-tbody">${renderMaintenanceRows(displayItems)}</tbody>
   </table></div></div>`);
 };
 
 function renderMaintenanceRows(items) {
+  window._maintRaw = items;
+  const TK = 'maint';
+  _sortFns[TK] = () => {
+    const q = document.getElementById('maint-search')?.value||'';
+    const list = _applySort(_applySearch(window._maintRaw||[], q, ['os_number','vessel_name','description']), TK);
+    const tb = document.getElementById('maint-tbody');
+    const th = document.getElementById('maint-thead');
+    if (tb) tb.innerHTML = _renderMaintTbody(list);
+    if (th) th.innerHTML = _maintTheadCells();
+  };
+  return _renderMaintTbody(_applySort(items, TK));
+}
+function _maintTheadCells() {
+  const TK = 'maint';
+  return _th(TK,'os_number','OS') + _th(TK,'vessel_name','Embarcação') + _th(TK,'type','Tipo') +
+    '<th>Descrição</th>' + _th(TK,'priority','Prioridade') + _th(TK,'scheduled_date','Agendado') +
+    _th(TK,'cost','Custo') + _th(TK,'status','Status') + '<th>Ações</th>';
+}
+function _renderMaintTbody(items) {
   if (!items.length) return '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhuma OS encontrada</td></tr>';
   return items.map(m=>`<tr>
     <td class="font-bold text-xs">${m.os_number}</td>
@@ -3195,6 +3373,15 @@ function renderMaintenanceRows(items) {
       ${m.status!=='completed'?`<button class="btn btn-success btn-sm" onclick="completeMaintenance(${m.id})">✓</button>`:''}
     </div></td>
   </tr>`).join('');
+}
+function searchMaintenance() {
+  const q = document.getElementById('maint-search')?.value||'';
+  const filtered = _applySearch(window._maintRaw||[], q, ['os_number','vessel_name','description']);
+  const sorted = _applySort(filtered, 'maint');
+  const tb = document.getElementById('maint-tbody');
+  const th = document.getElementById('maint-thead');
+  if (tb) tb.innerHTML = _renderMaintTbody(sorted);
+  if (th) th.innerHTML = _maintTheadCells();
 }
 
 async function filterMaintenance(status, el) {
