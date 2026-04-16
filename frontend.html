@@ -641,6 +641,10 @@ async function switchQueueTab(tab, el) {
   else if (tab === 'history') await renderQueueHistory();
   else await pages.queue();
 }
+let _qhExpandYears  = {};
+let _qhExpandMonths = {};
+let _qhExpandDays   = {};
+
 async function renderQueueHistory() {
   setContent(`
   <div class="flex justify-between mb-2">
@@ -653,7 +657,164 @@ async function renderQueueHistory() {
   </div>
   <div id="queue-list"><div class="empty-state"><div class="icon">⏳</div><p>Carregando...</p></div></div>`);
   const data = await api('GET','/queue/history');
-  document.getElementById('queue-list').innerHTML = renderQueue(data||[]);
+  document.getElementById('queue-list').innerHTML = renderQueueHistoryTree(data||[]);
+}
+
+function renderQueueHistoryTree(ops) {
+  if (!ops.length) return '<div class="empty-state"><div class="icon">📋</div><p>Sem histórico de operações</p></div>';
+
+  // Group by year → month → day
+  const byYear = {};
+  ops.forEach(op => {
+    const d = new Date(op.completed_at || op.requested_at);
+    const year  = d.getFullYear().toString();
+    const month = String(d.getMonth()+1).padStart(2,'0');
+    const day   = String(d.getDate()).padStart(2,'0');
+    if (!byYear[year]) byYear[year] = {};
+    if (!byYear[year][month]) byYear[year][month] = {};
+    if (!byYear[year][month][day]) byYear[year][month][day] = [];
+    byYear[year][month][day].push(op);
+  });
+
+  const curYear  = new Date().getFullYear().toString();
+  const curMonth = String(new Date().getMonth()+1).padStart(2,'0');
+  const curDay   = String(new Date().getDate()).padStart(2,'0');
+
+  const opTypeLabel = { descida:'⬇ Descida', subida:'⬆ Subida', atracacao:'⚓ Atracação' };
+
+  let html = '';
+  Object.keys(byYear).sort((a,b)=>b-a).forEach(year => {
+    const isCurYear = year === curYear;
+    if (_qhExpandYears[year] === undefined) _qhExpandYears[year] = isCurYear;
+    const exp = _qhExpandYears[year];
+
+    const allOpsYear = Object.values(byYear[year]).flatMap(m => Object.values(m).flat());
+    const total = allOpsYear.length;
+    const completed = allOpsYear.filter(o=>o.status==='completed').length;
+    const cancelled = allOpsYear.filter(o=>o.status==='cancelled').length;
+
+    let monthsHtml = '';
+    Object.keys(byYear[year]).sort((a,b)=>b-a).forEach(month => {
+      const mKey = `${year}-${month}`;
+      const isCurMonth = isCurYear && month === curMonth;
+      if (_qhExpandMonths[mKey] === undefined) _qhExpandMonths[mKey] = isCurMonth;
+      const mExp = _qhExpandMonths[mKey];
+
+      const allOpsMonth = Object.values(byYear[year][month]).flat();
+      const mTotal = allOpsMonth.length;
+      const mCompleted = allOpsMonth.filter(o=>o.status==='completed').length;
+      const mCancelled = allOpsMonth.filter(o=>o.status==='cancelled').length;
+
+      let daysHtml = '';
+      Object.keys(byYear[year][month]).sort((a,b)=>b-a).forEach(day => {
+        const dKey = `${year}-${month}-${day}`;
+        const isCurDay = isCurMonth && day === curDay;
+        if (_qhExpandDays[dKey] === undefined) _qhExpandDays[dKey] = isCurDay;
+        const dExp = _qhExpandDays[dKey];
+
+        const dayOps = byYear[year][month][day];
+        const dCompleted = dayOps.filter(o=>o.status==='completed').length;
+        const dCancelled = dayOps.filter(o=>o.status==='cancelled').length;
+
+        const dayCards = dayOps.map(op => {
+          const borderColor = op.status==='completed' ? 'var(--success)' : op.status==='cancelled' ? 'var(--danger)' : 'var(--border)';
+          const statusColor = op.status==='completed' ? 'var(--success)' : op.status==='cancelled' ? 'var(--danger)' : 'var(--text3)';
+          return `
+          <div class="queue-card" style="border-left:3px solid ${borderColor};margin-bottom:6px">
+            <div style="flex:1;min-width:0">
+              <div class="flex items-center gap-2 mb-1" style="flex-wrap:wrap">
+                <span class="font-bold">${op.vessel_name||'—'}</span>
+                ${tierBadge(op.client_tier)}
+                ${VESSEL_SIZE_LABEL[op.vessel_size]?`<span style="font-size:11px;color:var(--text3)">${VESSEL_SIZE_LABEL[op.vessel_size]}</span>`:''}
+                ${opBadge(op.operation_type)}
+                <span style="font-size:11px;color:var(--text3)">${opTypeLabel[op.operation_type]||''}</span>
+                ${statusBadge(op.status)}
+              </div>
+              <div class="text-xs text-muted">
+                ${op.client_name||''} · Solicitado: ${fmtDT(op.requested_at)}
+                ${op.started_at   ? ' · Iniciado: '+fmtDT(op.started_at)   : ''}
+                ${op.completed_at ? ' · Concluído: '+fmtDT(op.completed_at) : ''}
+                ${op.operator     ? ' · Op: '+op.operator : ''}
+                ${op.notes        ? ' · '+op.notes : ''}
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+
+        daysHtml += `
+        <div style="margin-bottom:6px">
+          <div onclick="toggleQhDay('${dKey}')" style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--surface3);border-radius:8px;cursor:pointer;user-select:none;transition:.15s">
+            <span class="fin-expand" id="qh-arrow-d-${dKey}">${dExp?'▼':'▶'}</span>
+            <span style="font-size:13px;font-weight:600;color:var(--text);flex:1">📆 Dia ${day}/${month}/${year}</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              ${dCompleted?`<span class="fin-stat green">${dCompleted} concluída${dCompleted>1?'s':''}</span>`:''}
+              ${dCancelled?`<span class="fin-stat red">${dCancelled} cancelada${dCancelled>1?'s':''}</span>`:''}
+              <span class="fin-stat total">${dayOps.length} op${dayOps.length>1?'s':''}</span>
+            </div>
+          </div>
+          <div id="qh-d-${dKey}" style="display:${dExp?'block':'none'};padding:6px 0 2px 16px;border-left:2px solid var(--border);margin-left:12px;margin-top:4px">
+            ${dayCards}
+          </div>
+        </div>`;
+      });
+
+      monthsHtml += `
+      <div class="fin-month">
+        <div class="fin-month-header" onclick="toggleQhMonth('${mKey}')">
+          <span class="fin-expand">${mExp?'▼':'▶'}</span>
+          <span class="fin-month-title">📅 ${MONTH_PT[parseInt(month)]||month} ${year}</span>
+          <div class="fin-month-stats">
+            ${mCompleted?`<span class="fin-stat green">${mCompleted} concluída${mCompleted>1?'s':''}</span>`:''}
+            ${mCancelled?`<span class="fin-stat red">${mCancelled} cancelada${mCancelled>1?'s':''}</span>`:''}
+            <span class="fin-stat total">${mTotal} op${mTotal>1?'s':''}</span>
+          </div>
+        </div>
+        <div id="qh-m-${mKey}" style="display:${mExp?'block':'none'};padding:6px 0 4px 20px;border-left:2px solid var(--border);margin-left:16px;margin-top:4px">
+          ${daysHtml}
+        </div>
+      </div>`;
+    });
+
+    html += `
+    <div class="fin-year">
+      <div class="fin-year-header" onclick="toggleQhYear('${year}')">
+        <span class="fin-expand">${exp?'▼':'▶'}</span>
+        <span class="fin-year-title">${year}${isCurYear?' <span class="badge badge-info" style="font-size:10px;margin-left:6px">Ano Atual</span>':''}</span>
+        <div class="fin-year-stats">
+          ${completed?`<span class="fin-stat green">${completed} concluída${completed>1?'s':''}</span>`:''}
+          ${cancelled?`<span class="fin-stat red">${cancelled} cancelada${cancelled>1?'s':''}</span>`:''}
+          <span class="fin-stat total">${total} op${total>1?'s':''}</span>
+        </div>
+      </div>
+      <div id="qh-y-${year}" class="fin-year-body" style="display:${exp?'block':'none'}">
+        ${monthsHtml}
+      </div>
+    </div>`;
+  });
+
+  return html;
+}
+
+function toggleQhYear(year) {
+  _qhExpandYears[year] = !_qhExpandYears[year];
+  const body = document.getElementById(`qh-y-${year}`);
+  const hdr  = body?.previousElementSibling;
+  if (body) body.style.display = _qhExpandYears[year] ? 'block' : 'none';
+  if (hdr)  hdr.querySelector('.fin-expand').textContent = _qhExpandYears[year] ? '▼' : '▶';
+}
+function toggleQhMonth(key) {
+  _qhExpandMonths[key] = !_qhExpandMonths[key];
+  const body = document.getElementById(`qh-m-${key}`);
+  const hdr  = body?.previousElementSibling;
+  if (body) body.style.display = _qhExpandMonths[key] ? 'block' : 'none';
+  if (hdr)  hdr.querySelector('.fin-expand').textContent = _qhExpandMonths[key] ? '▼' : '▶';
+}
+function toggleQhDay(key) {
+  _qhExpandDays[key] = !_qhExpandDays[key];
+  const body = document.getElementById(`qh-d-${key}`);
+  const arrow = document.getElementById(`qh-arrow-d-${key}`);
+  if (body)  body.style.display  = _qhExpandDays[key] ? 'block' : 'none';
+  if (arrow) arrow.textContent   = _qhExpandDays[key] ? '▼' : '▶';
 }
 
 const VESSEL_SIZE_LABEL = { pequena:'🚤 Pequena', media:'🛥️ Média', grande:'🛳️ Grande' };
@@ -982,8 +1143,12 @@ async function submitQueue() {
   if (!operation_type) { toast('Selecione o tipo de operação', 'error'); return; }
   if (!vessel_id)      { toast('Selecione a embarcação', 'error'); return; }
   const r = await api('POST','/queue',{vessel_id:parseInt(vessel_id),operation_type,notes});
-  if (r && r.id) { toast('Operação adicionada à fila'); closeModalForce(); pages.queue(); }
-  else if (r && r.error) toast(r.error, 'error');
+  if (r && r.id) {
+    closeModalForce();
+    pages.queue();
+    if (r.warning) toast(r.warning, 'warn');
+    else toast('Operação adicionada à fila');
+  } else if (r && r.error) toast(r.error, 'error');
 }
 
 // ── PAGE: CLIENTS ─────────────────────────────────────
@@ -3357,7 +3522,7 @@ async function renderSettings(tab) {
         </td>`).join('')}
       </tr>`).join('');
     const allKeys = ops.flatMap(op => sizes.map(sz => `avg_time_${op}_${sz}`));
-    allKeys.push('maneuver_time_min');
+    allKeys.push('maneuver_time_min', 'ops_start_time', 'ops_end_time');
     content = `
     <div class="settings-card">
       <div class="settings-card-title">⏱ Tempos Médios de Operação</div>
@@ -3380,7 +3545,25 @@ async function renderSettings(tab) {
           <label>Tempo de manobra (minutos)</label>
           <input type="number" id="s-maneuver_time_min" value="${s.maneuver_time_min||10}" min="0" max="120" style="max-width:100px">
         </div>
-        <div style="font-size:12px;color:var(--text3);padding-top:20px">Este tempo é somado automaticamente entre operações consecutivas no cálculo dos horários previstos e no calendário.</div>
+        <div style="font-size:12px;color:var(--text3);padding-top:20px">Somado automaticamente entre operações consecutivas no cálculo de horários previstos e no calendário.</div>
+      </div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-title">🕐 Horário de Funcionamento das Operações</div>
+      <div class="settings-info-box">
+        Define o período em que a marina aceita operações de descida e subida.<br>
+        • <strong>Antes do início:</strong> a operação é aceita mas agendada para o horário de início, com aviso ao usuário.<br>
+        • <strong>Após o término:</strong> o sistema impede o cadastro se a previsão de conclusão ultrapassar este horário.
+      </div>
+      <div class="form-row cols2" style="max-width:400px">
+        <div class="form-group">
+          <label>🌅 Início das Operações</label>
+          <input type="time" id="s-ops_start_time" value="${s.ops_start_time||'07:00'}">
+        </div>
+        <div class="form-group">
+          <label>🌙 Término das Operações</label>
+          <input type="time" id="s-ops_end_time" value="${s.ops_end_time||'18:00'}">
+        </div>
       </div>
       <div class="form-actions" style="border-top:none;padding-top:0;margin-top:16px">
         <button class="btn btn-primary" onclick="saveSettings(${JSON.stringify(allKeys)})">💾 Salvar Configurações de Tempo</button>

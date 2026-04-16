@@ -435,14 +435,54 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
   // Block duplicate active ops for same vessel
   const activeOp = dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [ctx.body.vessel_id]);
   if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui uma operação ativa na fila (cancele-a primeiro).' }, 400);
+
+  // ── Operation hours validation ─────────────────────────────────────
+  const cfg = {};
+  dbAll(`SELECT key,value FROM settings WHERE key IN ('ops_start_time','ops_end_time','maneuver_time_min')`)
+    .forEach(r => { cfg[r.key] = r.value; });
+  const opsStart   = cfg.ops_start_time   || '07:00';
+  const opsEnd     = cfg.ops_end_time     || '18:00';
+  const maneuverMin = parseInt(cfg.maneuver_time_min) || 0;
+  const [sh, sm] = opsStart.split(':').map(Number);
+  const [eh, em] = opsEnd.split(':').map(Number);
+  const now = new Date();
+  const todayOpsStart = new Date(now); todayOpsStart.setHours(sh, sm, 0, 0);
+  const todayOpsEnd   = new Date(now); todayOpsEnd.setHours(eh, em, 0, 0);
+  // Calculate estimated start for the new op (end of last queued op + maneuver)
+  const queuedActive = dbAll(`SELECT q.*, v.size as vessel_size FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id WHERE q.status NOT IN ('completed','cancelled') ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
+  let cursor = now < todayOpsStart ? new Date(todayOpsStart) : new Date(now);
+  for (const op of queuedActive) {
+    const dur = getAvgDuration(op.vessel_size, op.operation_type);
+    if (op.status === 'in_progress' && op.started_at) {
+      const opEnd = new Date(op.started_at);
+      opEnd.setMinutes(opEnd.getMinutes() + dur);
+      if (opEnd > cursor) cursor = new Date(opEnd);
+    } else if (op.status === 'waiting') {
+      cursor.setMinutes(cursor.getMinutes() + dur);
+    }
+    cursor.setMinutes(cursor.getMinutes() + maneuverMin);
+  }
+  const newDur = getAvgDuration(vessel.size, opType);
+  const estimatedEnd = new Date(cursor); estimatedEnd.setMinutes(estimatedEnd.getMinutes() + newDur);
+  // Block if estimated end exceeds ops_end_time
+  if (estimatedEnd > todayOpsEnd) {
+    const fmt2 = d => d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    return sendJson(res, { error: `Operação não pode ser incluída: previsão de término às ${fmt2(estimatedEnd)}, após o horário de encerramento das operações (${opsEnd}). Durção estimada: ${newDur} min. Tente agendar para o próximo dia útil.` }, 400);
+  }
+  // Warn if requested before ops start time
+  let warning = null;
+  if (now < todayOpsStart) {
+    warning = `Solicitação recebida antes do horário de início das operações (${opsStart}). A operação foi agendada para iniciar a partir das ${opsStart}.`;
+  }
+  // ──────────────────────────────────────────────────────────────────
+
   const client   = dbGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
   const priority = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
-  // Assign queue_order = max existing waiting order + 1
   const maxOrder = dbGet(`SELECT MAX(queue_order) as mo FROM queue_operations WHERE status='waiting'`);
   const queueOrder = (maxOrder?.mo || 0) + 1;
   const r = dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes,queue_order) VALUES(?,?,?,'waiting',?,?,?)`,
                   [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null, queueOrder]);
-  sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
+  sendJson(res, { id: Number(r.lastInsertRowid), warning }, 201);
 });
 addRoute('PUT', '/api/queue/:id/reorder', async (req, res, ctx) => {
   const { direction, justification } = ctx.body || {};
@@ -1198,6 +1238,8 @@ function migrateDb() {
     ['avg_time_subida_pequena','20'],['avg_time_subida_media','35'],['avg_time_subida_grande','60'],
     ['avg_time_atracacao_pequena','15'],['avg_time_atracacao_media','25'],['avg_time_atracacao_grande','40'],
     ['maneuver_time_min','10'],
+    ['ops_start_time','07:00'],
+    ['ops_end_time','18:00'],
   ];
   for (const [k,v] of defSettings) {
     try { dbRun(`INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)`,[k,v]); } catch(e) {}
