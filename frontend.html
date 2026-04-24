@@ -162,9 +162,17 @@ textarea{resize:vertical;min-height:72px}
 .store-item-cat{font-size:10px;color:var(--text3);margin-bottom:8px}
 .store-item-price{font-size:15px;font-weight:700;color:var(--success)}
 .store-item-stock{font-size:11px;color:var(--text3)}
-/* RESPONSIVE */
+/* RESPONSIVE — sidebar toggle */
+/* Desktop: sidebar collapses to 0 when .sidebar-collapsed is on #app */
+@media(min-width:769px){
+  #app.sidebar-collapsed #sidebar{width:0;border:none;overflow:hidden;padding:0}
+}
+/* Mobile: sidebar hidden off-screen by default; .sidebar-open slides it in */
 @media(max-width:768px){
-  #sidebar{position:fixed;z-index:100;left:-240px}.sidebar-open #sidebar{left:0}
+  #sidebar{position:fixed;z-index:100;left:-240px;height:100%}
+  .sidebar-open #sidebar{left:0}
+  /* overlay behind sidebar on mobile */
+  .sidebar-open::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
   .g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}
   .pdv-grid{grid-template-columns:1fr}
 }
@@ -300,7 +308,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
   <div id="main">
     <div id="topbar">
       <div class="flex items-center gap-2">
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('app').classList.toggle('sidebar-open')">☰</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()" title="Menu">☰</button>
         <span class="topbar-title" id="page-title">Dashboard</span>
       </div>
       <div class="topbar-right">
@@ -392,6 +400,27 @@ async function refreshBadges() {
 
 // ── NAV ──────────────────────────────────────────────
 const pageTitles = {dashboard:'Dashboard',queue:'Fila de Operações',clients:'Clientes',vessels:'Embarcações',spots:'Vagas',contracts:'Contratos',financial:'Financeiro',store:'Loja / PDV',maintenance:'Manutenção',analytics:'Analytics',alerts:'Alertas',settings:'Configurações'};
+
+function toggleSidebar() {
+  const app = document.getElementById('app');
+  if (window.innerWidth <= 768) {
+    // Mobile: slide sidebar in/out, close overlay on outside click
+    app.classList.toggle('sidebar-open');
+  } else {
+    // Desktop: collapse/expand sidebar
+    app.classList.toggle('sidebar-collapsed');
+  }
+}
+// Close mobile sidebar when clicking the overlay
+document.addEventListener('click', e => {
+  const app = document.getElementById('app');
+  if (app && app.classList.contains('sidebar-open') && window.innerWidth <= 768) {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && !sidebar.contains(e.target) && !e.target.closest('[onclick*="toggleSidebar"]')) {
+      app.classList.remove('sidebar-open');
+    }
+  }
+});
 
 function nav(page) {
   currentPage = page;
