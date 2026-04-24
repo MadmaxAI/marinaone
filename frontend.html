@@ -409,9 +409,19 @@ function refreshPage() { nav(currentPage); }
 // ── HELPERS ──────────────────────────────────────────
 const fmt = n => n == null ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 const fmtNum = n => n == null ? '—' : new Intl.NumberFormat('pt-BR').format(n);
-const fmtDate = s => { if(!s) return '—'; const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('pt-BR'); };
-const fmtDT   = s => { if(!s) return '—'; return new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
-const fmtTime = s => { if(!s) return '—'; return new Date(s).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); };
+// Local date string "YYYY-MM-DD" using machine timezone (never UTC)
+const todayLocal = () => { const d=new Date(),p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
+// Parse "YYYY-MM-DD HH:MM:SS" stored as local time safely (avoids UTC misinterpretation)
+const _parseLocalDT = s => {
+  if (!s) return null;
+  // Already a full ISO string with timezone (from estimated_end_at etc.) — parse as-is
+  if (s.includes('Z') || /[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+  // Stored local datetime "YYYY-MM-DD HH:MM:SS" or date "YYYY-MM-DD"
+  return new Date(s.includes(' ') ? s.replace(' ','T') : s + 'T00:00:00');
+};
+const fmtDate = s => { if(!s) return '—'; return _parseLocalDT(s).toLocaleDateString('pt-BR'); };
+const fmtDT   = s => { if(!s) return '—'; return _parseLocalDT(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+const fmtTime = s => { if(!s) return '—'; return _parseLocalDT(s).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); };
 const tierBadge = t => {
   if(t==='vip') return '<span class="tier-vip">VIP</span>';
   if(t==='gold') return '<span class="tier-gold">GOLD</span>';
@@ -1163,6 +1173,7 @@ async function openQueueModal() {
       </div>
     </div>
     <div class="form-group"><label>Observações</label><input id="q-notes" placeholder="Opcional..."></div>
+    <div id="q-error" style="display:none;background:var(--danger-bg,#2d1a1a);border:1px solid var(--danger);border-radius:6px;padding:10px 14px;font-size:13px;color:var(--danger);margin-top:4px"></div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
       <button class="btn btn-primary" onclick="submitQueue()">Adicionar à Fila</button>
@@ -1208,15 +1219,18 @@ async function submitQueue() {
   const operation_type = document.getElementById('q-type').value;
   const vessel_id      = document.getElementById('q-vessel').value;
   const notes          = document.getElementById('q-notes').value;
-  if (!operation_type) { toast('Selecione o tipo de operação', 'error'); return; }
-  if (!vessel_id)      { toast('Selecione a embarcação', 'error'); return; }
+  const errDiv         = document.getElementById('q-error');
+  const showErr = msg => { if (errDiv) { errDiv.textContent = '⚠ ' + msg; errDiv.style.display = 'block'; } else toast(msg, 'error'); };
+  if (errDiv) errDiv.style.display = 'none';
+  if (!operation_type) { showErr('Selecione o tipo de operação'); return; }
+  if (!vessel_id)      { showErr('Selecione a embarcação'); return; }
   const r = await api('POST','/queue',{vessel_id:parseInt(vessel_id),operation_type,notes});
   if (r && r.id) {
     closeModalForce();
     pages.queue();
     if (r.warning) toast(r.warning, 'warn');
     else toast('Operação adicionada à fila');
-  } else if (r && r.error) toast(r.error, 'error');
+  } else if (r && r.error) showErr(r.error);
 }
 
 // ── PAGE: CLIENTS ─────────────────────────────────────
@@ -1784,7 +1798,7 @@ async function openContractModal() {
       <div class="form-group"><label>Valor Mensal (R$) *</label><input id="ct-value" type="number" step=".01" placeholder="0.00"></div>
     </div>
     <div class="form-row cols2">
-      <div class="form-group"><label>Início *</label><input id="ct-start" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="form-group"><label>Início *</label><input id="ct-start" type="date" value="${todayLocal()}"></div>
       <div class="form-group"><label>Término (opcional)</label><input id="ct-end" type="date"></div>
     </div>
     <div class="form-group"><label>Observações</label><textarea id="ct-notes"></textarea></div>
@@ -2153,7 +2167,7 @@ async function markPaid(id) {
       </div>
       <div class="form-group">
         <label>Data do Pagamento</label>
-        <input type="date" id="pay-date" value="${new Date().toISOString().slice(0,10)}">
+        <input type="date" id="pay-date" value="${todayLocal()}">
       </div>
     </div>
     <div class="form-group">
@@ -2224,7 +2238,7 @@ async function openChargeModal() {
     <div class="form-group mb-2"><label>Descrição *</label><input id="ch-desc" placeholder="Ex: Mensalidade, serviço avulso..."></div>
     <div class="form-row cols2">
       <div class="form-group"><label>Valor (R$) *</label><input id="ch-amount" type="number" step=".01"></div>
-      <div class="form-group"><label>Vencimento *</label><input id="ch-due" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="form-group"><label>Vencimento *</label><input id="ch-due" type="date" value="${todayLocal()}"></div>
     </div>
     <div class="form-group"><label>Observações</label><textarea id="ch-notes"></textarea></div>
     <div class="form-actions">
@@ -2678,7 +2692,7 @@ function openStoreConfirmPayment(orderId, paymentMethod) {
       </div>
       <div class="form-group">
         <label>Data do Pagamento</label>
-        <input type="date" id="cpy-date" value="${new Date().toISOString().slice(0,10)}">
+        <input type="date" id="cpy-date" value="${todayLocal()}">
       </div>
     </div>
     <div class="form-group">

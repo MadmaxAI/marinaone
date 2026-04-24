@@ -32,12 +32,18 @@ function jwtVerify(token) {
 const dbAll  = (sql, a = []) => db.prepare(sql).all(...a);
 const dbGet  = (sql, a = []) => db.prepare(sql).get(...a);
 const dbRun  = (sql, a = []) => db.prepare(sql).run(...a);
-const nowStr = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// ── Local-time helpers (timezone-safe, never UTC) ────────────────────
+const _pad = n => String(n).padStart(2, '0');
+const _localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}`;
+const _localDateTime = (d = new Date()) =>
+  `${_localDate(d)} ${_pad(d.getHours())}:${_pad(d.getMinutes())}:${_pad(d.getSeconds())}`;
+const nowStr   = () => _localDateTime();
+const todayStr = () => _localDate();
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
-function monthStart() { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); }
-function daysAgo(n)   { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
-function daysAhead(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+function monthStart() { const d = new Date(); d.setDate(1); return _localDate(d); }
+function daysAgo(n)   { const d = new Date(); d.setDate(d.getDate() - n); return _localDate(d); }
+function daysAhead(n) { const d = new Date(); d.setDate(d.getDate() + n); return _localDate(d); }
 
 // ── HTTP helpers ─────────────────────────────────────────────────────
 function setCors(res) {
@@ -378,13 +384,16 @@ function getManeuverTime() {
 }
 function applyEstimatedTimes(enriched) {
   const maneuver = getManeuverTime();
-  let cursor = new Date();
+  const now = new Date();
+  let cursor = new Date(now);
   let prevEnd = null;
   // If there's an in_progress op, it anchors the timeline
   const inProg = enriched.find(r => r.status === 'in_progress');
   if (inProg && inProg.started_at) {
-    const endTime = new Date(inProg.started_at);
+    const endTime = new Date(String(inProg.started_at).replace(' ','T'));
     endTime.setMinutes(endTime.getMinutes() + inProg.estimated_duration_min);
+    // If estimated end is already in the past (stale op), anchor to now
+    if (isNaN(endTime) || endTime < now) endTime.setTime(now.getTime());
     inProg.estimated_end_at = endTime.toISOString();
     cursor = new Date(endTime);
     cursor.setMinutes(cursor.getMinutes() + maneuver);
@@ -422,7 +431,7 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
   sendJson(res, enriched);
 });
 addRoute('GET', '/api/queue/calendar', async (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   // Completed/cancelled ops from today (actual times)
   const done = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size,
     c.name as client_name, c.tier as client_tier
@@ -474,11 +483,16 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
   for (const op of queuedActive) {
     const dur = getAvgDuration(op.vessel_size, op.operation_type);
     if (op.status === 'in_progress' && op.started_at) {
-      // Parse SQLite datetime safely: replace space with T so JS treats it as local
-      const sa  = new Date(String(op.started_at).replace(' ','T'));
-      const saMin = isNaN(sa) ? nowMin : sa.getHours()*60 + sa.getMinutes();
-      const opEndMin = saMin + dur;
-      if (opEndMin > cursorMin) cursorMin = opEndMin;
+      // Parse stored local datetime — replace space with T so JS treats it as local time
+      const sa = new Date(String(op.started_at).replace(' ','T'));
+      const estimatedEnd = new Date(sa);
+      estimatedEnd.setMinutes(estimatedEnd.getMinutes() + dur);
+      if (!isNaN(estimatedEnd) && estimatedEnd > now) {
+        // Op is still running: anchor cursor to its estimated end (minutes of today)
+        const opEndMin = estimatedEnd.getHours()*60 + estimatedEnd.getMinutes();
+        if (opEndMin > cursorMin) cursorMin = opEndMin;
+      }
+      // else: estimated end is in the past (stale in_progress) — cursor stays at nowMin
     } else if (op.status === 'waiting') {
       cursorMin += dur;
     }
@@ -501,8 +515,8 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
   const priority = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
   const maxOrder = dbGet(`SELECT MAX(queue_order) as mo FROM queue_operations WHERE status='waiting'`);
   const queueOrder = (maxOrder?.mo || 0) + 1;
-  const r = dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes,queue_order) VALUES(?,?,?,'waiting',?,?,?)`,
-                  [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null, queueOrder]);
+  const r = dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes,queue_order,requested_at) VALUES(?,?,?,'waiting',?,?,?,?)`,
+                  [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null, queueOrder, nowStr()]);
   sendJson(res, { id: Number(r.lastInsertRowid), warning }, 201);
 });
 addRoute('PUT', '/api/queue/:id/reorder', async (req, res, ctx) => {
