@@ -1,16 +1,21 @@
 {
   "name": "marina-one",
-  "version": "1.0.0",
-  "description": "Sistema completo de gestão de marina",
+  "version": "2.0.0",
+  "description": "Sistema SaaS de gestão integrada de marina — Multi-Tenant PostgreSQL",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "provision": "node -e \"require('./src/db/migrate').provisionTenant(process.argv[1], { marinaName: process.argv[2] }).catch(console.error)\"",
+    "legacy": "node server.legacy.js"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
   },
-  "keywords": ["marina", "gestao", "nodejs", "sqlite"],
+  "dependencies": {
+    "postgres": "^3.4.4"
+  },
+  "keywords": ["marina", "saas", "multitenant", "nodejs", "postgresql"],
   "author": "MadmaxAI",
   "license": "MIT"
 }

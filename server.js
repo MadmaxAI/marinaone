@@ -1,54 +1,55 @@
 'use strict';
+// ============================================================
+//  Marina One v2.0 — SaaS Multi-Tenant
+//  Stack: Node.js 20+ | PostgreSQL | postgres.js
+//  Arquitetura: schema-per-tenant (marina_<slug>)
+// ============================================================
 const http   = require('http');
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
-const { DatabaseSync } = require('node:sqlite');
 
-const PORT    = process.env.PORT || 3000;
-const SECRET  = process.env.JWT_SECRET || 'marinaone_secret_2024';
-const DB_PATH = process.env.VERCEL ? '/tmp/marina.db' : path.join(__dirname, 'marina.db');
-let db;
+const PORT = process.env.PORT || 3000;
 
-// ── JWT ──────────────────────────────────────────────────────────────
-function jwtSign(payload, secs = 43200) {
-  const hdr  = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const body = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + secs })).toString('base64url');
-  const sig  = crypto.createHmac('sha256', SECRET).update(`${hdr}.${body}`).digest('base64url');
-  return `${hdr}.${body}.${sig}`;
+// ── Versão ───────────────────────────────────────────────────────────
+const pkg         = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+const APP_VERSION = pkg.version || '2.0.0';
+function _gitHash() {
+  try { const { execSync } = require('child_process'); return execSync('git rev-parse --short HEAD', { encoding:'utf8', stdio:['pipe','pipe','ignore'] }).trim(); }
+  catch { return null; }
 }
-function jwtVerify(token) {
-  const parts = (token || '').split('.');
-  if (parts.length !== 3) throw new Error('invalid');
-  const [hdr, body, sig] = parts;
-  const expected = crypto.createHmac('sha256', SECRET).update(`${hdr}.${body}`).digest('base64url');
-  if (sig !== expected) throw new Error('bad sig');
-  const p = JSON.parse(Buffer.from(body, 'base64url').toString());
-  if (p.exp && Date.now() / 1000 > p.exp) throw new Error('expired');
-  return p;
-}
+const GIT_HASH   = _gitHash();
+const BUILD_DATE = new Date().toISOString().slice(0, 10);
 
-// ── DB helpers ───────────────────────────────────────────────────────
-const dbAll  = (sql, a = []) => db.prepare(sql).all(...a);
-const dbGet  = (sql, a = []) => db.prepare(sql).get(...a);
-const dbRun  = (sql, a = []) => db.prepare(sql).run(...a);
-// ── Local-time helpers (timezone-safe, never UTC) ────────────────────
-const _pad = n => String(n).padStart(2, '0');
-const _localDate = (d = new Date()) =>
-  `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}`;
-const _localDateTime = (d = new Date()) =>
-  `${_localDate(d)} ${_pad(d.getHours())}:${_pad(d.getMinutes())}:${_pad(d.getSeconds())}`;
-const nowStr   = () => _localDateTime();
-const todayStr = () => _localDate();
-const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
-function monthStart() { const d = new Date(); d.setDate(1); return _localDate(d); }
-function daysAgo(n)   { const d = new Date(); d.setDate(d.getDate() - n); return _localDate(d); }
-function daysAhead(n) { const d = new Date(); d.setDate(d.getDate() + n); return _localDate(d); }
+// ── DB / Middleware layers ────────────────────────────────────────────
+const { initSaasSchema, runMigrations, provisionTenant, seedDefaultPermissions } = require('./src/db/migrate');
+const { createDbHelpers, createSaasHelpers }  = require('./src/db/compat');
+const { getTenantPool, getGlobalPool }         = require('./src/db/pool');
+const { tenantMiddleware }                     = require('./src/middleware/tenant');
+const { jwtSign, sha256, verifyPassword, authMiddleware } = require('./src/middleware/auth');
+
+// ── Constantes ───────────────────────────────────────────────────────
+const MODULES = [
+  { key: 'dashboard',   label: 'Dashboard',         group: 'Principal' },
+  { key: 'queue',       label: 'Fila de Operações', group: 'Principal' },
+  { key: 'clients',     label: 'Clientes',          group: 'Gestão'    },
+  { key: 'vessels',     label: 'Embarcações',       group: 'Gestão'    },
+  { key: 'spots',       label: 'Vagas',             group: 'Gestão'    },
+  { key: 'contracts',   label: 'Contratos',         group: 'Gestão'    },
+  { key: 'financial',   label: 'Financeiro',        group: 'Operações' },
+  { key: 'store',       label: 'Loja / PDV',        group: 'Operações' },
+  { key: 'maintenance', label: 'Manutenção',        group: 'Operações' },
+  { key: 'analytics',   label: 'Analytics',         group: 'Análise'   },
+  { key: 'alerts',      label: 'Alertas',           group: 'Análise'   },
+  { key: 'settings',    label: 'Configurações',     group: 'Sistema'   },
+];
+const MODULE_KEYS  = MODULES.map(m => m.key);
+const VALID_ROLES  = ['admin', 'operador', 'loja', 'cliente'];
 
 // ── HTTP helpers ─────────────────────────────────────────────────────
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Tenant-Slug');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
 }
 function sendJson(res, data, status = 200) {
@@ -68,30 +69,16 @@ function getQS(url) {
   new URLSearchParams((url.split('?')[1] || '')).forEach((v, k) => { o[k] = v; });
   return o;
 }
-function getAuth(req) {
-  try { return jwtVerify((req.headers.authorization || '').replace('Bearer ', '')); }
-  catch { return null; }
-}
 
-// ── Side effects ─────────────────────────────────────────────────────
-function addAlert(type, message, severity, entity_type, entity_id) {
-  dbRun('INSERT INTO alerts(type,message,severity,entity_type,entity_id) VALUES(?,?,?,?,?)',
-        [type, message, severity || 'info', entity_type || null, entity_id || null]);
-}
-function checkOverdue() {
-  dbRun(`UPDATE financial_charges SET status='overdue' WHERE status='pending' AND due_date<?`, [todayStr()]);
-}
-function recalcLtv(client_id) {
-  const r = dbGet(`SELECT COALESCE(SUM(amount),0) as t FROM financial_charges WHERE client_id=? AND status='paid'`, [client_id]);
-  dbRun('UPDATE clients SET ltv=? WHERE id=?', [r ? r.t : 0, client_id]);
-}
-function checkStock() {
-  const low = dbAll('SELECT * FROM store_items WHERE active=1 AND stock<=min_stock');
-  for (const item of low) {
-    const ex = dbAll(`SELECT id FROM alerts WHERE entity_type='store_item' AND entity_id=? AND read_at IS NULL`, [item.id]);
-    if (!ex.length) addAlert('estoque', `Estoque baixo: ${item.name} (${item.stock} ${item.unit})`, 'warning', 'store_item', item.id);
-  }
-}
+// ── Date helpers ─────────────────────────────────────────────────────
+const _pad = n => String(n).padStart(2, '0');
+const _localDate = (d = new Date()) => `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}`;
+const _localDateTime = (d = new Date()) => `${_localDate(d)} ${_pad(d.getHours())}:${_pad(d.getMinutes())}:${_pad(d.getSeconds())}`;
+const nowStr   = () => _localDateTime();
+const todayStr = () => _localDate();
+function monthStart() { const d = new Date(); d.setDate(1); return _localDate(d); }
+function daysAgo(n)   { const d = new Date(); d.setDate(d.getDate() - n); return _localDate(d); }
+function daysAhead(n) { const d = new Date(); d.setDate(d.getDate() + n); return _localDate(d); }
 
 // ── PIX ──────────────────────────────────────────────────────────────
 function crc16(data) {
@@ -103,31 +90,14 @@ function crc16(data) {
   return crc.toString(16).toUpperCase().padStart(4, '0');
 }
 function buildPix(key, name, city, amount, txid) {
-  // PIX (EMV QR Code) — BCB spec v2.2.0
-  // Sanitize: strip accents + non-ASCII (required by BCB spec for name/city)
-  const sanitize = (s, max) => (s||'')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^\x20-\x7E]/g,'').replace(/\s+/g,' ').trim().slice(0, max).toUpperCase();
+  const sanitize = (s, max) => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/\s+/g,' ').trim().slice(0, max).toUpperCase();
   const tlv = (id, val) => `${id}${String(val.length).padStart(2,'0')}${val}`;
-  const safeName  = sanitize(name, 25) || 'LOJA';
-  const safeCity  = sanitize(city, 15) || 'CIDADE';
-  // txid: only alphanumeric, no spaces, max 25
-  const safeTxid  = (txid||'').replace(/[^A-Za-z0-9]/g,'').slice(0, 25) || 'MARINA001';
-  // Merchant Account Information (tag 26)
+  const safeName = sanitize(name, 25) || 'LOJA', safeCity = sanitize(city, 15) || 'CIDADE';
+  const safeTxid = (txid||'').replace(/[^A-Za-z0-9]/g,'').slice(0,25) || 'MARINA001';
   const ma = tlv('00','BR.GOV.BCB.PIX') + tlv('01', key);
-  // Additional Data Field Template (tag 62) — Reference Label (05)
   const ad = tlv('05', safeTxid);
-  let p = tlv('00','01')                   // Payload Format Indicator
-        + tlv('01','12')                   // Point of Initiation: 12 = unique/one-time
-        + tlv('26', ma)                    // Merchant Account Information (PIX)
-        + tlv('52','0000')                 // Merchant Category Code
-        + tlv('53','986')                  // Transaction Currency (986 = BRL)
-        + (amount > 0 ? tlv('54', amount.toFixed(2)) : '')  // Transaction Amount
-        + tlv('58','BR')                   // Country Code
-        + tlv('59', safeName)              // Merchant Name (max 25)
-        + tlv('60', safeCity)              // Merchant City (max 15)
-        + tlv('62', ad);                   // Additional Data (txid)
-  // CRC16/CCITT-FALSE over the entire payload + '6304' (tag+length of CRC field)
+  let p = tlv('00','01') + tlv('01','12') + tlv('26', ma) + tlv('52','0000') + tlv('53','986')
+        + (amount > 0 ? tlv('54', amount.toFixed(2)) : '') + tlv('58','BR') + tlv('59', safeName) + tlv('60', safeCity) + tlv('62', ad);
   p += tlv('63', crc16(p + '6304'));
   return p;
 }
@@ -151,253 +121,174 @@ function matchRoute(method, urlpath) {
   return null;
 }
 
-// ── AUTH ─────────────────────────────────────────────────────────────
-addRoute('POST', '/api/auth/login', async (req, res, ctx) => {
-  const { email = '', password = '' } = ctx.body;
-  const user = dbGet('SELECT * FROM users WHERE email=?', [email.toLowerCase()]);
-  if (!user || user.password_hash !== sha256(password))
-    return sendJson(res, { error: 'Credenciais inválidas' }, 401);
-  const token = jwtSign({ user_id: user.id, email: user.email, name: user.name, role: user.role });
-  sendJson(res, { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
-});
-addRoute('GET', '/api/auth/me', async (req, res, ctx) => sendJson(res, ctx.user));
+// ── Helpers RBAC (usam ctx.db) ───────────────────────────────────────
+async function can(user, module, action = 'view', dbGet) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const row = await dbGet('SELECT * FROM role_permissions WHERE role=? AND module=?', [user.role, module]);
+  if (!row) return false;
+  return row[`can_${action}`] === 1;
+}
+function requireRole(ctx, res, roles) {
+  if (!ctx.user) { sendJson(res, { error: 'Não autorizado' }, 401); return false; }
+  const arr = Array.isArray(roles) ? roles : [roles];
+  if (!arr.includes(ctx.user.role)) { sendJson(res, { error: 'Acesso negado' }, 403); return false; }
+  return true;
+}
+async function requirePerm(ctx, res, module, action = 'view') {
+  if (!ctx.user) { sendJson(res, { error: 'Não autorizado' }, 401); return false; }
+  if (!(await can(ctx.user, module, action, ctx.db.dbGet))) { sendJson(res, { error: 'Sem permissão' }, 403); return false; }
+  return true;
+}
+function clientScope(user) {
+  if (!user) return null;
+  if (user.role === 'cliente') return user.client_id || -1;
+  return null;
+}
+function canAccessClient(user, clientId) {
+  if (!user) return false;
+  if (user.role !== 'cliente') return true;
+  return Number(user.client_id) === Number(clientId);
+}
+async function loadPermissions(role, dbGet) {
+  if (role === 'admin') {
+    const out = {};
+    for (const m of MODULE_KEYS) out[m] = { view: true, create: true, edit: true, delete: true };
+    return out;
+  }
+  const rows = await dbGet('SELECT * FROM role_permissions WHERE role=?', [role]);
+  const out  = {};
+  for (const m of MODULE_KEYS) out[m] = { view: false, create: false, edit: false, delete: false };
+  // rows pode ser um único objeto (quando usa dbGet) — normaliza para array
+  const arr  = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+  for (const r of arr) {
+    out[r.module] = {
+      view:   r.can_view   === 1,
+      create: r.can_create === 1,
+      edit:   r.can_edit   === 1,
+      delete: r.can_delete === 1,
+    };
+  }
+  return out;
+}
+async function loadPermissionsAll(role, dbAll) {
+  if (role === 'admin') {
+    const out = {};
+    for (const m of MODULE_KEYS) out[m] = { view: true, create: true, edit: true, delete: true };
+    return out;
+  }
+  const rows = await dbAll('SELECT * FROM role_permissions WHERE role=?', [role]);
+  const out  = {};
+  for (const m of MODULE_KEYS) out[m] = { view: false, create: false, edit: false, delete: false };
+  for (const r of rows) {
+    out[r.module] = {
+      view:   r.can_view   === 1,
+      create: r.can_create === 1,
+      edit:   r.can_edit   === 1,
+      delete: r.can_delete === 1,
+    };
+  }
+  return out;
+}
 
-// ── CLIENTS ──────────────────────────────────────────────────────────
-addRoute('GET', '/api/clients', async (req, res, ctx) => {
-  const { search = '', tier = '' } = ctx.qs;
-  let sql = 'SELECT c.*, (SELECT COUNT(*) FROM vessels WHERE client_id=c.id AND active=1) as vessel_count FROM clients c WHERE c.active=1';
-  const a = [];
-  if (search) { sql += ' AND (c.name LIKE ? OR c.email LIKE ? OR c.cpf LIKE ?)'; a.push(`%${search}%`, `%${search}%`, `%${search}%`); }
-  if (tier)   { sql += ' AND c.tier=?'; a.push(tier); }
-  sendJson(res, dbAll(sql + ' ORDER BY c.name', a));
-});
-addRoute('GET', '/api/clients/:id', async (req, res, ctx) => {
-  const c = dbGet('SELECT * FROM clients WHERE id=?', [ctx.params.id]);
-  if (!c) return sendJson(res, { error: 'Não encontrado' }, 404);
-  c.vessels   = dbAll('SELECT * FROM vessels WHERE client_id=? AND active=1', [ctx.params.id]);
-  c.contracts = dbAll('SELECT ct.*, s.number as spot_number FROM contracts ct LEFT JOIN spots s ON ct.spot_id=s.id WHERE ct.client_id=?', [ctx.params.id]);
-  c.charges   = dbAll('SELECT * FROM financial_charges WHERE client_id=? ORDER BY due_date DESC LIMIT 10', [ctx.params.id]);
-  sendJson(res, c);
-});
-addRoute('POST', '/api/clients', async (req, res, ctx) => {
-  const b = ctx.body;
-  const r = dbRun('INSERT INTO clients(name,email,phone,cpf,tier,address,notes) VALUES(?,?,?,?,?,?,?)',
-                  [b.name, b.email, b.phone, b.cpf, b.tier || 'standard', b.address, b.notes]);
-  addAlert('sistema', `Novo cliente: ${b.name}`, 'info');
-  sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
-});
-addRoute('PUT', '/api/clients/:id', async (req, res, ctx) => {
-  const b = ctx.body;
-  dbRun('UPDATE clients SET name=?,email=?,phone=?,cpf=?,tier=?,address=?,notes=? WHERE id=?',
-        [b.name, b.email, b.phone, b.cpf, b.tier || 'standard', b.address, b.notes, ctx.params.id]);
-  recalcLtv(ctx.params.id);
-  sendJson(res, { ok: true });
-});
-addRoute('DELETE', '/api/clients/:id', async (req, res, ctx) => {
-  dbRun('UPDATE clients SET active=0 WHERE id=?', [ctx.params.id]);
-  sendJson(res, { ok: true });
-});
+// ── Side effects (todos async agora) ────────────────────────────────
+async function addAlert(type, message, severity, entity_type, entity_id, dbRun) {
+  await dbRun('INSERT INTO alerts(type,message,severity,entity_type,entity_id) VALUES(?,?,?,?,?)',
+              [type, message, severity || 'info', entity_type || null, entity_id || null]);
+}
+async function checkOverdue(dbRun) {
+  await dbRun(`UPDATE financial_charges SET status='overdue' WHERE status='pending' AND due_date<?`, [todayStr()]);
+}
+async function recalcLtv(client_id, dbGet, dbRun) {
+  const r = await dbGet(`SELECT COALESCE(SUM(amount),0) as t FROM financial_charges WHERE client_id=? AND status='paid'`, [client_id]);
+  await dbRun('UPDATE clients SET ltv=? WHERE id=?', [r ? Number(r.t) : 0, client_id]);
+}
+async function checkStock(dbAll, dbAll2, dbGet, dbRun) {
+  const low = await dbAll('SELECT * FROM store_items WHERE active=1 AND stock<=min_stock');
+  for (const item of low) {
+    const ex = await dbAll2(`SELECT id FROM alerts WHERE entity_type='store_item' AND entity_id=? AND read_at IS NULL`, [item.id]);
+    if (!ex.length) await addAlert('estoque', `Estoque baixo: ${item.name} (${item.stock} ${item.unit})`, 'warning', 'store_item', item.id, dbRun);
+  }
+}
+function getAvgDurationSync(settings, vesselSize, opType) {
+  const settingKey = `avg_time_${opType}_${vesselSize || 'media'}`;
+  const val = settings[settingKey];
+  return val ? parseInt(val) || 30 : 30;
+}
 
-// ── VESSELS ──────────────────────────────────────────────────────────
-// Returns true if the vessel is currently in the water
-function isVesselInWater(vesselId, spotType) {
-  const lastOp = dbGet(`SELECT operation_type FROM queue_operations WHERE vessel_id=? AND status='completed' ORDER BY completed_at DESC LIMIT 1`, [vesselId]);
+// ── syncClientUser (async) ────────────────────────────────────────────
+async function syncClientUser(clientId, b, opts = {}, db) {
+  const { dbGet, dbRun } = db;
+  const { mode } = opts;
+  const result = { created: false, updated: false, deactivated: false, warning: null, initialPassword: null };
+  const existing = await dbGet(`SELECT * FROM users WHERE client_id=? AND role='cliente' LIMIT 1`, [clientId]);
+
+  if (mode === 'delete') {
+    if (existing) { await dbRun('UPDATE users SET active=0 WHERE id=?', [existing.id]); result.deactivated = true; }
+    return result;
+  }
+
+  const email = (b.email || '').toLowerCase().trim();
+  if (!email) { result.warning = 'Cliente sem e-mail: usuário de acesso não foi criado/atualizado.'; return result; }
+
+  const conflict = await dbGet('SELECT id, client_id, role FROM users WHERE email=? AND id<>?',
+                               [email, existing ? existing.id : -1]);
+  if (conflict) {
+    result.warning = `E-mail ${email} já está em uso por outro usuário (${conflict.role}). Usuário de acesso não sincronizado.`;
+    return result;
+  }
+
+  if (existing) {
+    await dbRun('UPDATE users SET name=?, email=?, active=1 WHERE id=?', [b.name, email, existing.id]);
+    result.updated = true;
+  } else {
+    const cpfDigits    = String(b.cpf || '').replace(/\D/g, '');
+    const initialPwd   = cpfDigits.length >= 6 ? cpfDigits : 'cliente@123';
+    await dbRun('INSERT INTO users(email,password_hash,name,role,client_id,active) VALUES(?,?,?,?,?,1)',
+                [email, sha256(initialPwd), b.name, 'cliente', clientId]);
+    result.created = true;
+    result.initialPassword = initialPwd;
+  }
+  return result;
+}
+
+// ── isVesselInWater (async) ───────────────────────────────────────────
+async function isVesselInWater(vesselId, spotType, dbGet) {
+  const lastOp = await dbGet(`SELECT operation_type FROM queue_operations WHERE vessel_id=? AND status='completed' ORDER BY completed_at DESC LIMIT 1`, [vesselId]);
   const t = lastOp?.operation_type;
-  if (t === 'descida' || t === 'atracacao') return true;   // last op put it in water
-  if (t === 'subida') return false;                          // last op put it on land
-  // No completed ops: molhada berth → in water, otherwise on land
+  if (t === 'descida' || t === 'atracacao') return true;
+  if (t === 'subida') return false;
   return spotType === 'molhada';
 }
-function vesselStatus(vesselId, spotType) {
-  const inWater = isVesselInWater(vesselId, spotType);
+async function vesselStatus(vesselId, spotType, dbGet) {
+  const inWater = await isVesselInWater(vesselId, spotType, dbGet);
   if (inWater) return spotType === 'molhada' ? 'Na vaga molhada' : 'Na água';
   return spotType === 'seca' ? 'Na vaga seca' : 'Em terra';
 }
-addRoute('GET', '/api/vessels', async (req, res, ctx) => {
-  const { search = '', client_id = '', eligible_for = '' } = ctx.qs;
-  let sql = `SELECT v.*, c.name as client_name, c.tier as client_tier, s.number as spot_number, s.type as spot_type
-    FROM vessels v JOIN clients c ON v.client_id=c.id
-    LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active'
-    LEFT JOIN spots s ON ct.spot_id=s.id WHERE v.active=1`;
-  const a = [];
-  if (search)    { sql += ' AND (v.name LIKE ? OR v.registration LIKE ? OR c.name LIKE ?)'; a.push(`%${search}%`, `%${search}%`, `%${search}%`); }
-  if (client_id) { sql += ' AND v.client_id=?'; a.push(client_id); }
-  let rows = dbAll(sql + ' ORDER BY v.name', a);
-  rows = rows.map(r => ({ ...r, vessel_status: vesselStatus(r.id, r.spot_type) }));
-  // Filter by operation eligibility — use isVesselInWater for correctness
-  // (covers all water states: Na água, Na vaga molhada, etc.)
-  if (eligible_for === 'descida') {
-    // Descida: vessel must NOT be in water; also no active op for this vessel
-    rows = rows.filter(r => !isVesselInWater(r.id, r.spot_type));
-    rows = rows.filter(r => !dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id]));
-  } else if (eligible_for === 'subida') {
-    // Subida: vessel must be in water (Na água OR Na vaga molhada); also no active op
-    rows = rows.filter(r => isVesselInWater(r.id, r.spot_type));
-    rows = rows.filter(r => !dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id]));
-  } else if (eligible_for === 'atracacao') {
-    // Atracação: no sequence restriction, just no active op
-    rows = rows.filter(r => !dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id]));
-  }
-  sendJson(res, rows);
-});
-addRoute('GET', '/api/vessels/:id', async (req, res, ctx) => {
-  const v = dbGet(`SELECT v.*, c.name as client_name, s.type as spot_type FROM vessels v JOIN clients c ON v.client_id=c.id LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active' LEFT JOIN spots s ON ct.spot_id=s.id WHERE v.id=?`, [ctx.params.id]);
-  if (!v) return sendJson(res, { error: 'Não encontrado' }, 404);
-  v.vessel_status = vesselStatus(v.id, v.spot_type);
-  v.history     = dbAll(`SELECT * FROM queue_operations WHERE vessel_id=? ORDER BY requested_at DESC LIMIT 20`, [ctx.params.id]);
-  v.maintenance = dbAll(`SELECT * FROM maintenance_os WHERE vessel_id=? ORDER BY created_at DESC LIMIT 10`, [ctx.params.id]);
-  v.contract    = dbGet(`SELECT ct.*, s.number as spot_number FROM contracts ct LEFT JOIN spots s ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [ctx.params.id]);
-  sendJson(res, v);
-});
-addRoute('POST', '/api/vessels', async (req, res, ctx) => {
-  const b = ctx.body;
-  const r = dbRun('INSERT INTO vessels(client_id,name,type,size,length,beam,draft,year,registration,model,manufacturer,engine,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                  [b.client_id, b.name, b.type, b.size||'media', b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes]);
-  sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
-});
-addRoute('PUT', '/api/vessels/:id', async (req, res, ctx) => {
-  const b = ctx.body;
-  dbRun('UPDATE vessels SET name=?,type=?,size=?,length=?,beam=?,draft=?,year=?,registration=?,model=?,manufacturer=?,engine=?,notes=? WHERE id=?',
-        [b.name, b.type, b.size||'media', b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes, ctx.params.id]);
-  sendJson(res, { ok: true });
-});
-addRoute('DELETE', '/api/vessels/:id', async (req, res, ctx) => {
-  dbRun('UPDATE vessels SET active=0 WHERE id=?', [ctx.params.id]);
-  sendJson(res, { ok: true });
-});
-
-// ── SPOTS ─────────────────────────────────────────────────────────────
-addRoute('GET', '/api/spots/summary', async (req, res) => {
-  const rows = dbAll('SELECT type, status, COUNT(*) as count FROM spots GROUP BY type, status');
-  const r = { seca: { total:0,available:0,occupied:0,maintenance:0 }, molhada: { total:0,available:0,occupied:0,maintenance:0 } };
-  for (const row of rows) {
-    r[row.type].total += row.count;
-    if (row.status in r[row.type]) r[row.type][row.status] += row.count;
-  }
-  sendJson(res, r);
-});
-addRoute('GET', '/api/spots', async (req, res, ctx) => {
-  const { type = '', status = '' } = ctx.qs;
-  let sql = 'SELECT s.*, v.name as vessel_name, c.name as client_name FROM spots s LEFT JOIN vessels v ON s.vessel_id=v.id LEFT JOIN clients c ON v.client_id=c.id WHERE 1=1';
-  const a = [];
-  if (type)   { sql += ' AND s.type=?';   a.push(type); }
-  if (status) { sql += ' AND s.status=?'; a.push(status); }
-  sendJson(res, dbAll(sql + ' ORDER BY s.number', a));
-});
-addRoute('POST', '/api/spots', async (req, res, ctx) => {
-  const b = ctx.body;
-  if (!b.number || !b.type) return sendJson(res, { error: 'Número e tipo obrigatórios' }, 400);
-  const r = dbRun('INSERT INTO spots(number,type,status) VALUES(?,?,?)', [b.number, b.type, 'available']);
-  sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
-});
-addRoute('PUT', '/api/spots/:id', async (req, res, ctx) => {
-  dbRun('UPDATE spots SET status=?,vessel_id=? WHERE id=?', [ctx.body.status, ctx.body.vessel_id || null, ctx.params.id]);
-  sendJson(res, { ok: true });
-});
-addRoute('DELETE', '/api/spots/:id', async (req, res, ctx) => {
-  const spot = dbGet('SELECT * FROM spots WHERE id=?', [ctx.params.id]);
-  if (!spot) return sendJson(res, { error: 'Vaga não encontrada' }, 404);
-  if (spot.vessel_id) return sendJson(res, { error: 'Vaga com embarcação associada — remova o contrato primeiro' }, 400);
-  if (spot.status === 'occupied') return sendJson(res, { error: 'Vaga ocupada — cancele o contrato primeiro' }, 400);
-  dbRun('DELETE FROM spots WHERE id=?', [ctx.params.id]);
-  sendJson(res, { ok: true });
-});
-
-// ── CONTRACTS ─────────────────────────────────────────────────────────
-addRoute('GET', '/api/contracts', async (req, res, ctx) => {
-  const { status = '' } = ctx.qs;
-  let sql = `SELECT ct.*, c.name as client_name, c.tier as client_tier,
-    v.name as vessel_name, s.number as spot_number
-    FROM contracts ct JOIN clients c ON ct.client_id=c.id
-    JOIN vessels v ON ct.vessel_id=v.id LEFT JOIN spots s ON ct.spot_id=s.id WHERE 1=1`;
-  const a = [];
-  if (status) { sql += ' AND ct.status=?'; a.push(status); }
-  sendJson(res, dbAll(sql + ' ORDER BY ct.start_date DESC', a));
-});
-addRoute('GET', '/api/contracts/:id', async (req, res, ctx) => {
-  const ct = dbGet(`SELECT ct.*, c.name as client_name, c.tier as client_tier,
-    v.name as vessel_name, s.number as spot_number
-    FROM contracts ct JOIN clients c ON ct.client_id=c.id
-    JOIN vessels v ON ct.vessel_id=v.id LEFT JOIN spots s ON ct.spot_id=s.id
-    WHERE ct.id=?`, [ctx.params.id]);
-  if (!ct) return sendJson(res, { error: 'Não encontrado' }, 404);
-  sendJson(res, ct);
-});
-addRoute('POST', '/api/contracts', async (req, res, ctx) => {
-  const b = ctx.body;
-  const r = dbRun('INSERT INTO contracts(client_id,vessel_id,spot_id,type,start_date,end_date,monthly_value,status,notes,contract_file,contract_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                  [b.client_id, b.vessel_id, b.spot_id || null, b.type, b.start_date, b.end_date || null, b.monthly_value, b.status || 'active', b.notes || null, b.contract_file || null, b.contract_file_name || null]);
-  if (b.spot_id) dbRun(`UPDATE spots SET status='occupied',vessel_id=? WHERE id=?`, [b.vessel_id, b.spot_id]);
-  for (let i = 0; i < 3; i++) {
-    const d = new Date(b.start_date); d.setDate(d.getDate() + 30 * i);
-    const ds = d.toISOString().slice(0, 10);
-    const month = d.toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
-    dbRun(`INSERT INTO financial_charges(client_id,contract_id,description,amount,due_date,status) VALUES(?,?,?,?,?,'pending')`,
-          [b.client_id, r.lastInsertRowid, `Mensalidade ${b.type} - ${month}`, b.monthly_value, ds]);
-  }
-  sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
-});
-addRoute('PUT', '/api/contracts/:id', async (req, res, ctx) => {
-  const b = ctx.body;
-  const old = dbGet('SELECT * FROM contracts WHERE id=?', [ctx.params.id]);
-  dbRun('UPDATE contracts SET status=?,monthly_value=?,end_date=?,notes=?,contract_file=?,contract_file_name=? WHERE id=?',
-        [b.status || old.status, b.monthly_value || old.monthly_value, b.end_date || old.end_date, b.notes || old.notes,
-         b.contract_file !== undefined ? (b.contract_file || null) : old.contract_file,
-         b.contract_file_name !== undefined ? (b.contract_file_name || null) : old.contract_file_name,
-         ctx.params.id]);
-  if (b.status === 'cancelled' && old.spot_id)
-    dbRun(`UPDATE spots SET status='available',vessel_id=NULL WHERE id=?`, [old.spot_id]);
-  sendJson(res, { ok: true });
-});
-
-// ── QUEUE ─────────────────────────────────────────────────────────────
-function getAvgDuration(vesselSize, opType) {
-  // Returns estimated minutes for operation based on vessel size
-  const sz = vesselSize || 'media';
-  const settingKey = `avg_time_${opType}_${sz}`;
-  const val = dbGet('SELECT value FROM settings WHERE key=?', [settingKey]);
-  return val ? parseInt(val.value) || 30 : 30;
-}
-function enrichQueueRow(q) {
-  const spot = dbGet(`SELECT s.type FROM spots s JOIN contracts ct ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [q.vessel_id]);
+async function enrichQueueRow(q, settings, dbGet) {
+  const spot     = await dbGet(`SELECT s.type FROM spots s JOIN contracts ct ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [q.vessel_id]);
   const spotType = spot?.type || null;
-  const inWater  = isVesselInWater(q.vessel_id, spotType);
-  const vs       = vesselStatus(q.vessel_id, spotType);
-  // Flag if this op is inconsistent with the vessel's current state
+  const inWater  = await isVesselInWater(q.vessel_id, spotType, dbGet);
+  const vs       = await vesselStatus(q.vessel_id, spotType, dbGet);
   let inconsistent = false;
   if (q.status === 'waiting' || q.status === 'in_progress') {
     if (q.operation_type === 'descida' && inWater)  inconsistent = true;
     if (q.operation_type === 'subida'  && !inWater) inconsistent = true;
   }
-  const estimated_duration_min = getAvgDuration(q.vessel_size, q.operation_type);
+  const estimated_duration_min = getAvgDurationSync(settings, q.vessel_size, q.operation_type);
   return { ...q, vessel_status: vs, is_inconsistent: inconsistent, estimated_duration_min };
 }
-addRoute('GET', '/api/queue/history', async (req, res) => {
-  const rows = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, c.name as client_name, c.tier as client_tier
-    FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
-    WHERE q.status IN ('completed','cancelled') ORDER BY q.requested_at DESC LIMIT 50`);
-  sendJson(res, rows.map(enrichQueueRow));
-});
-function getManeuverTime() {
-  const val = dbGet(`SELECT value FROM settings WHERE key='maneuver_time_min'`);
-  return val ? parseInt(val.value) || 0 : 0;
-}
-function applyEstimatedTimes(enriched) {
-  const maneuver = getManeuverTime();
+function applyEstimatedTimes(enriched, maneuver) {
   const now = new Date();
   let cursor = new Date(now);
-  let prevEnd = null;
-  // If there's an in_progress op, it anchors the timeline
   const inProg = enriched.find(r => r.status === 'in_progress');
   if (inProg && inProg.started_at) {
-    const endTime = new Date(String(inProg.started_at).replace(' ','T'));
+    const endTime = new Date(String(inProg.started_at).replace(' ', 'T'));
     endTime.setMinutes(endTime.getMinutes() + inProg.estimated_duration_min);
-    // If estimated end is already in the past (stale op), anchor to now
     if (isNaN(endTime) || endTime < now) endTime.setTime(now.getTime());
     inProg.estimated_end_at = endTime.toISOString();
     cursor = new Date(endTime);
     cursor.setMinutes(cursor.getMinutes() + maneuver);
-    prevEnd = endTime;
   }
   for (const row of enriched) {
     if (row.status === 'in_progress') continue;
@@ -408,16 +299,733 @@ function applyEstimatedTimes(enriched) {
       row.estimated_end_at = end.toISOString();
       cursor = new Date(end);
       cursor.setMinutes(cursor.getMinutes() + maneuver);
-      prevEnd = end;
     }
   }
 }
+async function getSettings(dbAll) {
+  const rows = await dbAll('SELECT key, value FROM settings');
+  const obj  = {};
+  rows.forEach(r => { obj[r.key] = r.value; });
+  return obj;
+}
+function getManeuverTime(settings) {
+  const val = settings['maneuver_time_min'];
+  return val ? parseInt(val) || 0 : 0;
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — VERSION (pública, sem tenant)
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/version', (req, res) => {
+  sendJson(res, {
+    version:     APP_VERSION,
+    git_hash:    GIT_HASH,
+    build_date:  BUILD_DATE,
+    node:        process.version,
+    uptime_sec:  Math.floor(process.uptime()),
+    environment: process.env.NODE_ENV || 'production',
+    saas:        true,
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — SUPER-ADMIN (/api/superadmin/*)
+// ═════════════════════════════════════════════════════════════════════
+const { saasAll, saasGet, saasRun } = createSaasHelpers();
+
+addRoute('POST', '/api/superadmin/auth/login', async (req, res, ctx) => {
+  const { email = '', password = '' } = ctx.body;
+  const admin = await saasGet('SELECT * FROM saas.super_admins WHERE email=$1', [email.toLowerCase()]);
+  if (!admin || !verifyPassword(password, admin.password_hash))
+    return sendJson(res, { error: 'Credenciais inválidas' }, 401);
+  const token = jwtSign({ super_admin_id: admin.id, email: admin.email, name: admin.name, role: 'superadmin' }, 86400);
+  sendJson(res, { token, admin: { id: admin.id, name: admin.name, email: admin.email } });
+});
+
+function requireSuperAdmin(ctx, res) {
+  if (!ctx.user || ctx.user.role !== 'superadmin') {
+    sendJson(res, { error: 'Acesso restrito ao super-admin' }, 403);
+    return false;
+  }
+  return true;
+}
+
+addRoute('GET', '/api/superadmin/tenants', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const tenants = await saasAll('SELECT * FROM saas.tenants ORDER BY created_at DESC');
+  sendJson(res, tenants);
+});
+
+addRoute('POST', '/api/superadmin/tenants', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const { slug, name, plan, adminEmail, adminPassword, adminName, spots_seca, spots_molhada, logo_base64 } = ctx.body || {};
+  if (!slug || !name) return sendJson(res, { error: 'slug e name são obrigatórios' }, 400);
+  const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+  const finalAdminEmail    = adminEmail    || `admin@${cleanSlug}.marina`;
+  const finalAdminPassword = adminPassword || 'marina123';
+  try {
+    await provisionTenant(cleanSlug, {
+      marinaName: name, plan: plan || 'professional',
+      adminEmail: finalAdminEmail,
+      adminPassword: finalAdminPassword,
+      adminName: adminName || 'Administrador',
+      spots_seca:   parseInt(spots_seca   || 0, 10),
+      spots_molhada: parseInt(spots_molhada || 0, 10),
+      logo_base64: logo_base64 || '',
+    });
+    // Salva credenciais do admin na tabela saas para consulta posterior
+    await saasRun(
+      `UPDATE saas.tenants SET admin_email=$1, admin_password_plain=$2 WHERE slug=$3`,
+      [finalAdminEmail, finalAdminPassword, cleanSlug]
+    );
+    const tenant = await saasGet('SELECT * FROM saas.tenants WHERE slug=$1', [cleanSlug]);
+    sendJson(res, { ok: true, tenant }, 201);
+  } catch (e) {
+    sendJson(res, { error: e.message }, 500);
+  }
+});
+
+addRoute('GET', '/api/superadmin/tenants/:slug/credentials', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const row = await saasGet(
+    `SELECT admin_email, admin_password_plain FROM saas.tenants WHERE slug=$1`,
+    [ctx.params.slug]
+  );
+  if (!row) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+  sendJson(res, {
+    admin_email:    row.admin_email    || '',
+    admin_password: row.admin_password_plain || '',
+  });
+});
+
+addRoute('PUT', '/api/superadmin/tenants/:slug', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const { name, plan, active } = ctx.body || {};
+  await saasRun(
+    'UPDATE saas.tenants SET name=COALESCE($1,name), plan=COALESCE($2,plan), active=COALESCE($3,active) WHERE slug=$4',
+    [name||null, plan||null, active !== undefined ? active : null, ctx.params.slug]
+  );
+  sendJson(res, { ok: true });
+});
+
+addRoute('PUT', '/api/superadmin/tenants/:slug/logo', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const { logo_base64 = '' } = ctx.body || {};
+  try {
+    const { dbRun: tRun } = createDbHelpers(ctx.params.slug);
+    await tRun(
+      `INSERT INTO settings(key,value) VALUES('marina_logo',?)
+       ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
+      [logo_base64]
+    );
+    sendJson(res, { ok: true });
+  } catch (e) {
+    sendJson(res, { error: e.message }, 500);
+  }
+});
+
+addRoute('GET', '/api/superadmin/tenants/:slug/stats', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { dbAll: tAll, dbGet: tGet } = createDbHelpers(ctx.params.slug);
+    const ms = monthStart();
+    const [clients, vessels, users, revenue, revenue_month,
+           contracts, spots_seca, spots_molhada, settings_rows] = await Promise.all([
+      tGet('SELECT COUNT(*) as n FROM clients WHERE active=1'),
+      tGet('SELECT COUNT(*) as n FROM vessels WHERE active=1'),
+      tGet('SELECT COUNT(*) as n FROM users WHERE active=1'),
+      tGet(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid'`),
+      tGet(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`, [ms]),
+      tGet(`SELECT COUNT(*) as n FROM contracts WHERE status='active'`),
+      tGet(`SELECT COUNT(*) as n FROM spots WHERE type='seca'`),
+      tGet(`SELECT COUNT(*) as n FROM spots WHERE type='molhada'`),
+      tAll(`SELECT key, value FROM settings WHERE key IN ('marina_logo','marina_name','marina_email','marina_phone','marina_cnpj','marina_city','marina_state','license_plan','license_valid_until')`),
+    ]);
+    const sett = {};
+    for (const r of (settings_rows || [])) sett[r.key] = r.value;
+    sendJson(res, {
+      slug:            ctx.params.slug,
+      clients:         Number(clients?.n       || 0),
+      vessels:         Number(vessels?.n       || 0),
+      users:           Number(users?.n         || 0),
+      contracts:       Number(contracts?.n     || 0),
+      spots_seca:      Number(spots_seca?.n    || 0),
+      spots_molhada:   Number(spots_molhada?.n || 0),
+      revenue:         Number(revenue?.v       || 0),
+      revenue_month:   Number(revenue_month?.v || 0),
+      marina_logo:     sett.marina_logo    || '',
+      marina_name:     sett.marina_name    || '',
+      marina_email:    sett.marina_email   || '',
+      marina_phone:    sett.marina_phone   || '',
+      marina_cnpj:     sett.marina_cnpj    || '',
+      marina_city:     sett.marina_city    || '',
+      marina_state:    sett.marina_state   || '',
+      license_plan:    sett.license_plan   || '',
+      license_until:   sett.license_valid_until || '',
+    });
+  } catch (e) {
+    sendJson(res, { error: e.message }, 500);
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — AUTH (por tenant)
+// ═════════════════════════════════════════════════════════════════════
+addRoute('POST', '/api/auth/login', async (req, res, ctx) => {
+  const { email = '', password = '' } = ctx.body;
+  const { dbGet: tGet, dbAll: tAll } = ctx.db;
+  const user = await tGet('SELECT * FROM users WHERE email=?', [email.toLowerCase()]);
+  if (!user || !verifyPassword(password, user.password_hash))
+    return sendJson(res, { error: 'Credenciais inválidas' }, 401);
+  if (user.active === 0) return sendJson(res, { error: 'Usuário desativado' }, 403);
+  const permissions = await loadPermissionsAll(user.role, tAll);
+  const token = jwtSign({
+    user_id:     user.id,
+    email:       user.email,
+    name:        user.name,
+    role:        user.role,
+    client_id:   user.client_id || null,
+    tenant_id:   ctx.tenant?.id,
+    tenant_slug: ctx.tenantSlug,
+  });
+  sendJson(res, { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, client_id: user.client_id || null, permissions } });
+});
+
+addRoute('GET', '/api/auth/me', async (req, res, ctx) => {
+  const { dbAll: tAll } = ctx.db;
+  const permissions = await loadPermissionsAll(ctx.user.role, tAll);
+  sendJson(res, { ...ctx.user, permissions });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — CONTROLE DE ACESSO
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/access/modules', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  sendJson(res, MODULES);
+});
+
+addRoute('GET', '/api/access/permissions', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const { dbAll: tAll } = ctx.db;
+  const out = {};
+  for (const role of VALID_ROLES) out[role] = await loadPermissionsAll(role, tAll);
+  sendJson(res, { roles: VALID_ROLES, modules: MODULES, permissions: out });
+});
+
+addRoute('PUT', '/api/access/permissions', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const { role, module, can_view, can_create, can_edit, can_delete } = ctx.body || {};
+  if (!VALID_ROLES.includes(role))    return sendJson(res, { error: 'Role inválido' }, 400);
+  if (role === 'admin')               return sendJson(res, { error: 'Não é permitido alterar permissões do admin' }, 400);
+  if (!MODULE_KEYS.includes(module))  return sendJson(res, { error: 'Módulo inválido' }, 400);
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const v = can_view?1:0, cr = can_create?1:0, e = can_edit?1:0, d = can_delete?1:0;
+  const exists = await tGet('SELECT 1 FROM role_permissions WHERE role=? AND module=?', [role, module]);
+  if (exists) {
+    await tRun('UPDATE role_permissions SET can_view=?,can_create=?,can_edit=?,can_delete=? WHERE role=? AND module=?',
+               [v, cr, e, d, role, module]);
+  } else {
+    await tRun('INSERT INTO role_permissions(role,module,can_view,can_create,can_edit,can_delete) VALUES(?,?,?,?,?,?)',
+               [role, module, v, cr, e, d]);
+  }
+  await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+             [ctx.user.user_id, ctx.user.name, 'update_permissions', `${role}/${module}: v=${v} c=${cr} e=${e} d=${d}`]);
+  sendJson(res, { ok: true });
+});
+
+addRoute('POST', '/api/access/permissions/reset', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const pool = getTenantPool(ctx.tenantSlug);
+  await pool.unsafe(`DELETE FROM role_permissions WHERE role IN ('operador','loja','cliente')`);
+  await seedDefaultPermissions(pool);
+  sendJson(res, { ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — USUÁRIOS
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/users', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const { dbAll: tAll } = ctx.db;
+  const rows = await tAll(`SELECT u.id,u.email,u.name,u.role,u.client_id,u.active,c.name as client_name
+    FROM users u LEFT JOIN clients c ON u.client_id=c.id ORDER BY u.role, u.name`);
+  sendJson(res, rows);
+});
+
+addRoute('POST', '/api/users', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const b = ctx.body || {};
+  if (!b.email || !b.name || !b.password || !b.role)
+    return sendJson(res, { error: 'Campos obrigatórios: email, name, password, role' }, 400);
+  if (!VALID_ROLES.includes(b.role)) return sendJson(res, { error: 'Role inválido' }, 400);
+  if (b.role === 'cliente' && !b.client_id)
+    return sendJson(res, { error: 'Usuário do tipo cliente precisa de client_id' }, 400);
+  const { dbRun: tRun } = ctx.db;
+  try {
+    const r = await tRun('INSERT INTO users(email,password_hash,name,role,client_id,active) VALUES(?,?,?,?,?,1)',
+      [String(b.email).toLowerCase(), sha256(b.password), b.name, b.role, b.role==='cliente' ? b.client_id : null]);
+    await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+               [ctx.user.user_id, ctx.user.name, 'create_user', `${b.email} (${b.role})`]);
+    sendJson(res, { id: r.lastInsertRowid }, 201);
+  } catch (e) {
+    sendJson(res, { error: 'E-mail já cadastrado ou dados inválidos' }, 400);
+  }
+});
+
+addRoute('PUT', '/api/users/:id', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const b = ctx.body || {};
+  const id = Number(ctx.params.id);
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const u = await tGet('SELECT * FROM users WHERE id=?', [id]);
+  if (!u) return sendJson(res, { error: 'Usuário não encontrado' }, 404);
+  if (u.role === 'admin' && b.role && b.role !== 'admin') {
+    const n = await tGet(`SELECT COUNT(*) as n FROM users WHERE role='admin' AND active=1`);
+    if (Number(n?.n) <= 1) return sendJson(res, { error: 'Não pode remover o último administrador' }, 400);
+  }
+  const role = b.role && VALID_ROLES.includes(b.role) ? b.role : u.role;
+  const cid  = role === 'cliente' ? (b.client_id || u.client_id) : null;
+  const act  = b.active === undefined ? u.active : (b.active ? 1 : 0);
+  await tRun('UPDATE users SET name=?,email=?,role=?,client_id=?,active=? WHERE id=?',
+             [b.name || u.name, (b.email || u.email).toLowerCase(), role, cid, act, id]);
+  if (b.password) await tRun('UPDATE users SET password_hash=? WHERE id=?', [sha256(b.password), id]);
+  await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+             [ctx.user.user_id, ctx.user.name, 'update_user', `#${id}`]);
+  sendJson(res, { ok: true });
+});
+
+addRoute('DELETE', '/api/users/:id', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const id = Number(ctx.params.id);
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const u = await tGet('SELECT * FROM users WHERE id=?', [id]);
+  if (!u) return sendJson(res, { error: 'Usuário não encontrado' }, 404);
+  if (u.role === 'admin') {
+    const n = await tGet(`SELECT COUNT(*) as n FROM users WHERE role='admin' AND active=1`);
+    if (Number(n?.n) <= 1) return sendJson(res, { error: 'Não pode excluir o último administrador' }, 400);
+  }
+  if (id === ctx.user.user_id) return sendJson(res, { error: 'Não pode excluir a si mesmo' }, 400);
+  await tRun('DELETE FROM users WHERE id=?', [id]);
+  await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+             [ctx.user.user_id, ctx.user.name, 'delete_user', `#${id} ${u.email}`]);
+  sendJson(res, { ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — CLIENTES
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/clients', async (req, res, ctx) => {
+  const { search = '', tier = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
+  let sql = `SELECT c.*,
+    (SELECT COUNT(*) FROM vessels WHERE client_id=c.id AND active=1) as vessel_count,
+    (SELECT u.id    FROM users u WHERE u.client_id=c.id AND u.role='cliente' LIMIT 1) as user_id,
+    (SELECT u.email FROM users u WHERE u.client_id=c.id AND u.role='cliente' LIMIT 1) as user_email,
+    (SELECT u.name  FROM users u WHERE u.client_id=c.id AND u.role='cliente' LIMIT 1) as user_name,
+    (SELECT u.active FROM users u WHERE u.client_id=c.id AND u.role='cliente' LIMIT 1) as user_active
+    FROM clients c WHERE c.active=1`;
+  const a = [];
+  const scope = clientScope(ctx.user);
+  if (scope !== null) { sql += ' AND c.id=?'; a.push(scope); }
+  if (search) { sql += ' AND (c.name LIKE ? OR c.email LIKE ? OR c.cpf LIKE ?)'; a.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+  if (tier)   { sql += ' AND c.tier=?'; a.push(tier); }
+  sendJson(res, await tAll(sql + ' ORDER BY c.name', a));
+});
+
+addRoute('GET', '/api/clients/:id', async (req, res, ctx) => {
+  if (!canAccessClient(ctx.user, ctx.params.id)) return sendJson(res, { error: 'Sem permissão' }, 403);
+  const { dbGet: tGet, dbAll: tAll } = ctx.db;
+  const c = await tGet('SELECT * FROM clients WHERE id=?', [ctx.params.id]);
+  if (!c) return sendJson(res, { error: 'Não encontrado' }, 404);
+  c.vessels   = await tAll('SELECT * FROM vessels WHERE client_id=? AND active=1', [ctx.params.id]);
+  c.contracts = await tAll('SELECT ct.*, s.number as spot_number FROM contracts ct LEFT JOIN spots s ON ct.spot_id=s.id WHERE ct.client_id=?', [ctx.params.id]);
+  c.charges   = await tAll('SELECT * FROM financial_charges WHERE client_id=? ORDER BY due_date DESC LIMIT 10', [ctx.params.id]);
+  c.user      = await tGet(`SELECT id,email,name,role,active FROM users WHERE client_id=? AND role='cliente' LIMIT 1`, [ctx.params.id]) || null;
+  sendJson(res, c);
+});
+
+addRoute('POST', '/api/clients', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbRun: tRun } = ctx.db;
+  const r = await tRun('INSERT INTO clients(name,email,phone,cpf,tier,address,notes) VALUES(?,?,?,?,?,?,?)',
+                       [b.name, b.email, b.phone, b.cpf, b.tier || 'standard', b.address, b.notes]);
+  const id   = r.lastInsertRowid;
+  const sync = await syncClientUser(id, b, { mode: 'create' }, ctx.db);
+  await addAlert('sistema', `Novo cliente: ${b.name}${sync.created ? ' (usuário de acesso criado)' : ''}`, 'info', null, null, tRun);
+  if (sync.created) {
+    await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+               [ctx.user.user_id, ctx.user.name, 'auto_create_user', `cliente=${b.name} email=${b.email}`]);
+  }
+  sendJson(res, { id, user_created: sync.created, initial_password: sync.initialPassword, warning: sync.warning }, 201);
+});
+
+addRoute('PUT', '/api/clients/:id', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  await tRun('UPDATE clients SET name=?,email=?,phone=?,cpf=?,tier=?,address=?,notes=? WHERE id=?',
+             [b.name, b.email, b.phone, b.cpf, b.tier || 'standard', b.address, b.notes, ctx.params.id]);
+  await recalcLtv(ctx.params.id, tGet, tRun);
+  const sync = await syncClientUser(Number(ctx.params.id), b, { mode: 'update' }, ctx.db);
+  if (sync.created) {
+    await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+               [ctx.user.user_id, ctx.user.name, 'auto_create_user', `cliente=${b.name}`]);
+  }
+  sendJson(res, { ok: true, user_created: sync.created, user_updated: sync.updated, warning: sync.warning });
+});
+
+addRoute('DELETE', '/api/clients/:id', async (req, res, ctx) => {
+  const { dbRun: tRun } = ctx.db;
+  await tRun('UPDATE clients SET active=0 WHERE id=?', [ctx.params.id]);
+  const sync = await syncClientUser(Number(ctx.params.id), {}, { mode: 'delete' }, ctx.db);
+  sendJson(res, { ok: true, user_deactivated: sync.deactivated });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — EMBARCAÇÕES
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/vessels', async (req, res, ctx) => {
+  const { search = '', client_id = '', eligible_for = '' } = ctx.qs;
+  const { dbAll: tAll, dbGet: tGet } = ctx.db;
+  let sql = `SELECT v.*, c.name as client_name, c.tier as client_tier, s.number as spot_number, s.type as spot_type
+    FROM vessels v JOIN clients c ON v.client_id=c.id
+    LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active'
+    LEFT JOIN spots s ON ct.spot_id=s.id WHERE v.active=1`;
+  const a = [];
+  const scope = clientScope(ctx.user);
+  if (scope !== null) { sql += ' AND v.client_id=?'; a.push(scope); }
+  else if (client_id) { sql += ' AND v.client_id=?'; a.push(client_id); }
+  if (search)         { sql += ' AND (v.name LIKE ? OR v.registration LIKE ? OR c.name LIKE ?)'; a.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+  let rows = await tAll(sql + ' ORDER BY v.name', a);
+  rows = await Promise.all(rows.map(async r => ({ ...r, vessel_status: await vesselStatus(r.id, r.spot_type, tGet) })));
+  if (eligible_for === 'descida') {
+    rows = (await Promise.all(rows.map(async r => ({ r, ok: !(await isVesselInWater(r.id, r.spot_type, tGet)) })))).filter(x=>x.ok).map(x=>x.r);
+    rows = (await Promise.all(rows.map(async r => ({ r, ok: !(await tGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id])) })))).filter(x=>x.ok).map(x=>x.r);
+  } else if (eligible_for === 'subida') {
+    rows = (await Promise.all(rows.map(async r => ({ r, ok: await isVesselInWater(r.id, r.spot_type, tGet) })))).filter(x=>x.ok).map(x=>x.r);
+    rows = (await Promise.all(rows.map(async r => ({ r, ok: !(await tGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id])) })))).filter(x=>x.ok).map(x=>x.r);
+  } else if (eligible_for === 'atracacao') {
+    rows = (await Promise.all(rows.map(async r => ({ r, ok: !(await tGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [r.id])) })))).filter(x=>x.ok).map(x=>x.r);
+  }
+  sendJson(res, rows);
+});
+
+addRoute('GET', '/api/vessels/:id', async (req, res, ctx) => {
+  const { dbGet: tGet, dbAll: tAll } = ctx.db;
+  const v = await tGet(`SELECT v.*, c.name as client_name, s.type as spot_type FROM vessels v JOIN clients c ON v.client_id=c.id LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active' LEFT JOIN spots s ON ct.spot_id=s.id WHERE v.id=?`, [ctx.params.id]);
+  if (!v) return sendJson(res, { error: 'Não encontrado' }, 404);
+  v.vessel_status = await vesselStatus(v.id, v.spot_type, tGet);
+  v.history       = await tAll(`SELECT * FROM queue_operations WHERE vessel_id=? ORDER BY requested_at DESC LIMIT 20`, [ctx.params.id]);
+  v.maintenance   = await tAll(`SELECT * FROM maintenance_os WHERE vessel_id=? ORDER BY created_at DESC LIMIT 10`, [ctx.params.id]);
+  v.contract      = await tGet(`SELECT ct.*, s.number as spot_number FROM contracts ct LEFT JOIN spots s ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [ctx.params.id]);
+  // Vaga atribuída diretamente (via spots.vessel_id — fonte da verdade)
+  v.direct_spot   = await tGet(`SELECT * FROM spots WHERE vessel_id=?`, [ctx.params.id]);
+  sendJson(res, v);
+});
+
+addRoute('POST', '/api/vessels', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbRun: tRun } = ctx.db;
+  const r = await tRun('INSERT INTO vessels(client_id,name,type,size,length,beam,draft,year,registration,model,manufacturer,engine,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                       [b.client_id, b.name, b.type, b.size||'media', b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes]);
+  sendJson(res, { id: r.lastInsertRowid }, 201);
+});
+
+addRoute('PUT', '/api/vessels/:id', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbRun: tRun } = ctx.db;
+  await tRun('UPDATE vessels SET name=?,type=?,size=?,length=?,beam=?,draft=?,year=?,registration=?,model=?,manufacturer=?,engine=?,notes=? WHERE id=?',
+             [b.name, b.type, b.size||'media', b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes, ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+// ── Atribuição direta de vaga a embarcação (admin) ───────────────────
+addRoute('PUT', '/api/vessels/:id/spot', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const vesselId = ctx.params.id;
+  const { spot_id } = ctx.body; // null = desatribuir
+
+  if (!spot_id) {
+    // DESATRIBUIR — libera a vaga atual da embarcação
+    const curSpot = await tGet('SELECT * FROM spots WHERE vessel_id=?', [vesselId]);
+    if (!curSpot) return sendJson(res, { ok: true }); // já sem vaga
+    // Bloqueia se há contrato ativo vinculando esta vaga
+    const activeContract = await tGet(
+      `SELECT id FROM contracts WHERE spot_id=? AND status='active'`, [curSpot.id]);
+    if (activeContract)
+      return sendJson(res, { error: 'Esta vaga possui contrato ativo. Cancele o contrato antes de desatribuir a vaga.' }, 400);
+    await tRun(`UPDATE spots SET status='available', vessel_id=NULL WHERE id=?`, [curSpot.id]);
+    return sendJson(res, { ok: true });
+  }
+
+  // ATRIBUIR — valida e ocupa a vaga
+  const spot = await tGet('SELECT * FROM spots WHERE id=?', [spot_id]);
+  if (!spot) return sendJson(res, { error: 'Vaga não encontrada' }, 404);
+  if (spot.vessel_id && String(spot.vessel_id) !== String(vesselId))
+    return sendJson(res, { error: `Vaga ${spot.number} já está ocupada por outra embarcação.` }, 400);
+
+  // Embarcação já tem outra vaga? Deve desatribuir primeiro
+  const existing = await tGet('SELECT * FROM spots WHERE vessel_id=? AND id!=?', [vesselId, spot_id]);
+  if (existing)
+    return sendJson(res, { error: `Esta embarcação já ocupa a vaga ${existing.number}. Remova a vaga atual antes de atribuir outra.` }, 400);
+
+  await tRun(`UPDATE spots SET status='occupied', vessel_id=? WHERE id=?`, [vesselId, spot_id]);
+  sendJson(res, { ok: true });
+});
+
+addRoute('DELETE', '/api/vessels/:id', async (req, res, ctx) => {
+  await ctx.db.dbRun('UPDATE vessels SET active=0 WHERE id=?', [ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — VAGAS
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/spots/summary', async (req, res, ctx) => {
+  const { dbAll: tAll } = ctx.db;
+  const rows = await tAll('SELECT type, status, COUNT(*) as count FROM spots GROUP BY type, status');
+  const r = { seca: { total:0,available:0,occupied:0,maintenance:0 }, molhada: { total:0,available:0,occupied:0,maintenance:0 } };
+  for (const row of rows) {
+    r[row.type].total += Number(row.count);
+    if (row.status in r[row.type]) r[row.type][row.status] += Number(row.count);
+  }
+  sendJson(res, r);
+});
+
+addRoute('GET', '/api/spots', async (req, res, ctx) => {
+  const { type = '', status = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
+  let sql = 'SELECT s.*, v.name as vessel_name, c.name as client_name FROM spots s LEFT JOIN vessels v ON s.vessel_id=v.id LEFT JOIN clients c ON v.client_id=c.id WHERE 1=1';
+  const a = [];
+  if (type)   { sql += ' AND s.type=?';   a.push(type); }
+  if (status) { sql += ' AND s.status=?'; a.push(status); }
+  sendJson(res, await tAll(sql + ' ORDER BY s.number', a));
+});
+
+addRoute('POST', '/api/spots', async (req, res, ctx) => {
+  const b = ctx.body;
+  if (!b.number || !b.type) return sendJson(res, { error: 'Número e tipo obrigatórios' }, 400);
+  const r = await ctx.db.dbRun('INSERT INTO spots(number,type,status) VALUES(?,?,?)', [b.number, b.type, 'available']);
+  sendJson(res, { id: r.lastInsertRowid }, 201);
+});
+
+addRoute('PUT', '/api/spots/:id', async (req, res, ctx) => {
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const spot = await tGet('SELECT * FROM spots WHERE id=?', [ctx.params.id]);
+  if (!spot) return sendJson(res, { error: 'Vaga não encontrada' }, 404);
+  const newStatus = ctx.body.status;
+
+  // Regras de negócio:
+  // 'occupied' só via rota /vessels/:id/spot — nunca manualmente
+  if (newStatus === 'occupied')
+    return sendJson(res, { error: 'Status "ocupado" só pode ser definido ao atribuir uma embarcação à vaga.' }, 400);
+  // Não pode liberar vaga que tem embarcação atribuída
+  if (newStatus === 'available' && spot.vessel_id)
+    return sendJson(res, { error: 'A vaga possui embarcação atribuída. Desatribua a embarcação antes de liberar a vaga.' }, 400);
+  // Não pode colocar em manutenção vaga ocupada
+  if (newStatus === 'maintenance' && spot.vessel_id)
+    return sendJson(res, { error: 'A vaga está ocupada. Desatribua a embarcação antes de colocar em manutenção.' }, 400);
+
+  await tRun('UPDATE spots SET status=? WHERE id=?', [newStatus, ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+addRoute('DELETE', '/api/spots/:id', async (req, res, ctx) => {
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const spot = await tGet('SELECT * FROM spots WHERE id=?', [ctx.params.id]);
+  if (!spot) return sendJson(res, { error: 'Vaga não encontrada' }, 404);
+  if (spot.vessel_id) return sendJson(res, { error: 'Vaga com embarcação — remova o contrato primeiro' }, 400);
+  if (spot.status === 'occupied') return sendJson(res, { error: 'Vaga ocupada — cancele o contrato primeiro' }, 400);
+  await tRun('DELETE FROM spots WHERE id=?', [ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — CONTRATOS
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/contracts', async (req, res, ctx) => {
+  const { status = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
+  let sql = `SELECT ct.*, c.name as client_name, c.tier as client_tier,
+    v.name as vessel_name, s.number as spot_number
+    FROM contracts ct JOIN clients c ON ct.client_id=c.id
+    JOIN vessels v ON ct.vessel_id=v.id LEFT JOIN spots s ON ct.spot_id=s.id WHERE 1=1`;
+  const a = [];
+  const scope = clientScope(ctx.user);
+  if (scope !== null) { sql += ' AND ct.client_id=?'; a.push(scope); }
+  if (status) { sql += ' AND ct.status=?'; a.push(status); }
+  sendJson(res, await tAll(sql + ' ORDER BY ct.start_date DESC', a));
+});
+
+addRoute('GET', '/api/contracts/:id', async (req, res, ctx) => {
+  const { dbGet: tGet } = ctx.db;
+  const ct = await tGet(`SELECT ct.*, c.name as client_name, c.tier as client_tier,
+    v.name as vessel_name, s.number as spot_number
+    FROM contracts ct JOIN clients c ON ct.client_id=c.id
+    JOIN vessels v ON ct.vessel_id=v.id LEFT JOIN spots s ON ct.spot_id=s.id WHERE ct.id=?`, [ctx.params.id]);
+  if (!ct) return sendJson(res, { error: 'Não encontrado' }, 404);
+  sendJson(res, ct);
+});
+
+addRoute('POST', '/api/contracts', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbRun: tRun } = ctx.db;
+  const r = await tRun('INSERT INTO contracts(client_id,vessel_id,spot_id,type,start_date,end_date,monthly_value,status,notes,contract_file,contract_file_name) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                       [b.client_id, b.vessel_id, b.spot_id || null, b.type, b.start_date, b.end_date || null, b.monthly_value, b.status || 'active', b.notes || null, b.contract_file || null, b.contract_file_name || null]);
+  if (b.spot_id) await tRun(`UPDATE spots SET status='occupied',vessel_id=? WHERE id=?`, [b.vessel_id, b.spot_id]);
+
+  // Gera mensalidades mensais:
+  // - Sem término: até 31/12 do ano corrente
+  // - Com término: do início até a data de término (máx. 60 parcelas)
+  const contractId = r.lastInsertRowid;
+  const startDt    = new Date(b.start_date + 'T12:00:00Z');
+  const endLimit   = b.end_date
+    ? new Date(b.end_date + 'T12:00:00Z')
+    : new Date(Date.UTC(new Date().getFullYear(), 11, 31)); // 31/12 ano atual
+
+  const cur = new Date(startDt);
+  let chargesGenerated = 0;
+  while (cur <= endLimit && chargesGenerated < 60) {
+    const ds    = cur.toISOString().slice(0, 10);
+    const month = cur.toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
+    await tRun(`INSERT INTO financial_charges(client_id,contract_id,description,amount,due_date,status) VALUES(?,?,?,?,?,'pending')`,
+               [b.client_id, contractId, `Mensalidade ${b.type} - ${month}`, b.monthly_value, ds]);
+    cur.setUTCMonth(cur.getUTCMonth() + 1);
+    chargesGenerated++;
+  }
+  sendJson(res, { id: contractId }, 201);
+});
+
+addRoute('GET', '/api/contracts/:id/cancel-info', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const { dbGet: tGet, dbAll: tAll } = ctx.db;
+  const contract = await tGet('SELECT * FROM contracts WHERE id=?', [ctx.params.id]);
+  if (!contract) return sendJson(res, { error: 'Contrato não encontrado' }, 404);
+  if (contract.status !== 'active') return sendJson(res, { error: 'Contrato não está ativo' }, 400);
+
+  // Parcelas vencidas (overdue ou pending com vencimento no passado/hoje)
+  const today = todayStr();
+  const overdueCharges = await tAll(
+    `SELECT * FROM financial_charges WHERE contract_id=? AND status IN ('overdue','pending') AND due_date<=? ORDER BY due_date ASC`,
+    [ctx.params.id, today]
+  );
+  // Parcelas futuras pendentes
+  const futureCharges = await tAll(
+    `SELECT * FROM financial_charges WHERE contract_id=? AND status='pending' AND due_date>? ORDER BY due_date ASC`,
+    [ctx.params.id, today]
+  );
+
+  const overdue_amount = overdueCharges.reduce((s, c) => s + Number(c.amount), 0);
+  const notice_amount  = Number(contract.monthly_value); // 1 mês aviso prévio
+
+  sendJson(res, {
+    contract_id:      Number(contract.id),
+    monthly_value:    Number(contract.monthly_value),
+    overdue_count:    overdueCharges.length,
+    overdue_amount,
+    notice_amount,
+    total_due:        overdue_amount + notice_amount,
+    future_count:     futureCharges.length,
+    overdue_charges:  overdueCharges.map(c => ({ ...c, amount: Number(c.amount) })),
+  });
+});
+
+addRoute('PUT', '/api/contracts/:id', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbGet: tGet, dbAll: tAll, dbRun: tRun } = ctx.db;
+  const old = await tGet('SELECT * FROM contracts WHERE id=?', [ctx.params.id]);
+  if (!old) return sendJson(res, { error: 'Contrato não encontrado' }, 404);
+
+  // Cancelamento com validações
+  if (b.status === 'cancelled' && old.status === 'active') {
+    const today = todayStr();
+    // Bloqueia se houver parcelas vencidas não pagas
+    const overdueCount = await tGet(
+      `SELECT COUNT(*) as n FROM financial_charges WHERE contract_id=? AND status IN ('overdue','pending') AND due_date<=?`,
+      [ctx.params.id, today]
+    );
+    if (Number(overdueCount?.n) > 0)
+      return sendJson(res, { error: `Há ${overdueCount.n} parcela(s) vencida(s) em aberto. Dê baixa nelas antes de cancelar o contrato.` }, 400);
+    if (!b.justification || !b.justification.trim())
+      return sendJson(res, { error: 'Justificativa é obrigatória para cancelamento.' }, 400);
+
+    // Cancela parcelas futuras pendentes
+    await tRun(
+      `UPDATE financial_charges SET status='cancelled' WHERE contract_id=? AND status='pending' AND due_date>?`,
+      [ctx.params.id, today]
+    );
+    // Libera vaga
+    if (old.spot_id)
+      await tRun(`UPDATE spots SET status='available',vessel_id=NULL WHERE id=?`, [old.spot_id]);
+    // Atualiza contrato
+    await tRun(
+      'UPDATE contracts SET status=?,notes=?,contract_file=?,contract_file_name=? WHERE id=?',
+      ['cancelled',
+       `${old.notes ? old.notes + '\n' : ''}[CANCELADO] ${b.justification}`.trim(),
+       b.contract_file !== undefined ? (b.contract_file || null) : old.contract_file,
+       b.contract_file_name !== undefined ? (b.contract_file_name || null) : old.contract_file_name,
+       ctx.params.id]
+    );
+    // Registra no log do sistema
+    await tRun(
+      `INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+      [ctx.user?.user_id || null, ctx.user?.name || null, 'contract_cancelled',
+       JSON.stringify({ contract_id: Number(ctx.params.id), justification: b.justification.trim(), cancelled_by: ctx.user?.name || '—' })]
+    );
+    return sendJson(res, { ok: true });
+  }
+
+  // Atualização normal
+  await tRun('UPDATE contracts SET status=?,monthly_value=?,end_date=?,notes=?,contract_file=?,contract_file_name=? WHERE id=?',
+             [b.status || old.status, b.monthly_value || old.monthly_value, b.end_date || old.end_date, b.notes || old.notes,
+              b.contract_file !== undefined ? (b.contract_file || null) : old.contract_file,
+              b.contract_file_name !== undefined ? (b.contract_file_name || null) : old.contract_file_name,
+              ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — FILA DE OPERAÇÕES
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/queue/history', async (req, res, ctx) => {
+  const { dbAll: tAll, dbGet: tGet } = ctx.db;
+  const scope = clientScope(ctx.user);
+  let sql = `SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, c.name as client_name, c.tier as client_tier
+    FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
+    WHERE q.status IN ('completed','cancelled')`;
+  const a = [];
+  if (scope !== null) { sql += ' AND q.client_id=?'; a.push(scope); }
+  const settings = await getSettings(tAll);
+  const rows     = await tAll(sql + ' ORDER BY q.requested_at DESC LIMIT 50', a);
+  const enriched = await Promise.all(rows.map(q => enrichQueueRow(q, settings, tGet)));
+  sendJson(res, enriched);
+});
+
+addRoute('GET', '/api/queue/calendar', async (req, res, ctx) => {
+  const { dbAll: tAll, dbGet: tGet } = ctx.db;
+  const today    = todayStr();
+  const settings = await getSettings(tAll);
+  const done     = await tAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, c.name as client_name, c.tier as client_tier
+    FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
+    WHERE q.status IN ('completed','cancelled') AND DATE(q.requested_at)=? ORDER BY COALESCE(q.started_at, q.requested_at) ASC`, [today]);
+  const active   = await tAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, c.name as client_name, c.tier as client_tier
+    FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
+    WHERE q.status NOT IN ('completed','cancelled') ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
+  const activeEnriched = await Promise.all(active.map(q => enrichQueueRow(q, settings, tGet)));
+  const doneEnriched   = await Promise.all(done.map(q => enrichQueueRow(q, settings, tGet)));
+  applyEstimatedTimes(activeEnriched, getManeuverTime(settings));
+  sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime(settings) });
+});
+
 addRoute('GET', '/api/queue', async (req, res, ctx) => {
   const { status = '' } = ctx.qs;
-  let sql = `SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, v.length as vessel_length,
-    c.name as client_name, c.tier as client_tier
+  const { dbAll: tAll, dbGet: tGet } = ctx.db;
+  let sql = `SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, v.length as vessel_length, c.name as client_name, c.tier as client_tier
     FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id WHERE 1=1`;
   const a = [];
+  const scope = clientScope(ctx.user);
+  if (scope !== null) { sql += ' AND q.client_id=?'; a.push(scope); }
   if (status) {
     const ss = status.split(',');
     sql += ` AND q.status IN (${ss.map(() => '?').join(',')})`;
@@ -425,974 +1033,802 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
   } else {
     sql += ` AND q.status NOT IN ('completed','cancelled')`;
   }
-  const rows = dbAll(sql + ' ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC', a);
-  const enriched = rows.map(enrichQueueRow);
-  applyEstimatedTimes(enriched);
+  const settings = await getSettings(tAll);
+  const rows     = await tAll(sql + ' ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC', a);
+  const enriched = await Promise.all(rows.map(q => enrichQueueRow(q, settings, tGet)));
+  applyEstimatedTimes(enriched, getManeuverTime(settings));
   sendJson(res, enriched);
 });
-addRoute('GET', '/api/queue/calendar', async (req, res) => {
-  const today = todayStr();
-  // Completed/cancelled ops from today (actual times)
-  const done = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size,
-    c.name as client_name, c.tier as client_tier
-    FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
-    WHERE q.status IN ('completed','cancelled') AND DATE(q.requested_at)=?
-    ORDER BY COALESCE(q.started_at, q.requested_at) ASC`, [today]);
-  // Active ops (with estimated times)
-  const active = dbAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size,
-    c.name as client_name, c.tier as client_tier
-    FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id
-    WHERE q.status NOT IN ('completed','cancelled')
-    ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
-  const activeEnriched = active.map(enrichQueueRow);
-  applyEstimatedTimes(activeEnriched);
-  const doneEnriched   = done.map(enrichQueueRow);
-  sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime() });
-});
-addRoute('POST', '/api/queue', async (req, res, ctx) => {
-  const vessel = dbGet('SELECT * FROM vessels WHERE id=?', [ctx.body.vessel_id]);
-  if (!vessel) return sendJson(res, { error: 'Embarcação não encontrada' }, 404);
-  const opType  = ctx.body.operation_type;
-  const spot    = dbGet(`SELECT s.type FROM spots s JOIN contracts ct ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [ctx.body.vessel_id]);
-  const spotType = spot?.type || null;
-  // Enforce descida/subida sequence using isVesselInWater
-  if (opType === 'descida' && isVesselInWater(ctx.body.vessel_id, spotType))
-    return sendJson(res, { error: 'A embarcação já está na água. Registre uma Subida antes de fazer outra Descida.' }, 400);
-  if (opType === 'subida' && !isVesselInWater(ctx.body.vessel_id, spotType))
-    return sendJson(res, { error: 'A embarcação não está na água. Registre uma Descida antes de fazer uma Subida.' }, 400);
-  // Block duplicate active ops for same vessel
-  const activeOp = dbGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [ctx.body.vessel_id]);
-  if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui uma operação ativa na fila (cancele-a primeiro).' }, 400);
 
-  // ── Operation hours validation (minutes-of-day arithmetic, timezone-safe) ─
-  const cfg = {};
-  dbAll(`SELECT key,value FROM settings WHERE key IN ('ops_start_time','ops_end_time','maneuver_time_min')`)
-    .forEach(r => { cfg[r.key] = r.value; });
-  const opsStart    = cfg.ops_start_time  || '07:00';
-  const opsEnd      = cfg.ops_end_time    || '18:00';
-  const maneuverMin = parseInt(cfg.maneuver_time_min) || 0;
-  const hhmm2min = s => { const [h,m] = (s||'00:00').split(':').map(Number); return h*60+m; };
-  const fmtMin   = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
-  const now      = new Date();
-  const nowMin   = now.getHours()*60 + now.getMinutes();
-  const startMin = hhmm2min(opsStart);
-  const endMin   = hhmm2min(opsEnd);
-  // Cursor = earliest possible start for the new operation (minutes-of-day)
-  let cursorMin = Math.max(nowMin, startMin);
-  const queuedActive = dbAll(`SELECT q.*, v.size as vessel_size FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id WHERE q.status NOT IN ('completed','cancelled') ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
+addRoute('POST', '/api/queue', async (req, res, ctx) => {
+  const { dbGet: tGet, dbAll: tAll, dbRun: tRun } = ctx.db;
+  const vessel = await tGet('SELECT * FROM vessels WHERE id=?', [ctx.body.vessel_id]);
+  if (!vessel) return sendJson(res, { error: 'Embarcação não encontrada' }, 404);
+  if (ctx.user && ctx.user.role === 'cliente' && Number(vessel.client_id) !== Number(ctx.user.client_id))
+    return sendJson(res, { error: 'Você só pode solicitar operações de suas próprias embarcações' }, 403);
+  const opType   = ctx.body.operation_type;
+  const spot     = await tGet(`SELECT s.type FROM spots s JOIN contracts ct ON ct.spot_id=s.id WHERE ct.vessel_id=? AND ct.status='active'`, [ctx.body.vessel_id]);
+  const spotType = spot?.type || null;
+  if (opType === 'descida' && (await isVesselInWater(ctx.body.vessel_id, spotType, tGet)))
+    return sendJson(res, { error: 'A embarcação já está na água.' }, 400);
+  if (opType === 'subida' && !(await isVesselInWater(ctx.body.vessel_id, spotType, tGet)))
+    return sendJson(res, { error: 'A embarcação não está na água.' }, 400);
+  const activeOp = await tGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [ctx.body.vessel_id]);
+  if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui operação ativa na fila.' }, 400);
+
+  const settings  = await getSettings(tAll);
+  const opsStart  = settings['ops_start_time']  || '07:00';
+  const opsEnd    = settings['ops_end_time']    || '18:00';
+  const maneuverMin = parseInt(settings['maneuver_time_min']) || 0;
+  const hhmm2min  = s => { const [h, m] = (s||'00:00').split(':').map(Number); return h*60+m; };
+  const fmtMin    = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const now       = new Date();
+  const nowMin    = now.getHours()*60 + now.getMinutes();
+  const startMin  = hhmm2min(opsStart), endMin = hhmm2min(opsEnd);
+  let cursorMin   = Math.max(nowMin, startMin);
+  const queuedActive = await tAll(`SELECT q.*, v.size as vessel_size FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id WHERE q.status NOT IN ('completed','cancelled') ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
   for (const op of queuedActive) {
-    const dur = getAvgDuration(op.vessel_size, op.operation_type);
+    const dur = getAvgDurationSync(settings, op.vessel_size, op.operation_type);
     if (op.status === 'in_progress' && op.started_at) {
-      // Parse stored local datetime — replace space with T so JS treats it as local time
-      const sa = new Date(String(op.started_at).replace(' ','T'));
+      const sa = new Date(String(op.started_at).replace(' ', 'T'));
       const estimatedEnd = new Date(sa);
       estimatedEnd.setMinutes(estimatedEnd.getMinutes() + dur);
       if (!isNaN(estimatedEnd) && estimatedEnd > now) {
-        // Op is still running: anchor cursor to its estimated end (minutes of today)
         const opEndMin = estimatedEnd.getHours()*60 + estimatedEnd.getMinutes();
         if (opEndMin > cursorMin) cursorMin = opEndMin;
       }
-      // else: estimated end is in the past (stale in_progress) — cursor stays at nowMin
-    } else if (op.status === 'waiting') {
-      cursorMin += dur;
-    }
+    } else if (op.status === 'waiting') { cursorMin += dur; }
     cursorMin += maneuverMin;
   }
-  const newDur = getAvgDuration(vessel.size, opType);
-  const estimatedEndMin = cursorMin + newDur;
-  // Block if estimated end exceeds ops_end_time
-  if (estimatedEndMin > endMin) {
-    return sendJson(res, { error: `Operação não pode ser incluída: previsão de término às ${fmtMin(estimatedEndMin)}, após o horário de encerramento das operações (${opsEnd}). Duração estimada: ${newDur} min.` }, 400);
-  }
-  // Warn if requested before ops start time
+  const newDur = getAvgDurationSync(settings, vessel.size, opType);
+  if (cursorMin + newDur > endMin)
+    return sendJson(res, { error: `Operação não pode ser incluída: previsão de término às ${fmtMin(cursorMin + newDur)}, após ${opsEnd}.` }, 400);
   let warning = null;
-  if (nowMin < startMin) {
-    warning = `Solicitação recebida antes do horário de início das operações (${opsStart}). A operação foi agendada para iniciar a partir das ${opsStart}.`;
-  }
-  // ──────────────────────────────────────────────────────────────────
+  if (nowMin < startMin) warning = `Solicitação recebida antes do horário de início (${opsStart}).`;
 
-  const client   = dbGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
-  const priority = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
-  const maxOrder = dbGet(`SELECT MAX(queue_order) as mo FROM queue_operations WHERE status='waiting'`);
-  const queueOrder = (maxOrder?.mo || 0) + 1;
-  const r = dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes,queue_order,requested_at) VALUES(?,?,?,'waiting',?,?,?,?)`,
-                  [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null, queueOrder, nowStr()]);
-  sendJson(res, { id: Number(r.lastInsertRowid), warning }, 201);
+  const client    = await tGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
+  const priority  = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
+  const maxOrder  = await tGet(`SELECT MAX(queue_order) as mo FROM queue_operations WHERE status='waiting'`);
+  const queueOrder = (Number(maxOrder?.mo) || 0) + 1;
+  const r = await tRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes,queue_order,requested_at) VALUES(?,?,?,'waiting',?,?,?,?)`,
+                       [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null, queueOrder, nowStr()]);
+  sendJson(res, { id: r.lastInsertRowid, warning }, 201);
 });
+
 addRoute('PUT', '/api/queue/:id/reorder', async (req, res, ctx) => {
   const { direction, justification } = ctx.body || {};
-  if (!justification || !justification.trim())
-    return sendJson(res, { error: 'Justificativa obrigatória para reordenar a fila.' }, 400);
-  if (!['up','down'].includes(direction))
-    return sendJson(res, { error: 'Direção inválida.' }, 400);
-  const op = dbGet(`SELECT * FROM queue_operations WHERE id=? AND status='waiting'`, [ctx.params.id]);
-  if (!op) return sendJson(res, { error: 'Operação não encontrada ou não está aguardando.' }, 404);
-  // Get all waiting ops sorted by queue_order to find adjacent
-  const waitingOps = dbAll(`SELECT id, queue_order FROM queue_operations WHERE status='waiting' ORDER BY queue_order ASC`);
+  if (!justification?.trim()) return sendJson(res, { error: 'Justificativa obrigatória.' }, 400);
+  if (!['up','down'].includes(direction)) return sendJson(res, { error: 'Direção inválida.' }, 400);
+  const { dbGet: tGet, dbAll: tAll, dbRun: tRun } = ctx.db;
+  const op = await tGet(`SELECT * FROM queue_operations WHERE id=? AND status='waiting'`, [ctx.params.id]);
+  if (!op) return sendJson(res, { error: 'Operação não encontrada.' }, 404);
+  const waitingOps = await tAll(`SELECT id, queue_order FROM queue_operations WHERE status='waiting' ORDER BY queue_order ASC`);
   const idx = waitingOps.findIndex(o => o.id == ctx.params.id);
-  if (idx === -1) return sendJson(res, { error: 'Operação não encontrada na fila de espera.' }, 404);
   const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
   if (swapIdx < 0 || swapIdx >= waitingOps.length)
-    return sendJson(res, { error: direction === 'up' ? 'Já é o primeiro na fila.' : 'Já é o último na fila.' }, 400);
+    return sendJson(res, { error: direction === 'up' ? 'Já é o primeiro.' : 'Já é o último.' }, 400);
   const other = waitingOps[swapIdx];
-  // Swap queue_order values
-  dbRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [other.queue_order, op.id]);
-  dbRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [op.queue_order, other.id]);
-  // Log the action
-  const user = ctx.user || {};
-  const vessel = dbGet('SELECT name FROM vessels WHERE id=?', [op.vessel_id]);
-  dbRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
-    [user.id||null, user.name||user.email||'Sistema', 'queue_reorder',
-     JSON.stringify({ op_id: op.id, vessel: vessel?.name, direction, justification: justification.trim(), moved_from: idx+1, moved_to: swapIdx+1, total: waitingOps.length })]);
-  sendJson(res, { ok: true });
-});
-addRoute('PUT', '/api/queue/:id', async (req, res, ctx) => {
-  const b = ctx.body;
-  const old = dbGet('SELECT * FROM queue_operations WHERE id=?', [ctx.params.id]);
-  const ns = b.status || old.status;
-  let started   = old.started_at,   completed = old.completed_at;
-  if (ns === 'in_progress' && !started)                       started   = nowStr();
-  if (['completed', 'cancelled'].includes(ns) && !completed)  completed = nowStr();
-  dbRun('UPDATE queue_operations SET status=?,started_at=?,completed_at=?,operator=?,notes=? WHERE id=?',
-        [ns, started || null, completed || null, b.operator || old.operator || null, b.notes || old.notes || null, ctx.params.id]);
-  sendJson(res, { ok: true });
-});
-addRoute('DELETE', '/api/queue/:id', async (req, res, ctx) => {
-  dbRun(`UPDATE queue_operations SET status='cancelled' WHERE id=?`, [ctx.params.id]);
+  await tRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [other.queue_order, op.id]);
+  await tRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [op.queue_order, other.id]);
+  const vessel = await tGet('SELECT name FROM vessels WHERE id=?', [op.vessel_id]);
+  await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
+    [ctx.user.user_id||null, ctx.user.name||'Sistema', 'queue_reorder',
+     JSON.stringify({ op_id: op.id, vessel: vessel?.name, direction, justification: justification.trim() })]);
   sendJson(res, { ok: true });
 });
 
-// ── FINANCIAL ─────────────────────────────────────────────────────────
-addRoute('GET', '/api/financial/charges', async (req, res, ctx) => {
-  const { status = '', client_id = '' } = ctx.qs;
-  let sql = 'SELECT fc.*, c.name as client_name, c.tier as client_tier FROM financial_charges fc JOIN clients c ON fc.client_id=c.id WHERE 1=1';
-  const a = [];
-  if (status)    { sql += ' AND fc.status=?';    a.push(status); }
-  if (client_id) { sql += ' AND fc.client_id=?'; a.push(client_id); }
-  sendJson(res, dbAll(sql + ' ORDER BY fc.due_date DESC', a));
-});
-addRoute('POST', '/api/financial/charges', async (req, res, ctx) => {
+addRoute('PUT', '/api/queue/:id', async (req, res, ctx) => {
   const b = ctx.body;
-  const r = dbRun(`INSERT INTO financial_charges(client_id,contract_id,description,amount,due_date,status,notes) VALUES(?,?,?,?,?,?,?)`,
-                  [b.client_id, b.contract_id || null, b.description, b.amount, b.due_date, b.status || 'pending', b.notes || null]);
-  sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
-});
-addRoute('PUT', '/api/financial/charges/:id', async (req, res, ctx) => {
-  const b   = ctx.body;
-  const old = dbGet('SELECT * FROM financial_charges WHERE id=?', [ctx.params.id]);
-  if (!old) return sendJson(res, { error: 'Cobrança não encontrada' }, 404);
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const old = await tGet('SELECT * FROM queue_operations WHERE id=?', [ctx.params.id]);
   const ns  = b.status || old.status;
-  const paid_date = (ns === 'paid' && !old.paid_date) ? todayStr() : (b.paid_date || old.paid_date || null);
-  const newNotes = b.pay_notes || b.notes || old.notes || null;
-  dbRun('UPDATE financial_charges SET status=?,paid_date=?,payment_method=?,notes=? WHERE id=?',
-        [ns, paid_date, b.payment_method || old.payment_method || null, newNotes, ctx.params.id]);
-  // Payment log — only when transitioning to paid
-  if (ns === 'paid' && old.status !== 'paid') {
-    const clientRow = old.client_id ? dbGet('SELECT name FROM clients WHERE id=?', [old.client_id]) : null;
-    dbRun(`INSERT INTO payment_logs(charge_id,client_id,client_name,description,amount,payment_method,pay_notes,comprovante_data,comprovante_name,user_id,user_email,user_name)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [old.id, old.client_id, clientRow?.name || null, old.description, old.amount,
-           b.payment_method || null, b.pay_notes || null,
-           b.comprovante_data || null, b.comprovante_name || null,
-           ctx.user?.user_id || null, ctx.user?.email || null, ctx.user?.name || null]);
-    recalcLtv(old.client_id);
-  }
-  checkOverdue();
+  let started = old.started_at, completed = old.completed_at;
+  if (ns === 'in_progress' && !started) started = nowStr();
+  if (['completed','cancelled'].includes(ns) && !completed) completed = nowStr();
+  await tRun('UPDATE queue_operations SET status=?,started_at=?,completed_at=?,operator=?,notes=? WHERE id=?',
+             [ns, started || null, completed || null, b.operator || old.operator || null, b.notes || old.notes || null, ctx.params.id]);
   sendJson(res, { ok: true });
 });
-addRoute('GET', '/api/financial/summary', async (req, res) => {
-  checkOverdue();
+
+addRoute('DELETE', '/api/queue/:id', async (req, res, ctx) => {
+  await ctx.db.dbRun(`UPDATE queue_operations SET status='cancelled' WHERE id=?`, [ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — FINANCEIRO
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/financial/charges', async (req, res, ctx) => {
+  const { status = '', client_id = '', contract_id = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
+  let sql = 'SELECT fc.*, c.name as client_name, c.tier as client_tier FROM financial_charges fc JOIN clients c ON fc.client_id=c.id WHERE 1=1';
+  const a = [];
+  const scope = clientScope(ctx.user);
+  if (scope !== null)    { sql += ' AND fc.client_id=?'; a.push(scope); }
+  else if (client_id)    { sql += ' AND fc.client_id=?'; a.push(client_id); }
+  if (contract_id)       { sql += ' AND fc.contract_id=?'; a.push(contract_id); }
+  if (status)            { sql += ' AND fc.status=?'; a.push(status); }
+  const rows = await tAll(sql + ' ORDER BY fc.due_date ASC', a);
+  sendJson(res, rows.map(r => ({ ...r, amount: Number(r.amount) })));
+});
+
+addRoute('POST', '/api/financial/charges', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbRun: tRun } = ctx.db;
+  const r = await tRun(`INSERT INTO financial_charges(client_id,contract_id,description,amount,due_date,status,notes) VALUES(?,?,?,?,?,?,?)`,
+                       [b.client_id, b.contract_id || null, b.description, b.amount, b.due_date, b.status || 'pending', b.notes || null]);
+  sendJson(res, { id: r.lastInsertRowid }, 201);
+});
+
+addRoute('PUT', '/api/financial/charges/:id', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const old = await tGet('SELECT * FROM financial_charges WHERE id=?', [ctx.params.id]);
+  if (!old) return sendJson(res, { error: 'Cobrança não encontrada' }, 404);
+  const ns       = b.status || old.status;
+  const paid_date = (ns === 'paid' && !old.paid_date) ? todayStr() : (b.paid_date || old.paid_date || null);
+  await tRun('UPDATE financial_charges SET status=?,paid_date=?,payment_method=?,notes=? WHERE id=?',
+             [ns, paid_date, b.payment_method || old.payment_method || null, b.pay_notes || b.notes || old.notes || null, ctx.params.id]);
+  if (ns === 'paid' && old.status !== 'paid') {
+    const clientRow = old.client_id ? await tGet('SELECT name FROM clients WHERE id=?', [old.client_id]) : null;
+    await tRun(`INSERT INTO payment_logs(charge_id,client_id,client_name,description,amount,payment_method,pay_notes,comprovante_data,comprovante_name,user_id,user_email,user_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+               [old.id, old.client_id, clientRow?.name||null, old.description, old.amount,
+                b.payment_method||null, b.pay_notes||null, b.comprovante_data||null, b.comprovante_name||null,
+                ctx.user?.user_id||null, ctx.user?.email||null, ctx.user?.name||null]);
+    await recalcLtv(old.client_id, tGet, tRun);
+  }
+  await checkOverdue(tRun);
+  sendJson(res, { ok: true });
+});
+
+addRoute('GET', '/api/financial/summary', async (req, res, ctx) => {
+  const { dbGet: tGet, dbAll: tAll } = ctx.db;
+  await checkOverdue(ctx.db.dbRun);
   const ms = monthStart();
   sendJson(res, {
-    total_paid_month: dbGet(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`, [ms])?.v || 0,
-    total_pending:    dbGet(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='pending'`)?.v || 0,
-    total_overdue:    dbGet(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='overdue'`)?.v || 0,
-    count_overdue:    dbGet(`SELECT COUNT(*) as v FROM financial_charges WHERE status='overdue'`)?.v || 0,
-    revenue_by_month: dbAll(`SELECT strftime('%Y-%m',paid_date) as month, COALESCE(SUM(amount),0) as total FROM financial_charges WHERE status='paid' AND paid_date IS NOT NULL GROUP BY month ORDER BY month DESC LIMIT 6`),
+    total_paid_month: Number((await tGet(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`, [ms]))?.v || 0),
+    total_pending:    Number((await tGet(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='pending'`))?.v || 0),
+    total_overdue:    Number((await tGet(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='overdue'`))?.v || 0),
+    count_overdue:    Number((await tGet(`SELECT COUNT(*) as v FROM financial_charges WHERE status='overdue'`))?.v || 0),
+    revenue_by_month: (await tAll(`SELECT TO_CHAR(paid_date,'YYYY-MM') as month, COALESCE(SUM(amount),0) as total FROM financial_charges WHERE status='paid' AND paid_date IS NOT NULL GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY TO_CHAR(paid_date,'YYYY-MM') DESC LIMIT 6`)).map(r=>({...r,total:Number(r.total)})),
   });
 });
 
-// ── STORE ─────────────────────────────────────────────────────────────
+addRoute('GET', '/api/financial/payment-logs', async (req, res, ctx) => {
+  const { charge_id = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
+  let sql = 'SELECT * FROM payment_logs';
+  const params = [];
+  if (charge_id) { sql += ' WHERE charge_id=?'; params.push(charge_id); }
+  sql += ' ORDER BY created_at DESC LIMIT 200';
+  const logs = await tAll(sql, params);
+  sendJson(res, logs.map(l => ({ ...l, comprovante_data: l.comprovante_data ? '[anexo]' : null })));
+});
+
+addRoute('GET', '/api/financial/payment-logs/:id/comprovante', async (req, res, ctx) => {
+  const log = await ctx.db.dbGet(`SELECT comprovante_data, comprovante_name FROM payment_logs WHERE id=?`, [ctx.params.id]);
+  if (!log || !log.comprovante_data) return sendJson(res, { error: 'Sem comprovante' }, 404);
+  sendJson(res, log);
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — LOJA / PDV
+// ═════════════════════════════════════════════════════════════════════
 addRoute('GET', '/api/store/items', async (req, res, ctx) => {
   const { category = '', low_stock = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
   let sql = 'SELECT * FROM store_items WHERE active=1';
   const a = [];
   if (category)  { sql += ' AND category=?'; a.push(category); }
   if (low_stock) sql += ' AND stock<=min_stock';
-  sendJson(res, dbAll(sql + ' ORDER BY category,name', a));
+  sendJson(res, await tAll(sql + ' ORDER BY category,name', a));
 });
+
 addRoute('POST', '/api/store/items', async (req, res, ctx) => {
   const b = ctx.body;
-  const r = dbRun('INSERT INTO store_items(name,category,price,cost,stock,min_stock,unit) VALUES(?,?,?,?,?,?,?)',
-                  [b.name, b.category || 'outros', b.price, b.cost || 0, b.stock || 0, b.min_stock || 5, b.unit || 'un']);
-  sendJson(res, { id: Number(r.lastInsertRowid) }, 201);
+  const r = await ctx.db.dbRun('INSERT INTO store_items(name,category,price,cost,stock,min_stock,unit) VALUES(?,?,?,?,?,?,?)',
+                               [b.name, b.category||'outros', b.price, b.cost||0, b.stock||0, b.min_stock||5, b.unit||'un']);
+  sendJson(res, { id: r.lastInsertRowid }, 201);
 });
+
 addRoute('PUT', '/api/store/items/:id', async (req, res, ctx) => {
   const b = ctx.body;
-  dbRun('UPDATE store_items SET name=?,category=?,price=?,cost=?,stock=?,min_stock=?,unit=? WHERE id=?',
-        [b.name, b.category, b.price, b.cost || 0, b.stock || 0, b.min_stock || 5, b.unit || 'un', ctx.params.id]);
-  checkStock();
+  const { dbAll: tAll, dbGet: tGet, dbRun: tRun } = ctx.db;
+  await tRun('UPDATE store_items SET name=?,category=?,price=?,cost=?,stock=?,min_stock=?,unit=? WHERE id=?',
+             [b.name, b.category, b.price, b.cost||0, b.stock||0, b.min_stock||5, b.unit||'un', ctx.params.id]);
+  await checkStock(tAll, tAll, tGet, tRun);
   sendJson(res, { ok: true });
 });
+
 addRoute('DELETE', '/api/store/items/:id', async (req, res, ctx) => {
-  dbRun('UPDATE store_items SET active=0 WHERE id=?', [ctx.params.id]);
+  await ctx.db.dbRun('UPDATE store_items SET active=0 WHERE id=?', [ctx.params.id]);
   sendJson(res, { ok: true });
 });
+
 addRoute('GET', '/api/store/orders', async (req, res, ctx) => {
   const { status = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
   let sql = 'SELECT o.*, v.name as vessel_name, c.name as client_name FROM store_orders o LEFT JOIN vessels v ON o.vessel_id=v.id LEFT JOIN clients c ON o.client_id=c.id WHERE 1=1';
   const a = [];
   if (status) { sql += ' AND o.status=?'; a.push(status); }
-  const rows = dbAll(sql + ' ORDER BY o.created_at DESC LIMIT 100', a);
+  const rows = await tAll(sql + ' ORDER BY o.created_at DESC LIMIT 100', a);
   for (const r of rows) { try { r.items = JSON.parse(r.items); } catch { /* keep raw */ } }
   sendJson(res, rows);
 });
+
 addRoute('POST', '/api/store/orders', async (req, res, ctx) => {
   const b = ctx.body;
+  const { dbAll: tAll, dbGet: tGet, dbRun: tRun } = ctx.db;
   const items    = b.items || [];
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
   const discount = b.discount || 0;
   const total    = subtotal - discount;
-  // Ficha (conta do cliente) → always pending_payment until manually settled
   const forcedStatus = b.payment_method === 'ficha' ? 'pending_payment' : (b.status || 'open');
-  const r = dbRun('INSERT INTO store_orders(vessel_id,client_id,items,subtotal,discount,total,status,payment_method,notes) VALUES(?,?,?,?,?,?,?,?,?)',
-                  [b.vessel_id || null, b.client_id || null, JSON.stringify(items), subtotal, discount, total,
-                   forcedStatus, b.payment_method || null, b.notes || null]);
-  for (const item of items) dbRun('UPDATE store_items SET stock=MAX(0,stock-?) WHERE id=?', [item.qty, item.item_id]);
-  checkStock();
-  sendJson(res, { id: Number(r.lastInsertRowid), total }, 201);
+  const r = await tRun('INSERT INTO store_orders(vessel_id,client_id,items,subtotal,discount,total,status,payment_method,notes) VALUES(?,?,?,?,?,?,?,?,?)',
+                       [b.vessel_id||null, b.client_id||null, JSON.stringify(items), subtotal, discount, total, forcedStatus, b.payment_method||null, b.notes||null]);
+  for (const item of items) await tRun('UPDATE store_items SET stock=GREATEST(0,stock-?) WHERE id=?', [item.qty, item.item_id]);
+  await checkStock(tAll, tAll, tGet, tRun);
+  sendJson(res, { id: r.lastInsertRowid, total }, 201);
 });
+
 addRoute('PUT', '/api/store/orders/:id', async (req, res, ctx) => {
-  dbRun('UPDATE store_orders SET status=?,payment_method=?,notes=? WHERE id=?',
-        [ctx.body.status, ctx.body.payment_method || null, ctx.body.notes || null, ctx.params.id]);
+  await ctx.db.dbRun('UPDATE store_orders SET status=?,payment_method=?,notes=? WHERE id=?',
+                     [ctx.body.status, ctx.body.payment_method||null, ctx.body.notes||null, ctx.params.id]);
   sendJson(res, { ok: true });
 });
+
 addRoute('PUT', '/api/store/orders/:id/delivery', async (req, res, ctx) => {
   const { delivery_status, status } = ctx.body;
-  const updates = [];
-  const params = [];
+  const updates = [], params = [];
   if (delivery_status !== undefined) { updates.push('delivery_status=?'); params.push(delivery_status); }
-  if (status !== undefined) { updates.push('status=?'); params.push(status); }
-  if (!updates.length) { sendJson(res,{ok:true}); return; }
+  if (status !== undefined)          { updates.push('status=?'); params.push(status); }
+  if (!updates.length) { sendJson(res, { ok: true }); return; }
   params.push(ctx.params.id);
-  dbRun(`UPDATE store_orders SET ${updates.join(',')} WHERE id=?`, params);
+  await ctx.db.dbRun(`UPDATE store_orders SET ${updates.join(',')} WHERE id=?`, params);
   sendJson(res, { ok: true });
 });
+
 addRoute('PUT', '/api/store/orders/:id/confirm-payment', async (req, res, ctx) => {
   if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
   const b = ctx.body || {};
-  dbRun(`UPDATE store_orders SET
+  await ctx.db.dbRun(`UPDATE store_orders SET
     status='paid', delivery_status='preparando',
     payment_method=COALESCE(?,payment_method),
-    pay_notes=?, paid_date=COALESCE(?,DATE('now')),
+    pay_notes=?, paid_date=COALESCE(CAST(? AS DATE),CURRENT_DATE),
     comprovante_data=?, comprovante_name=?
     WHERE id=?`,
     [b.payment_method||null, b.pay_notes||null, b.paid_date||null,
      b.comprovante_data||null, b.comprovante_name||null, ctx.params.id]);
   sendJson(res, { ok: true });
 });
+
 addRoute('GET', '/api/store/client-accounts', async (req, res, ctx) => {
   if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
-  const rows = dbAll(`SELECT o.*, c.name as client_name, c.phone as client_phone, c.tier as client_tier,
-    v.name as vessel_name
-    FROM store_orders o
-    LEFT JOIN clients c ON o.client_id=c.id
-    LEFT JOIN vessels v ON o.vessel_id=v.id
-    WHERE o.status='pending_payment'
-    ORDER BY o.created_at ASC`);
+  const { dbAll: tAll } = ctx.db;
+  const rows = await tAll(`SELECT o.*, c.name as client_name, c.phone as client_phone, c.tier as client_tier, v.name as vessel_name
+    FROM store_orders o LEFT JOIN clients c ON o.client_id=c.id LEFT JOIN vessels v ON o.vessel_id=v.id
+    WHERE o.status='pending_payment' ORDER BY o.created_at ASC`);
   for (const r of rows) { try { r.items = JSON.parse(r.items); } catch {} }
-  // Group by client
   const map = {};
   for (const o of rows) {
     const key = o.client_id || 0;
-    if (!map[key]) map[key] = {
-      client_id: o.client_id, client_name: o.client_name||'Balcão',
-      client_phone: o.client_phone, client_tier: o.client_tier,
-      orders: [], total: 0
-    };
+    if (!map[key]) map[key] = { client_id: o.client_id, client_name: o.client_name||'Balcão', client_phone: o.client_phone, client_tier: o.client_tier, orders: [], total: 0 };
     map[key].orders.push(o);
-    map[key].total += o.total;
+    map[key].total += Number(o.total);
   }
-  const accounts = Object.values(map).sort((a,b) => b.total - a.total);
-  const grand_total = accounts.reduce((s,a) => s+a.total, 0);
+  const accounts   = Object.values(map).sort((a, b) => b.total - a.total);
+  const grand_total = accounts.reduce((s, a) => s + a.total, 0);
   sendJson(res, { accounts, grand_total });
 });
-addRoute('GET', '/api/store/stats', async (req, res) => {
-  const td = todayStr();
-  const g1 = (sql, a=[]) => dbGet(sql, a);
-  const vendas_hoje   = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND DATE(created_at)=?`,[td])?.v||0;
-  const receita_hoje  = g1(`SELECT COALESCE(SUM(total),0) as v FROM store_orders WHERE status='paid' AND DATE(created_at)=?`,[td])?.v||0;
-  const aguardando    = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='pending_payment'`)?.v||0;
-  const preparando    = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND delivery_status='preparando'`)?.v||0;
-  const entregando    = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND delivery_status='entregando'`)?.v||0;
-  const entregue_hoje = g1(`SELECT COUNT(*) as v FROM store_orders WHERE delivery_status='entregue' AND DATE(created_at)=?`,[td])?.v||0;
-  const estoque_baixo = g1(`SELECT COUNT(*) as v FROM store_items WHERE active=1 AND stock<=min_stock`)?.v||0;
-  const abertos       = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='open'`)?.v||0;
-  const ticket_medio  = vendas_hoje>0 ? receita_hoje/vendas_hoje : 0;
 
-  const parse = rows => { for (const r of rows) { try { r.items=JSON.parse(r.items); } catch{} } return rows; };
+addRoute('GET', '/api/store/stats', async (req, res, ctx) => {
+  const { dbAll: tAll, dbGet: tGet } = ctx.db;
+  const td  = todayStr();
+  const g1  = (sql, a = []) => tGet(sql, a);
+  const n   = v => Number(v || 0);
+  const vendas_hoje   = n((await g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND DATE(created_at)=?`,[td]))?.v);
+  const receita_hoje  = n((await g1(`SELECT COALESCE(SUM(total),0) as v FROM store_orders WHERE status='paid' AND DATE(created_at)=?`,[td]))?.v);
+  const aguardando    = n((await g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='pending_payment'`))?.v);
+  const preparando    = n((await g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND delivery_status='preparando'`))?.v);
+  const entregando    = n((await g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND delivery_status='entregando'`))?.v);
+  const entregue_hoje = n((await g1(`SELECT COUNT(*) as v FROM store_orders WHERE delivery_status='entregue' AND DATE(created_at)=?`,[td]))?.v);
+  const estoque_baixo = n((await g1(`SELECT COUNT(*) as v FROM store_items WHERE active=1 AND stock<=min_stock`))?.v);
+  const abertos       = n((await g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='open'`))?.v);
+  const ticket_medio  = vendas_hoje > 0 ? receita_hoje / vendas_hoje : 0;
+  const parse = rows => { for (const r of rows) { try { r.items = JSON.parse(r.items); } catch {} } return rows; };
   const pipeBase = `SELECT o.*,c.name as client_name FROM store_orders o LEFT JOIN clients c ON o.client_id=c.id WHERE `;
-  const pipeline_aguardando = parse(dbAll(pipeBase+`o.status='pending_payment' ORDER BY o.created_at ASC LIMIT 10`));
-  const pipeline_preparando = parse(dbAll(pipeBase+`o.status='paid' AND o.delivery_status='preparando' ORDER BY o.created_at ASC LIMIT 10`));
-  const pipeline_entregando = parse(dbAll(pipeBase+`o.status='paid' AND o.delivery_status='entregando' ORDER BY o.created_at ASC LIMIT 10`));
-  const pipeline_entregue   = parse(dbAll(pipeBase+`o.delivery_status='entregue' AND DATE(o.created_at)=? ORDER BY o.created_at DESC LIMIT 10`,[td]));
-  const recent = parse(dbAll(`SELECT o.*,c.name as client_name FROM store_orders o LEFT JOIN clients c ON o.client_id=c.id WHERE o.status='paid' ORDER BY o.created_at DESC LIMIT 8`));
-  const vendas_semana = dbAll(`SELECT DATE(created_at) as day,COUNT(*) as count,COALESCE(SUM(total),0) as total FROM store_orders WHERE status='paid' AND DATE(created_at)>=? GROUP BY day ORDER BY day`,[daysAgo(6)]);
-  sendJson(res,{vendas_hoje,receita_hoje,aguardando,preparando,entregando,entregue_hoje,estoque_baixo,abertos,ticket_medio,pipeline_aguardando,pipeline_preparando,pipeline_entregando,pipeline_entregue,recent,vendas_semana});
+  const [pa, pp, pe, pee] = await Promise.all([
+    tAll(pipeBase+`o.status='pending_payment' ORDER BY o.created_at ASC LIMIT 10`),
+    tAll(pipeBase+`o.status='paid' AND o.delivery_status='preparando' ORDER BY o.created_at ASC LIMIT 10`),
+    tAll(pipeBase+`o.status='paid' AND o.delivery_status='entregando' ORDER BY o.created_at ASC LIMIT 10`),
+    tAll(pipeBase+`o.delivery_status='entregue' AND DATE(o.created_at)=? ORDER BY o.created_at DESC LIMIT 10`,[td]),
+  ]);
+  const recent       = parse(await tAll(`SELECT o.*,c.name as client_name FROM store_orders o LEFT JOIN clients c ON o.client_id=c.id WHERE o.status='paid' ORDER BY o.created_at DESC LIMIT 8`));
+  const vendas_semana = (await tAll(`SELECT DATE(created_at) as day,COUNT(*) as count,COALESCE(SUM(total),0) as total FROM store_orders WHERE status='paid' AND DATE(created_at)>=? GROUP BY DATE(created_at) ORDER BY DATE(created_at)`,[daysAgo(6)])).map(r=>({...r,count:Number(r.count),total:Number(r.total)}));
+  sendJson(res,{vendas_hoje,receita_hoje,aguardando,preparando,entregando,entregue_hoje,estoque_baixo,abertos,ticket_medio,
+    pipeline_aguardando:parse(pa),pipeline_preparando:parse(pp),pipeline_entregando:parse(pe),pipeline_entregue:parse(pee),recent,vendas_semana});
 });
-addRoute('GET', '/api/store/stock-stats', async (req, res) => {
-  const items = dbAll(`SELECT * FROM store_items WHERE active=1`);
-  const g1 = (sql, a=[]) => dbGet(sql, a);
-  const ago30 = daysAgo(30);
 
-  // KPI aggregates
-  const total_itens        = items.length;
-  const total_skus_zero    = items.filter(i => i.stock <= 0).length;
-  const total_skus_baixo   = items.filter(i => i.stock > 0 && i.stock <= i.min_stock).length;
-  const total_skus_ok      = items.filter(i => i.stock > i.min_stock).length;
-  const valor_custo        = items.reduce((s, i) => s + (i.stock||0) * (i.cost||0), 0);
-  const valor_venda        = items.reduce((s, i) => s + (i.stock||0) * (i.price||0), 0);
-  const margem_potencial   = valor_venda - valor_custo;
-
-  // Per-category breakdown
+addRoute('GET', '/api/store/stock-stats', async (req, res, ctx) => {
+  const { dbAll: tAll } = ctx.db;
+  const items   = await tAll(`SELECT * FROM store_items WHERE active=1`);
+  const ago30   = daysAgo(30);
+  const total_itens      = items.length;
+  const total_skus_zero  = items.filter(i => i.stock <= 0).length;
+  const total_skus_baixo = items.filter(i => i.stock > 0 && i.stock <= i.min_stock).length;
+  const total_skus_ok    = items.filter(i => i.stock > i.min_stock).length;
+  const valor_custo      = items.reduce((s, i) => s + (Number(i.stock)||0) * (Number(i.cost)||0), 0);
+  const valor_venda      = items.reduce((s, i) => s + (Number(i.stock)||0) * (Number(i.price)||0), 0);
   const cats = {};
   items.forEach(i => {
-    if (!cats[i.category]) cats[i.category] = { category: i.category, itens: 0, stock_total: 0, valor_venda: 0, valor_custo: 0, baixo: 0, zero: 0 };
+    if (!cats[i.category]) cats[i.category] = { category: i.category, itens:0, stock_total:0, valor_venda:0, valor_custo:0, baixo:0, zero:0 };
     cats[i.category].itens++;
-    cats[i.category].stock_total += i.stock||0;
-    cats[i.category].valor_venda += (i.stock||0) * (i.price||0);
-    cats[i.category].valor_custo += (i.stock||0) * (i.cost||0);
-    if (i.stock <= 0) cats[i.category].zero++;
-    else if (i.stock <= i.min_stock) cats[i.category].baixo++;
+    cats[i.category].stock_total += Number(i.stock)||0;
+    cats[i.category].valor_venda += (Number(i.stock)||0)*(Number(i.price)||0);
+    cats[i.category].valor_custo += (Number(i.stock)||0)*(Number(i.cost)||0);
+    if (i.stock<=0) cats[i.category].zero++; else if (i.stock<=i.min_stock) cats[i.category].baixo++;
   });
   const por_categoria = Object.values(cats).sort((a, b) => b.valor_venda - a.valor_venda);
-
-  // Top 10 most sold last 30 days
-  const orders_recentes = dbAll(`SELECT items FROM store_orders WHERE status != 'cancelled' AND DATE(created_at) >= ?`, [ago30]);
+  const orders_recentes = await tAll(`SELECT items FROM store_orders WHERE status != 'cancelled' AND DATE(created_at) >= ?`, [ago30]);
   const qtd_vendida = {};
   for (const o of orders_recentes) {
     let its; try { its = JSON.parse(o.items); } catch { its = []; }
     for (const i of its) { qtd_vendida[i.item_id] = (qtd_vendida[i.item_id]||0) + i.qty; }
   }
-  const top_vendidos = items
-    .map(i => ({ ...i, qtd_vendida_30d: qtd_vendida[i.id]||0, receita_30d: (qtd_vendida[i.id]||0)*i.price }))
-    .sort((a, b) => b.qtd_vendida_30d - a.qtd_vendida_30d)
-    .slice(0, 10);
-
-  // Critical items (zero or low), sorted by urgency (stock/min ratio ascending)
-  const criticos = items
-    .filter(i => i.stock <= i.min_stock)
-    .map(i => {
-      const diasCobertura = qtd_vendida[i.id]
-        ? Math.round((i.stock / (qtd_vendida[i.id] / 30)) * 10) / 10
-        : null;
-      return { ...i, qtd_vendida_30d: qtd_vendida[i.id]||0, dias_cobertura: diasCobertura };
-    })
-    .sort((a, b) => (a.stock / Math.max(a.min_stock,1)) - (b.stock / Math.max(b.min_stock,1)));
-
-  // Giro médio (average days of coverage for items with sales)
-  const coberturas = items
-    .filter(i => qtd_vendida[i.id] && i.stock > 0)
-    .map(i => i.stock / (qtd_vendida[i.id] / 30));
-  const cobertura_media = coberturas.length
-    ? Math.round(coberturas.reduce((s,v) => s+v, 0) / coberturas.length)
-    : null;
-
-  sendJson(res, {
-    total_itens, total_skus_zero, total_skus_baixo, total_skus_ok,
-    valor_custo, valor_venda, margem_potencial, cobertura_media,
-    por_categoria, top_vendidos, criticos
-  });
+  const top_vendidos = items.map(i => ({ ...i, qtd_vendida_30d: qtd_vendida[i.id]||0, receita_30d: (qtd_vendida[i.id]||0)*Number(i.price) })).sort((a,b)=>b.qtd_vendida_30d-a.qtd_vendida_30d).slice(0,10);
+  const criticos = items.filter(i=>i.stock<=i.min_stock).map(i=>({ ...i, qtd_vendida_30d:qtd_vendida[i.id]||0, dias_cobertura: qtd_vendida[i.id] ? Math.round((i.stock/(qtd_vendida[i.id]/30))*10)/10 : null })).sort((a,b)=>(a.stock/Math.max(a.min_stock,1))-(b.stock/Math.max(b.min_stock,1)));
+  const coberturas = items.filter(i=>qtd_vendida[i.id]&&i.stock>0).map(i=>i.stock/(qtd_vendida[i.id]/30));
+  const cobertura_media = coberturas.length ? Math.round(coberturas.reduce((s,v)=>s+v,0)/coberturas.length) : null;
+  sendJson(res,{total_itens,total_skus_zero,total_skus_baixo,total_skus_ok,valor_custo,valor_venda,margem_potencial:valor_venda-valor_custo,cobertura_media,por_categoria,top_vendidos,criticos});
 });
-addRoute('GET', '/api/store/pix-config', async (req, res) => {
-  sendJson(res, dbGet(`SELECT * FROM store_pix_config WHERE active=1 ORDER BY id DESC`) || {});
+
+addRoute('GET', '/api/store/pix-config', async (req, res, ctx) => {
+  sendJson(res, await ctx.db.dbGet(`SELECT * FROM store_pix_config WHERE active=1 ORDER BY id DESC`) || {});
 });
+
 addRoute('POST', '/api/store/pix-config', async (req, res, ctx) => {
-  dbRun(`UPDATE store_pix_config SET active=0`);
-  dbRun(`INSERT INTO store_pix_config(key,key_type,merchant_name,city,active) VALUES(?,?,?,?,1)`,
-        [ctx.body.key, ctx.body.key_type, ctx.body.merchant_name, ctx.body.city]);
+  const { dbRun: tRun } = ctx.db;
+  await tRun(`UPDATE store_pix_config SET active=0`);
+  await tRun(`INSERT INTO store_pix_config(key,key_type,merchant_name,city,active) VALUES(?,?,?,?,1)`,
+             [ctx.body.key, ctx.body.key_type, ctx.body.merchant_name, ctx.body.city]);
   sendJson(res, { ok: true });
 });
+
 addRoute('POST', '/api/store/pix-qrcode', async (req, res, ctx) => {
-  const cfg = dbGet(`SELECT * FROM store_pix_config WHERE active=1 ORDER BY id DESC`);
+  const cfg = await ctx.db.dbGet(`SELECT * FROM store_pix_config WHERE active=1 ORDER BY id DESC`);
   if (!cfg) return sendJson(res, { error: 'PIX não configurado' }, 400);
-  const amount  = parseFloat(ctx.body.amount) || 0;
-  const txid    = crypto.randomBytes(12).toString('hex').toUpperCase().slice(0, 25);
-  const payload = buildPix(cfg.key, cfg.merchant_name, cfg.city, amount, txid);
-  sendJson(res, { payload, txid, amount });
+  const amount = parseFloat(ctx.body.amount) || 0;
+  const txid   = crypto.randomBytes(12).toString('hex').toUpperCase().slice(0, 25);
+  sendJson(res, { payload: buildPix(cfg.key, cfg.merchant_name, cfg.city, amount, txid), txid, amount });
 });
 
-// ── MAINTENANCE ───────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — MANUTENÇÃO
+// ═════════════════════════════════════════════════════════════════════
 addRoute('GET', '/api/maintenance', async (req, res, ctx) => {
   const { status = '', vessel_id = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
   let sql = `SELECT m.*, v.name as vessel_name, c.name as client_name
     FROM maintenance_os m LEFT JOIN vessels v ON m.vessel_id=v.id LEFT JOIN clients c ON v.client_id=c.id WHERE 1=1`;
   const a = [];
-  if (status)    { sql += ' AND m.status=?';    a.push(status); }
-  if (vessel_id) { sql += ' AND m.vessel_id=?'; a.push(vessel_id); }
+  const scope = clientScope(ctx.user);
+  if (scope !== null) { sql += ' AND v.client_id=?'; a.push(scope); }
+  if (status)         { sql += ' AND m.status=?';    a.push(status); }
+  if (vessel_id)      { sql += ' AND m.vessel_id=?'; a.push(vessel_id); }
   sql += ` ORDER BY CASE m.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END, m.created_at DESC`;
-  sendJson(res, dbAll(sql, a));
+  sendJson(res, await tAll(sql, a));
 });
+
 addRoute('POST', '/api/maintenance', async (req, res, ctx) => {
   const b      = ctx.body;
+  const { dbRun: tRun } = ctx.db;
   const os_num = `OS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*900)+100}`;
-  const r = dbRun('INSERT INTO maintenance_os(vessel_id,os_number,type,description,status,priority,scheduled_date,estimated_hours,cost,technician,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                  [b.vessel_id || null, os_num, b.type, b.description, b.status || 'open', b.priority || 'normal',
-                   b.scheduled_date || null, b.estimated_hours || null, b.cost || 0, b.technician || null, b.notes || null]);
-  if (['urgent', 'high'].includes(b.priority))
-    addAlert('manutencao', `OS urgente: ${b.description.slice(0, 50)}`, 'warning');
-  sendJson(res, { id: Number(r.lastInsertRowid), os_number: os_num }, 201);
+  const r = await tRun('INSERT INTO maintenance_os(vessel_id,os_number,type,description,status,priority,scheduled_date,estimated_hours,cost,technician,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                       [b.vessel_id||null, os_num, b.type, b.description, b.status||'open', b.priority||'normal', b.scheduled_date||null, b.estimated_hours||null, b.cost||0, b.technician||null, b.notes||null]);
+  if (['urgent','high'].includes(b.priority))
+    await addAlert('manutencao', `OS urgente: ${b.description.slice(0,50)}`, 'warning', null, null, tRun);
+  sendJson(res, { id: r.lastInsertRowid, os_number: os_num }, 201);
 });
+
 addRoute('PUT', '/api/maintenance/:id', async (req, res, ctx) => {
-  const b   = ctx.body;
-  const old = dbGet('SELECT * FROM maintenance_os WHERE id=?', [ctx.params.id]);
+  const b = ctx.body;
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const old = await tGet('SELECT * FROM maintenance_os WHERE id=?', [ctx.params.id]);
   const ns  = b.status || old.status;
   const completed_date = (ns === 'completed' && !old.completed_date) ? todayStr() : (b.completed_date || old.completed_date || null);
-  dbRun('UPDATE maintenance_os SET status=?,priority=?,scheduled_date=?,completed_date=?,actual_hours=?,cost=?,technician=?,notes=? WHERE id=?',
-        [ns, b.priority || old.priority, b.scheduled_date || old.scheduled_date || null, completed_date,
-         b.actual_hours || old.actual_hours || null, b.cost !== undefined ? b.cost : old.cost,
-         b.technician || old.technician || null, b.notes || old.notes || null, ctx.params.id]);
-  sendJson(res, { ok: true });
-});
-addRoute('DELETE', '/api/maintenance/:id', async (req, res, ctx) => {
-  dbRun(`UPDATE maintenance_os SET status='cancelled' WHERE id=?`, [ctx.params.id]);
+  await tRun('UPDATE maintenance_os SET status=?,priority=?,scheduled_date=?,completed_date=?,actual_hours=?,cost=?,technician=?,notes=? WHERE id=?',
+             [ns, b.priority||old.priority, b.scheduled_date||old.scheduled_date||null, completed_date,
+              b.actual_hours||old.actual_hours||null, b.cost!==undefined ? b.cost : old.cost,
+              b.technician||old.technician||null, b.notes||old.notes||null, ctx.params.id]);
   sendJson(res, { ok: true });
 });
 
-// ── ALERTS ────────────────────────────────────────────────────────────
+addRoute('DELETE', '/api/maintenance/:id', async (req, res, ctx) => {
+  await ctx.db.dbRun(`UPDATE maintenance_os SET status='cancelled' WHERE id=?`, [ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — ALERTAS
+// ═════════════════════════════════════════════════════════════════════
 addRoute('GET', '/api/alerts', async (req, res, ctx) => {
   const { unread = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
   let sql = 'SELECT * FROM alerts WHERE 1=1';
   if (unread) sql += ' AND read_at IS NULL';
-  sendJson(res, dbAll(sql + ' ORDER BY created_at DESC LIMIT 50'));
+  sendJson(res, await tAll(sql + ' ORDER BY created_at DESC LIMIT 50'));
 });
-addRoute('PUT', '/api/alerts/read-all', async (req, res) => {
-  dbRun('UPDATE alerts SET read_at=? WHERE read_at IS NULL', [nowStr()]);
+
+addRoute('PUT', '/api/alerts/read-all', async (req, res, ctx) => {
+  await ctx.db.dbRun('UPDATE alerts SET read_at=? WHERE read_at IS NULL', [nowStr()]);
   sendJson(res, { ok: true });
 });
+
 addRoute('PUT', '/api/alerts/:id/read', async (req, res, ctx) => {
-  dbRun('UPDATE alerts SET read_at=? WHERE id=?', [nowStr(), ctx.params.id]);
+  await ctx.db.dbRun('UPDATE alerts SET read_at=? WHERE id=?', [nowStr(), ctx.params.id]);
   sendJson(res, { ok: true });
 });
+
 addRoute('PUT', '/api/alerts/:id/unread', async (req, res, ctx) => {
-  dbRun('UPDATE alerts SET read_at=NULL WHERE id=?', [ctx.params.id]);
+  await ctx.db.dbRun('UPDATE alerts SET read_at=NULL WHERE id=?', [ctx.params.id]);
   sendJson(res, { ok: true });
 });
-addRoute('GET', '/api/financial/payment-logs', async (req, res, ctx) => {
-  const { charge_id = '' } = ctx.qs;
-  let sql = 'SELECT * FROM payment_logs';
-  const params = [];
-  if (charge_id) { sql += ' WHERE charge_id=?'; params.push(charge_id); }
-  sql += ' ORDER BY created_at DESC LIMIT 200';
-  const logs = dbAll(sql, params);
-  // Strip comprovante_data from list (too large), keep name only
-  sendJson(res, logs.map(l => ({ ...l, comprovante_data: l.comprovante_data ? '[anexo]' : null })));
-});
-addRoute('GET', '/api/financial/payment-logs/:id/comprovante', async (req, res, ctx) => {
-  const log = dbGet(`SELECT comprovante_data, comprovante_name FROM payment_logs WHERE id=?`, [ctx.params.id]);
-  if (!log || !log.comprovante_data) return sendJson(res, { error: 'Sem comprovante' }, 404);
-  sendJson(res, log);
-});
 
-// ── ANALYTICS ─────────────────────────────────────────────────────────
-addRoute('GET', '/api/analytics/kpis', async (req, res) => {
-  checkOverdue();
-  const ms   = monthStart();
-  const td   = todayStr();
-  const ago30 = daysAgo(30);
-  const g1 = (sql, a = []) => dbGet(sql, a);
-
-  const vagas_total         = g1('SELECT COUNT(*) as v FROM spots')?.v || 0;
-  const vagas_ocupadas      = g1(`SELECT COUNT(*) as v FROM spots WHERE status='occupied'`)?.v || 0;
-  const vagas_seca_total    = g1(`SELECT COUNT(*) as v FROM spots WHERE type='seca'`)?.v || 0;
-  const vagas_seca_ocupadas = g1(`SELECT COUNT(*) as v FROM spots WHERE type='seca' AND status='occupied'`)?.v || 0;
-  const vagas_molhada_total    = g1(`SELECT COUNT(*) as v FROM spots WHERE type='molhada'`)?.v || 0;
-  const vagas_molhada_ocupadas = g1(`SELECT COUNT(*) as v FROM spots WHERE type='molhada' AND status='occupied'`)?.v || 0;
-
-  const receita_mes  = g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`, [ms])?.v || 0;
-  const inadimplencia= g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='overdue'`)?.v || 0;
-  const pendente     = g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='pending'`)?.v || 0;
-  const total_ct_val = g1(`SELECT COALESCE(SUM(monthly_value),0) as v FROM contracts WHERE status='active'`)?.v || 0;
-  const receita_seca = g1(`SELECT COALESCE(SUM(fc.amount),0) as v FROM financial_charges fc JOIN contracts ct ON fc.contract_id=ct.id WHERE fc.status='paid' AND fc.paid_date>=? AND ct.type='seca'`, [ms])?.v || 0;
-  const receita_mol  = g1(`SELECT COALESCE(SUM(fc.amount),0) as v FROM financial_charges fc JOIN contracts ct ON fc.contract_id=ct.id WHERE fc.status='paid' AND fc.paid_date>=? AND ct.type='molhada'`, [ms])?.v || 0;
-  const loja_mes     = g1(`SELECT COALESCE(SUM(total),0) as v FROM store_orders WHERE status='paid' AND DATE(created_at)>=?`, [ms])?.v || 0;
-
-  const total_clientes   = g1(`SELECT COUNT(*) as v FROM clients WHERE active=1`)?.v || 0;
-  const vip_count        = g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier IN ('gold','vip')`)?.v || 0;
-  const total_vessels    = g1(`SELECT COUNT(*) as v FROM vessels WHERE active=1`)?.v || 0;
-  const contratos_ativos = g1(`SELECT COUNT(*) as v FROM contracts WHERE status='active'`)?.v || 0;
-  const queue_hoje       = g1(`SELECT COUNT(*) as v FROM queue_operations WHERE DATE(requested_at)=? AND status!='cancelled'`, [td])?.v || 0;
-  const queue_aguardando = g1(`SELECT COUNT(*) as v FROM queue_operations WHERE status IN ('waiting','in_progress')`)?.v || 0;
-  const os_abertas       = g1(`SELECT COUNT(*) as v FROM maintenance_os WHERE status IN ('open','in_progress')`)?.v || 0;
-  const os_urgentes      = g1(`SELECT COUNT(*) as v FROM maintenance_os WHERE status IN ('open','in_progress') AND priority IN ('urgent','high')`)?.v || 0;
-  const custo_manut      = g1(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_os WHERE completed_date>=?`, [ms])?.v || 0;
-  const alertas_nl       = g1(`SELECT COUNT(*) as v FROM alerts WHERE read_at IS NULL`)?.v || 0;
-  const ticket_medio     = g1(`SELECT AVG(total) as v FROM store_orders WHERE status='paid'`)?.v || 0;
-  const ltv_medio        = g1(`SELECT AVG(ltv) as v FROM clients WHERE active=1`)?.v || 0;
-  const sla              = g1(`SELECT AVG((julianday(completed_at)-julianday(requested_at))*24*60) as avg_min FROM queue_operations WHERE status='completed' AND DATE(completed_at)>=?`, [ms])?.avg_min || 0;
-  const ops_por_tipo     = dbAll(`SELECT operation_type, COUNT(*) as count FROM queue_operations WHERE DATE(requested_at)>=? GROUP BY operation_type`, [ago30]);
-
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — ANALYTICS
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/analytics/kpis', async (req, res, ctx) => {
+  const { dbAll: tAll, dbGet: tGet, dbRun: tRun } = ctx.db;
+  await checkOverdue(tRun);
+  const ms = monthStart(), td = todayStr(), ago30 = daysAgo(30);
+  const g1 = (sql, a=[]) => tGet(sql, a);
+  const n  = v => Number(v || 0);
+  const [vt, vo, vst, vso, vmt, vmo] = await Promise.all([
+    g1('SELECT COUNT(*) as v FROM spots'),
+    g1(`SELECT COUNT(*) as v FROM spots WHERE status='occupied'`),
+    g1(`SELECT COUNT(*) as v FROM spots WHERE type='seca'`),
+    g1(`SELECT COUNT(*) as v FROM spots WHERE type='seca' AND status='occupied'`),
+    g1(`SELECT COUNT(*) as v FROM spots WHERE type='molhada'`),
+    g1(`SELECT COUNT(*) as v FROM spots WHERE type='molhada' AND status='occupied'`),
+  ]);
+  const vagas_total=n(vt?.v), vagas_ocupadas=n(vo?.v), vagas_seca_total=n(vst?.v), vagas_seca_ocupadas=n(vso?.v), vagas_molhada_total=n(vmt?.v), vagas_molhada_ocupadas=n(vmo?.v);
+  const [rm,inad,pend,tctv,rs,rmol,lm,tc,vc,tv,ca,qh,qa,osab,osurg,cm,anl,tmed,ltv,sla] = await Promise.all([
+    g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`,[ms]),
+    g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='overdue'`),
+    g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='pending'`),
+    g1(`SELECT COALESCE(SUM(monthly_value),0) as v FROM contracts WHERE status='active'`),
+    g1(`SELECT COALESCE(SUM(fc.amount),0) as v FROM financial_charges fc JOIN contracts ct ON fc.contract_id=ct.id WHERE fc.status='paid' AND fc.paid_date>=? AND ct.type='seca'`,[ms]),
+    g1(`SELECT COALESCE(SUM(fc.amount),0) as v FROM financial_charges fc JOIN contracts ct ON fc.contract_id=ct.id WHERE fc.status='paid' AND fc.paid_date>=? AND ct.type='molhada'`,[ms]),
+    g1(`SELECT COALESCE(SUM(total),0) as v FROM store_orders WHERE status='paid' AND DATE(created_at)>=?`,[ms]),
+    g1(`SELECT COUNT(*) as v FROM clients WHERE active=1`),
+    g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier IN ('gold','vip')`),
+    g1(`SELECT COUNT(*) as v FROM vessels WHERE active=1`),
+    g1(`SELECT COUNT(*) as v FROM contracts WHERE status='active'`),
+    g1(`SELECT COUNT(*) as v FROM queue_operations WHERE DATE(requested_at)=? AND status!='cancelled'`,[td]),
+    g1(`SELECT COUNT(*) as v FROM queue_operations WHERE status IN ('waiting','in_progress')`),
+    g1(`SELECT COUNT(*) as v FROM maintenance_os WHERE status IN ('open','in_progress')`),
+    g1(`SELECT COUNT(*) as v FROM maintenance_os WHERE status IN ('open','in_progress') AND priority IN ('urgent','high')`),
+    g1(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_os WHERE completed_date>=?`,[ms]),
+    g1(`SELECT COUNT(*) as v FROM alerts WHERE read_at IS NULL`),
+    g1(`SELECT AVG(total) as v FROM store_orders WHERE status='paid'`),
+    g1(`SELECT AVG(ltv) as v FROM clients WHERE active=1`),
+    g1(`SELECT AVG(EXTRACT(EPOCH FROM (completed_at-requested_at))/60) as avg_min FROM queue_operations WHERE status='completed' AND DATE(completed_at)>=?`,[ms]),
+  ]);
+  const ops_por_tipo = (await tAll(`SELECT operation_type, COUNT(*) as count FROM queue_operations WHERE DATE(requested_at)>=? GROUP BY operation_type`, [ago30])).map(r=>({...r,count:Number(r.count)}));
   sendJson(res, {
-    ocupacao_total:   vagas_total    ? Math.round(vagas_ocupadas      / vagas_total    * 1000) / 10 : 0,
-    ocupacao_seca:    vagas_seca_total    ? Math.round(vagas_seca_ocupadas    / vagas_seca_total    * 1000) / 10 : 0,
-    ocupacao_molhada: vagas_molhada_total ? Math.round(vagas_molhada_ocupadas / vagas_molhada_total * 1000) / 10 : 0,
-    vagas_total, vagas_ocupadas,
-    vagas_seca_total, vagas_seca_ocupadas,
-    vagas_molhada_total, vagas_molhada_ocupadas,
-    receita_mes, inadimplencia, pendente, receita_seca, receita_molhada: receita_mol, receita_loja: loja_mes,
-    taxa_inadimplencia: total_ct_val ? Math.round(inadimplencia / total_ct_val * 1000) / 10 : 0,
-    total_clientes, vip_count, total_vessels, contratos_ativos,
-    queue_hoje, queue_aguardando,
-    sla_avg_min:         Math.round(sla * 10) / 10,
-    os_abertas, os_urgentes, custo_manutencao_mes: custo_manut,
-    alertas_nao_lidos:   alertas_nl,
-    ticket_medio_loja:   Math.round((ticket_medio || 0) * 100) / 100,
-    ltv_medio:           Math.round((ltv_medio    || 0) * 100) / 100,
+    ocupacao_total:   vagas_total    ? Math.round(vagas_ocupadas      /vagas_total    *1000)/10 : 0,
+    ocupacao_seca:    vagas_seca_total    ? Math.round(vagas_seca_ocupadas    /vagas_seca_total    *1000)/10 : 0,
+    ocupacao_molhada: vagas_molhada_total ? Math.round(vagas_molhada_ocupadas /vagas_molhada_total *1000)/10 : 0,
+    vagas_total, vagas_ocupadas, vagas_seca_total, vagas_seca_ocupadas, vagas_molhada_total, vagas_molhada_ocupadas,
+    receita_mes: n(rm?.v), inadimplencia: n(inad?.v), pendente: n(pend?.v), receita_seca: n(rs?.v), receita_molhada: n(rmol?.v), receita_loja: n(lm?.v),
+    taxa_inadimplencia: n(tctv?.v) ? Math.round(n(inad?.v)/n(tctv?.v)*1000)/10 : 0,
+    total_clientes: n(tc?.v), vip_count: n(vc?.v), total_vessels: n(tv?.v), contratos_ativos: n(ca?.v),
+    queue_hoje: n(qh?.v), queue_aguardando: n(qa?.v),
+    sla_avg_min: Math.round((n(sla?.avg_min))*10)/10,
+    os_abertas: n(osab?.v), os_urgentes: n(osurg?.v), custo_manutencao_mes: n(cm?.v),
+    alertas_nao_lidos: n(anl?.v),
+    ticket_medio_loja: Math.round((n(tmed?.v))*100)/100,
+    ltv_medio: Math.round((n(ltv?.v))*100)/100,
     ops_por_tipo,
   });
 });
-addRoute('GET', '/api/analytics/revenue-chart', async (req, res) => {
-  const rows = dbAll(`SELECT strftime('%Y-%m',paid_date) as month, COALESCE(SUM(amount),0) as total FROM financial_charges WHERE status='paid' AND paid_date IS NOT NULL GROUP BY month ORDER BY month DESC LIMIT 12`);
-  sendJson(res, rows.reverse());
+
+addRoute('GET', '/api/analytics/revenue-chart', async (req, res, ctx) => {
+  const rows = await ctx.db.dbAll(`SELECT TO_CHAR(paid_date,'YYYY-MM') as month, COALESCE(SUM(amount),0) as total FROM financial_charges WHERE status='paid' AND paid_date IS NOT NULL GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY TO_CHAR(paid_date,'YYYY-MM') DESC LIMIT 12`);
+  sendJson(res, rows.reverse().map(r => ({ ...r, total: Number(r.total) })));
 });
-addRoute('GET', '/api/analytics/top-clients', async (req, res) => {
-  sendJson(res, dbAll(`SELECT c.name, c.tier, c.ltv,
+
+addRoute('GET', '/api/analytics/top-clients', async (req, res, ctx) => {
+  const rows = await ctx.db.dbAll(`SELECT c.id, c.name, c.tier, c.ltv,
     COUNT(DISTINCT v.id) as vessels, COUNT(DISTINCT ct.id) as contracts
-    FROM clients c LEFT JOIN vessels v ON v.client_id=c.id AND v.active=1
+    FROM clients c
+    LEFT JOIN vessels v ON v.client_id=c.id AND v.active=1
     LEFT JOIN contracts ct ON ct.client_id=c.id AND ct.status='active'
-    WHERE c.active=1 ORDER BY c.ltv DESC LIMIT 10`));
+    WHERE c.active=1
+    GROUP BY c.id, c.name, c.tier, c.ltv
+    ORDER BY c.ltv DESC LIMIT 10`);
+  sendJson(res, rows.map(r => ({ ...r, ltv: Number(r.ltv), vessels: Number(r.vessels), contracts: Number(r.contracts) })));
 });
-addRoute('GET', '/api/analytics/occupancy-trend', async (req, res) => {
-  sendJson(res, dbAll(`SELECT DATE(start_date) as d, COUNT(*) as new_contracts FROM contracts GROUP BY DATE(start_date) ORDER BY d DESC LIMIT 30`));
+
+addRoute('GET', '/api/analytics/occupancy-trend', async (req, res, ctx) => {
+  const rows = await ctx.db.dbAll(`SELECT TO_CHAR(start_date,'YYYY-MM-DD') as d, COUNT(*) as new_contracts FROM contracts GROUP BY TO_CHAR(start_date,'YYYY-MM-DD') ORDER BY d DESC LIMIT 30`);
+  sendJson(res, rows.map(r => ({ ...r, new_contracts: Number(r.new_contracts) })));
 });
-addRoute('GET', '/api/analytics/extended', async (req, res) => {
-  checkOverdue();
-  const ms = monthStart();
-  const ago3m = daysAgo(90);
-  const ago6m = daysAgo(180);
-  const g1 = (sql,a=[]) => dbGet(sql,a);
 
-  const receita_3m    = g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`,[ago3m])?.v||0;
-  const receita_6m    = g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`,[ago6m])?.v||0;
-  const receita_total = g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid'`)?.v||0;
-  const despesas_manut= g1(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_os WHERE status='completed'`)?.v||0;
-  const contratos_vencendo_30d = g1(`SELECT COUNT(*) as v FROM contracts WHERE status='active' AND end_date<=?`,[daysAhead(30)])?.v||0;
-  const contratos_vencendo_7d  = g1(`SELECT COUNT(*) as v FROM contracts WHERE status='active' AND end_date<=?`,[daysAhead(7)])?.v||0;
-  const valor_carteira = g1(`SELECT COALESCE(SUM(monthly_value),0) as v FROM contracts WHERE status='active'`)?.v||0;
-  const clientes_novos_mes = g1(`SELECT COUNT(*) as v FROM clients WHERE DATE(created_at)>=?`,[ms])?.v||0;
-  const ltv_max  = g1(`SELECT MAX(ltv) as v FROM clients WHERE active=1`)?.v||0;
-  const pedidos_mes = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND DATE(created_at)>=?`,[ms])?.v||0;
-  const pedidos_pendentes = g1(`SELECT COUNT(*) as v FROM store_orders WHERE status IN ('open','pending_payment')`)?.v||0;
-  const ops_total = g1(`SELECT COUNT(*) as v FROM queue_operations`)?.v||0;
-  const ops_mes   = g1(`SELECT COUNT(*) as v FROM queue_operations WHERE DATE(requested_at)>=?`,[ms])?.v||0;
-  const ops_completed_mes = g1(`SELECT COUNT(*) as v FROM queue_operations WHERE status='completed' AND DATE(completed_at)>=?`,[ms])?.v||0;
-  const taxa_conclusao = ops_mes>0 ? Math.round(ops_completed_mes/ops_mes*100) : 0;
-  const os_total = g1(`SELECT COUNT(*) as v FROM maintenance_os`)?.v||0;
-  const os_concluidas = g1(`SELECT COUNT(*) as v FROM maintenance_os WHERE status='completed'`)?.v||0;
-  const taxa_resolucao_os = os_total>0 ? Math.round(os_concluidas/os_total*100) : 0;
-  const spots_seca_livre = g1(`SELECT COUNT(*) as v FROM spots WHERE type='seca' AND status='available'`)?.v||0;
-  const spots_mol_livre  = g1(`SELECT COUNT(*) as v FROM spots WHERE type='molhada' AND status='available'`)?.v||0;
+addRoute('GET', '/api/analytics/forecast', async (req, res, ctx) => {
+  const { dbAll: tAll, dbGet: tGet } = ctx.db;
+  const currentYear = new Date().getFullYear();
+  const year = parseInt(ctx.qs.year || currentYear, 10);
+  const yStr = String(year);
+  const from = `${yStr}-01`, to = `${yStr}-12`;
 
-  const receita_por_mes    = dbAll(`SELECT strftime('%Y-%m',paid_date) as month, COALESCE(SUM(amount),0) as total, COUNT(*) as count FROM financial_charges WHERE status='paid' AND paid_date IS NOT NULL GROUP BY month ORDER BY month DESC LIMIT 12`).reverse();
-  const loja_por_mes       = dbAll(`SELECT strftime('%Y-%m',created_at) as month, COALESCE(SUM(total),0) as total, COUNT(*) as count FROM store_orders WHERE status='paid' GROUP BY month ORDER BY month DESC LIMIT 12`).reverse();
-  const ops_por_tipo       = dbAll(`SELECT operation_type, COUNT(*) as count FROM queue_operations GROUP BY operation_type ORDER BY count DESC`);
-  const ops_por_mes        = dbAll(`SELECT strftime('%Y-%m',requested_at) as month, COUNT(*) as count FROM queue_operations GROUP BY month ORDER BY month DESC LIMIT 12`).reverse();
-  const manut_por_tipo     = dbAll(`SELECT type, COUNT(*) as count, COALESCE(SUM(cost),0) as total FROM maintenance_os GROUP BY type`);
-  const charges_por_status = dbAll(`SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM financial_charges GROUP BY status`);
-  const top_clientes_loja  = dbAll(`SELECT c.name, c.tier, COALESCE(SUM(o.total),0) as total_loja, COUNT(o.id) as pedidos FROM clients c LEFT JOIN store_orders o ON o.client_id=c.id AND o.status='paid' WHERE c.active=1 GROUP BY c.id ORDER BY total_loja DESC LIMIT 10`);
-  const vip_count   = g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='vip'`)?.v||0;
-  const gold_count  = g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='gold'`)?.v||0;
-  const silver_count= g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='silver'`)?.v||0;
-  const std_count   = g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='standard'`)?.v||0;
+  // Anos disponíveis (union de due_date e paid_date)
+  const [yDue, yPaid] = await Promise.all([
+    tAll(`SELECT DISTINCT TO_CHAR(due_date,'YYYY') as y FROM financial_charges WHERE due_date IS NOT NULL ORDER BY y`),
+    tAll(`SELECT DISTINCT TO_CHAR(paid_date,'YYYY') as y FROM financial_charges WHERE paid_date IS NOT NULL ORDER BY y`),
+  ]);
+  const yearsSet = new Set([...yDue, ...yPaid].map(r => parseInt(r.y)).filter(Boolean));
+  yearsSet.add(currentYear);
+  yearsSet.add(currentYear + 1); // próximo ano sempre disponível para planejamento
+  const years = [...yearsSet].sort();
 
+  // Previsto: todas as cobranças (não canceladas) agrupadas por due_date no ano
+  const plannedRaw = await tAll(
+    `SELECT TO_CHAR(due_date,'YYYY-MM') as month, COALESCE(SUM(amount),0) as total
+     FROM financial_charges
+     WHERE status != 'cancelled'
+       AND TO_CHAR(due_date,'YYYY-MM') >= ? AND TO_CHAR(due_date,'YYYY-MM') <= ?
+     GROUP BY TO_CHAR(due_date,'YYYY-MM') ORDER BY month ASC`,
+    [from, to]
+  );
+
+  // Realizado: cobranças pagas agrupadas por paid_date no ano
+  const actualRaw = await tAll(
+    `SELECT TO_CHAR(paid_date,'YYYY-MM') as month, COALESCE(SUM(amount),0) as total
+     FROM financial_charges
+     WHERE status='paid' AND paid_date IS NOT NULL
+       AND TO_CHAR(paid_date,'YYYY-MM') >= ? AND TO_CHAR(paid_date,'YYYY-MM') <= ?
+     GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY month ASC`,
+    [from, to]
+  );
+
+  // Baseline de contratos ativos (valor mensal a ser faturado nos meses sem cobranças)
+  const baselineRow = await tGet(`SELECT COALESCE(SUM(monthly_value),0) as v FROM contracts WHERE status='active'`);
+  const baseline = Number(baselineRow?.v || 0);
+
+  // Mapas mês → valor
+  const plannedMap = {};
+  for (const r of plannedRaw) plannedMap[r.month] = Number(r.total);
+  const actualMap = {};
+  for (const r of actualRaw) actualMap[r.month] = Number(r.total);
+
+  const today = new Date();
+  const currentYM = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+  const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  const months = Array.from({length: 12}, (_, i) => {
+    const m = `${yStr}-${String(i+1).padStart(2,'0')}`;
+    const hasPrevisto = plannedMap[m] !== undefined;
+    // Para meses futuros sem cobranças lançadas, usa o baseline de contratos
+    const previsto = hasPrevisto ? plannedMap[m] : (m > currentYM ? baseline : 0);
+    return {
+      month:     m,
+      label:     MONTHS_PT[i],
+      label_short: MONTHS_PT[i].slice(0,3),
+      previsto,
+      realizado: actualMap[m] || 0,
+      is_baseline: !hasPrevisto && m > currentYM,
+      is_past:    m < currentYM,
+      is_current: m === currentYM,
+      is_future:  m > currentYM,
+    };
+  });
+
+  const totalPrevisto  = months.reduce((s, m) => s + m.previsto, 0);
+  const totalRealizado = months.reduce((s, m) => s + m.realizado, 0);
+  const taxa = totalPrevisto > 0 ? Math.round(totalRealizado / totalPrevisto * 100) : 0;
+  const avgPrevisto = totalPrevisto / 12;
+
+  sendJson(res, { year, years, baseline, months, total_previsto: totalPrevisto, total_realizado: totalRealizado, taxa_realizacao: taxa, avg_mensal: avgPrevisto });
+});
+
+addRoute('GET', '/api/analytics/extended', async (req, res, ctx) => {
+  const { dbAll: tAll, dbGet: tGet, dbRun: tRun } = ctx.db;
+  await checkOverdue(tRun);
+  const ms = monthStart(), ago3m = daysAgo(90), ago6m = daysAgo(180);
+  const g1 = (sql, a=[]) => tGet(sql, a);
+  const n  = v => Number(v || 0);
+  const [r3m,r6m,rtot,dm,cv30,cv7,vcar,cnm,ltxm,pm,pp,ot,om,ocm,ost,osc,ssl,sml] = await Promise.all([
+    g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`,[ago3m]),
+    g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid' AND paid_date>=?`,[ago6m]),
+    g1(`SELECT COALESCE(SUM(amount),0) as v FROM financial_charges WHERE status='paid'`),
+    g1(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_os WHERE status='completed'`),
+    g1(`SELECT COUNT(*) as v FROM contracts WHERE status='active' AND end_date<=?`,[daysAhead(30)]),
+    g1(`SELECT COUNT(*) as v FROM contracts WHERE status='active' AND end_date<=?`,[daysAhead(7)]),
+    g1(`SELECT COALESCE(SUM(monthly_value),0) as v FROM contracts WHERE status='active'`),
+    g1(`SELECT COUNT(*) as v FROM clients WHERE DATE(created_at)>=?`,[ms]),
+    g1(`SELECT MAX(ltv) as v FROM clients WHERE active=1`),
+    g1(`SELECT COUNT(*) as v FROM store_orders WHERE status='paid' AND DATE(created_at)>=?`,[ms]),
+    g1(`SELECT COUNT(*) as v FROM store_orders WHERE status IN ('open','pending_payment')`),
+    g1(`SELECT COUNT(*) as v FROM queue_operations`),
+    g1(`SELECT COUNT(*) as v FROM queue_operations WHERE DATE(requested_at)>=?`,[ms]),
+    g1(`SELECT COUNT(*) as v FROM queue_operations WHERE status='completed' AND DATE(completed_at)>=?`,[ms]),
+    g1(`SELECT COUNT(*) as v FROM maintenance_os`),
+    g1(`SELECT COUNT(*) as v FROM maintenance_os WHERE status='completed'`),
+    g1(`SELECT COUNT(*) as v FROM spots WHERE type='seca' AND status='available'`),
+    g1(`SELECT COUNT(*) as v FROM spots WHERE type='molhada' AND status='available'`),
+  ]);
+  const [_rmp,_lmp,_opt,_omp,_mpt,_cps,_tcl,vip,gold,silv,std] = await Promise.all([
+    tAll(`SELECT TO_CHAR(paid_date,'YYYY-MM') as month, COALESCE(SUM(amount),0) as total, COUNT(*) as count FROM financial_charges WHERE status='paid' AND paid_date IS NOT NULL GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY TO_CHAR(paid_date,'YYYY-MM') DESC LIMIT 12`),
+    tAll(`SELECT TO_CHAR(created_at,'YYYY-MM') as month, COALESCE(SUM(total),0) as total, COUNT(*) as count FROM store_orders WHERE status='paid' GROUP BY TO_CHAR(created_at,'YYYY-MM') ORDER BY TO_CHAR(created_at,'YYYY-MM') DESC LIMIT 12`),
+    tAll(`SELECT operation_type, COUNT(*) as count FROM queue_operations GROUP BY operation_type ORDER BY count DESC`),
+    tAll(`SELECT TO_CHAR(requested_at,'YYYY-MM') as month, COUNT(*) as count FROM queue_operations GROUP BY TO_CHAR(requested_at,'YYYY-MM') ORDER BY TO_CHAR(requested_at,'YYYY-MM') DESC LIMIT 12`),
+    tAll(`SELECT type, COUNT(*) as count, COALESCE(SUM(cost),0) as total FROM maintenance_os GROUP BY type`),
+    tAll(`SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM financial_charges GROUP BY status`),
+    tAll(`SELECT c.name, c.tier, COALESCE(SUM(o.total),0) as total_loja, COUNT(o.id) as pedidos FROM clients c LEFT JOIN store_orders o ON o.client_id=c.id AND o.status='paid' WHERE c.active=1 GROUP BY c.id, c.name, c.tier ORDER BY total_loja DESC LIMIT 10`),
+    g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='vip'`),
+    g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='gold'`),
+    g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='silver'`),
+    g1(`SELECT COUNT(*) as v FROM clients WHERE active=1 AND tier='standard'`),
+  ]);
+  // Coerção numérica dos arrays com aggregates
+  const rmp = _rmp.map(r=>({...r, total:Number(r.total), count:Number(r.count)}));
+  const lmp = _lmp.map(r=>({...r, total:Number(r.total), count:Number(r.count)}));
+  const opt = _opt.map(r=>({...r, count:Number(r.count)}));
+  const omp = _omp.map(r=>({...r, count:Number(r.count)}));
+  const mpt = _mpt.map(r=>({...r, count:Number(r.count), total:Number(r.total)}));
+  const cps = _cps.map(r=>({...r, count:Number(r.count), total:Number(r.total)}));
+  const tcl = _tcl.map(r=>({...r, total_loja:Number(r.total_loja), pedidos:Number(r.pedidos)}));
+
+  const om_n = n(om?.v);
   sendJson(res, {
-    receita_3m, receita_6m, receita_total, despesas_manut,
-    margem_bruta: receita_total - despesas_manut,
-    contratos_vencendo_30d, contratos_vencendo_7d,
-    valor_carteira, valor_carteira_anual: valor_carteira*12,
-    clientes_novos_mes, ltv_max,
-    pedidos_mes, pedidos_pendentes,
-    ops_total, ops_mes, ops_completed_mes, taxa_conclusao,
-    os_total, os_concluidas, taxa_resolucao_os,
-    spots_seca_livre, spots_mol_livre,
-    receita_por_mes, loja_por_mes, ops_por_tipo, ops_por_mes,
-    manut_por_tipo, charges_por_status, top_clientes_loja,
-    vip_count, gold_count, silver_count, std_count,
+    receita_3m:n(r3m?.v), receita_6m:n(r6m?.v), receita_total:n(rtot?.v), despesas_manut:n(dm?.v),
+    margem_bruta:n(rtot?.v)-n(dm?.v),
+    contratos_vencendo_30d:n(cv30?.v), contratos_vencendo_7d:n(cv7?.v),
+    valor_carteira:n(vcar?.v), valor_carteira_anual:n(vcar?.v)*12,
+    clientes_novos_mes:n(cnm?.v), ltv_max:n(ltxm?.v),
+    pedidos_mes:n(pm?.v), pedidos_pendentes:n(pp?.v),
+    ops_total:n(ot?.v), ops_mes:om_n, ops_completed_mes:n(ocm?.v),
+    taxa_conclusao: om_n>0 ? Math.round(n(ocm?.v)/om_n*100) : 0,
+    os_total:n(ost?.v), os_concluidas:n(osc?.v),
+    taxa_resolucao_os: n(ost?.v)>0 ? Math.round(n(osc?.v)/n(ost?.v)*100) : 0,
+    spots_seca_livre:n(ssl?.v), spots_mol_livre:n(sml?.v),
+    receita_por_mes: rmp.reverse(), loja_por_mes: lmp.reverse(), ops_por_tipo: opt, ops_por_mes: omp.reverse(),
+    manut_por_tipo: mpt, charges_por_status: cps, top_clientes_loja: tcl,
+    vip_count:n(vip?.v), gold_count:n(gold?.v), silver_count:n(silv?.v), std_count:n(std?.v),
   });
 });
 
-// ── SETTINGS ─────────────────────────────────────────────────────────
-addRoute('GET', '/api/settings', async (req, res) => {
-  const rows = dbAll(`SELECT key,value FROM settings`);
-  const obj = {};
-  rows.forEach(r => { obj[r.key] = r.value; });
-  sendJson(res, obj);
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — CONFIGURAÇÕES + SYSTEM LOGS
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/settings', async (req, res, ctx) => {
+  const s = await getSettings(ctx.db.dbAll);
+  // Garante que license_marina_id está sempre preenchido com o slug do tenant
+  if (!s.license_marina_id && ctx.tenantSlug) s.license_marina_id = ctx.tenantSlug;
+  sendJson(res, s);
 });
+
 addRoute('PUT', '/api/settings', async (req, res, ctx) => {
   if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
-  const body = ctx.body || {};
-  for (const [k, v] of Object.entries(body)) {
-    dbRun(`INSERT INTO settings(key,value,updated_at) VALUES(?,?,datetime('now'))
-           ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,
-          [k, String(v)]);
+  const { dbRun: tRun } = ctx.db;
+  for (const [k, v] of Object.entries(ctx.body || {})) {
+    await tRun(`INSERT INTO settings(key,value,updated_at) VALUES(?,?,NOW())
+                ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
+               [k, String(v)]);
   }
   sendJson(res, { ok: true });
 });
 
-// ── SYSTEM LOGS ───────────────────────────────────────────────────────
 addRoute('GET', '/api/system-logs', async (req, res, ctx) => {
   if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
   const { limit: lim = '100', action = '' } = ctx.qs;
+  const { dbAll: tAll } = ctx.db;
   let sql = 'SELECT * FROM system_logs WHERE 1=1';
   const a = [];
   if (action) { sql += ' AND action=?'; a.push(action); }
-  sql += ` ORDER BY created_at DESC LIMIT ${parseInt(lim)||100}`;
-  sendJson(res, dbAll(sql, a));
+  sql += ` ORDER BY created_at DESC LIMIT ${Math.min(parseInt(lim)||100, 500)}`;
+  sendJson(res, await tAll(sql, a));
 });
 
-// ── DB INIT & SEED ────────────────────────────────────────────────────
-function initDb() {
-  db = new DatabaseSync(DB_PATH);
-  db.exec(`
-  PRAGMA foreign_keys=ON;
-  CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,name TEXT NOT NULL,role TEXT DEFAULT 'admin');
-  CREATE TABLE IF NOT EXISTS clients(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT,phone TEXT,cpf TEXT,tier TEXT DEFAULT 'standard',ltv REAL DEFAULT 0,address TEXT,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-  CREATE TABLE IF NOT EXISTS vessels(id INTEGER PRIMARY KEY AUTOINCREMENT,client_id INTEGER NOT NULL,name TEXT NOT NULL,type TEXT,length REAL,beam REAL,draft REAL,year INTEGER,registration TEXT,model TEXT,manufacturer TEXT,engine TEXT,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-  CREATE TABLE IF NOT EXISTS spots(id INTEGER PRIMARY KEY AUTOINCREMENT,number TEXT NOT NULL,type TEXT NOT NULL,status TEXT DEFAULT 'available',vessel_id INTEGER);
-  CREATE TABLE IF NOT EXISTS contracts(id INTEGER PRIMARY KEY AUTOINCREMENT,client_id INTEGER NOT NULL,vessel_id INTEGER NOT NULL,spot_id INTEGER,type TEXT NOT NULL,start_date TEXT NOT NULL,end_date TEXT,monthly_value REAL NOT NULL,status TEXT DEFAULT 'active',notes TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-  CREATE TABLE IF NOT EXISTS queue_operations(id INTEGER PRIMARY KEY AUTOINCREMENT,vessel_id INTEGER NOT NULL,client_id INTEGER NOT NULL,operation_type TEXT NOT NULL,status TEXT DEFAULT 'waiting',priority INTEGER DEFAULT 0,requested_at TEXT DEFAULT CURRENT_TIMESTAMP,started_at TEXT,completed_at TEXT,operator TEXT,notes TEXT);
-  CREATE TABLE IF NOT EXISTS financial_charges(id INTEGER PRIMARY KEY AUTOINCREMENT,client_id INTEGER NOT NULL,contract_id INTEGER,description TEXT NOT NULL,amount REAL NOT NULL,due_date TEXT NOT NULL,paid_date TEXT,payment_method TEXT,status TEXT DEFAULT 'pending',notes TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-  CREATE TABLE IF NOT EXISTS store_items(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,category TEXT,price REAL NOT NULL,cost REAL DEFAULT 0,stock INTEGER DEFAULT 0,min_stock INTEGER DEFAULT 5,unit TEXT DEFAULT 'un',active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-  CREATE TABLE IF NOT EXISTS store_orders(id INTEGER PRIMARY KEY AUTOINCREMENT,vessel_id INTEGER,client_id INTEGER,items TEXT NOT NULL,subtotal REAL NOT NULL,discount REAL DEFAULT 0,total REAL NOT NULL,status TEXT DEFAULT 'open',payment_method TEXT,pix_txid TEXT,notes TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-  CREATE TABLE IF NOT EXISTS store_pix_config(id INTEGER PRIMARY KEY AUTOINCREMENT,key TEXT NOT NULL,key_type TEXT NOT NULL,merchant_name TEXT NOT NULL,city TEXT NOT NULL,active INTEGER DEFAULT 1);
-  CREATE TABLE IF NOT EXISTS maintenance_os(id INTEGER PRIMARY KEY AUTOINCREMENT,vessel_id INTEGER,os_number TEXT NOT NULL,type TEXT NOT NULL,description TEXT NOT NULL,status TEXT DEFAULT 'open',priority TEXT DEFAULT 'normal',scheduled_date TEXT,completed_date TEXT,estimated_hours REAL,actual_hours REAL,cost REAL DEFAULT 0,technician TEXT,parts_used TEXT,notes TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-  CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,message TEXT NOT NULL,severity TEXT DEFAULT 'info',entity_type TEXT,entity_id INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP,read_at TEXT);
-  CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL DEFAULT '',updated_at TEXT DEFAULT (datetime('now')));
-  CREATE TABLE IF NOT EXISTS payment_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,charge_id INTEGER NOT NULL,client_id INTEGER,client_name TEXT,description TEXT,amount REAL,payment_method TEXT,pay_notes TEXT,comprovante_data TEXT,comprovante_name TEXT,user_id INTEGER,user_email TEXT,user_name TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-  `);
-}
-
-function seedDb() {
-  if ((dbGet('SELECT COUNT(*) as n FROM users')?.n || 0) > 0) return;
-
-  dbRun('INSERT INTO users(email,password_hash,name,role) VALUES(?,?,?,?)',
-        ['admin@marina.com', sha256('marina123'), 'Administrador', 'admin']);
-
-  for (let i = 1; i <= 90; i++)
-    dbRun(`INSERT INTO spots(number,type,status) VALUES(?,'seca','available')`, [`S${String(i).padStart(3,'0')}`]);
-  for (let i = 1; i <= 20; i++)
-    dbRun(`INSERT INTO spots(number,type,status) VALUES(?,'molhada','available')`, [`M${String(i).padStart(2,'0')}`]);
-
-  const clientData = [
-    ['Carlos Eduardo Souza','carlos@email.com','(11) 99999-0001','123.456.789-01','vip','Av. Beira Mar, 100'],
-    ['Ana Paula Ferreira','ana@email.com','(11) 99999-0002','234.567.890-02','gold','Rua das Flores, 200'],
-    ['Roberto Alves Lima','roberto@email.com','(11) 99999-0003','345.678.901-03','gold','Alameda Santos, 300'],
-    ['Mariana Costa Pinto','mariana@email.com','(11) 99999-0004','456.789.012-04','silver','Rua Augusta, 400'],
-    ['Fernando Oliveira','fernando@email.com','(11) 99999-0005','567.890.123-05','silver','Av. Paulista, 500'],
-    ['Juliana Santos Cruz','juliana@email.com','(11) 99999-0006','678.901.234-06','standard','Rua 7 de Abril, 600'],
-    ['Marcelo Rodrigues','marcelo@email.com','(11) 99999-0007','789.012.345-07','standard','Av. Brasil, 700'],
-    ['Patricia Mendes Luz','patricia@email.com','(11) 99999-0008','890.123.456-08','vip','Rua Consolacao, 800'],
-  ];
-  const cids = clientData.map(c => Number(dbRun('INSERT INTO clients(name,email,phone,cpf,tier,address) VALUES(?,?,?,?,?,?)', c).lastInsertRowid));
-  const cEmails = ['carlos','ana','roberto','mariana','fernando','juliana','marcelo','patricia'];
-  cEmails.forEach((prefix,i) => {
-    try { dbRun('INSERT INTO users(email,password_hash,name,role) VALUES(?,?,?,?)',
-                [`${prefix}@marinaone.com`, sha256('senha123'), clientData[i][0], 'client']); }
-    catch(e) {}
-  });
-
-  const vesselData = [
-    [cids[0],'Rei dos Mares','lancha',12.5,3.2,1.0,2020,'SP-1001','Phantom 45','Phantom','Diesel 600cv'],
-    [cids[1],'Brisa do Mar','veleiro',10.0,3.0,1.5,2018,'SP-1002','Bavaria 33','Bavaria','Vela'],
-    [cids[2],'Pegaso','lancha',9.5,2.8,0.9,2021,'SP-1003','Focker 295','Focker','Diesel 400cv'],
-    [cids[3],'Sereia','lancha',7.5,2.5,0.7,2019,'SP-1004','Coral 28','Coral','Gasolina 280cv'],
-    [cids[4],'Delfim','jetski',3.5,1.2,0.4,2022,'SP-1005','Sea-Doo 300','Sea-Doo','Gasolina 300cv'],
-    [cids[5],'Mare Alta','lancha',8.0,2.6,0.8,2017,'SP-1006','Ventura 28','Ventura','Gasolina 220cv'],
-    [cids[6],'Sol Poente','catamaras',11.0,5.0,0.8,2020,'SP-1007','Leopard 38','Leopard','Diesel 2x55cv'],
-    [cids[7],'Tempestade','lancha',13.0,3.5,1.1,2023,'SP-1008','Azimut 45','Azimut','Diesel 2x800cv'],
-  ];
-  const vids = vesselData.map(v => Number(dbRun('INSERT INTO vessels(client_id,name,type,length,beam,draft,year,registration,model,manufacturer,engine) VALUES(?,?,?,?,?,?,?,?,?,?,?)', v).lastInsertRowid));
-
-  const startDate = daysAgo(180);
-  const endDate   = daysAhead(180);
-  const ctData = [
-    [cids[0],vids[0],1,'seca',3500],
-    [cids[1],vids[1],2,'seca',3200],
-    [cids[2],vids[2],3,'seca',2800],
-    [cids[3],vids[3],4,'seca',2200],
-    [cids[4],vids[4],5,'seca',1500],
-    [cids[5],vids[5],6,'seca',1800],
-    [cids[6],vids[6],91,'molhada',4500],
-    [cids[7],vids[7],92,'molhada',5500],
-  ];
-  const ctids = ctData.map(ct => {
-    const r = dbRun(`INSERT INTO contracts(client_id,vessel_id,spot_id,type,start_date,end_date,monthly_value,status) VALUES(?,?,?,?,?,?,?,'active')`,
-                    [ct[0], ct[1], ct[2], ct[3], startDate, endDate, ct[4]]);
-    dbRun(`UPDATE spots SET status='occupied',vessel_id=? WHERE id=?`, [ct[1], ct[2]]);
-    return Number(r.lastInsertRowid);
-  });
-
-  // Financial history
-  for (let i = 30; i >= 1; i--) {
-    const d   = new Date(); d.setDate(d.getDate() - i);
-    const ds  = d.toISOString().slice(0, 10);
-    if (i % 30 === 0 || i === 30) {
-      for (let idx = 0; idx < 8; idx++) {
-        const isPaid   = i > 5;
-        const month    = d.toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
-        dbRun(`INSERT INTO financial_charges(client_id,contract_id,description,amount,due_date,paid_date,status,payment_method) VALUES(?,?,?,?,?,?,?,?)`,
-              [cids[idx], ctids[idx], `Mensalidade ${month}`, ctData[idx][4], ds,
-               isPaid ? ds : null, isPaid ? 'paid' : 'pending', isPaid ? 'pix' : null]);
-      }
-    }
-  }
-
-  const extras = [
-    [cids[0],null,'Servico de icamento emergencial',850,daysAgo(15),daysAgo(15),'paid','cartao'],
-    [cids[1],null,'Limpeza casco completa',420,daysAgo(10),daysAgo(9),'paid','pix'],
-    [cids[2],null,'Pernoite embarcacao visitante',200,daysAgo(8),null,'overdue',null],
-    [cids[3],null,'Energia eletrica extra',180,daysAgo(6),null,'overdue',null],
-    [cids[7],null,'Reforma box armazenagem',1200,daysAhead(5),null,'pending',null],
-  ];
-  for (const e of extras)
-    dbRun(`INSERT INTO financial_charges(client_id,contract_id,description,amount,due_date,paid_date,status,payment_method) VALUES(?,?,?,?,?,?,?,?)`, e);
-
-  for (const cid of cids) recalcLtv(cid);
-
-  const storeItems = [
-    ['Oleo Motor 4T 1L','manutencao',45.9,28,30,10,'un'],
-    ['Oleo Motor 2T 1L','manutencao',38.5,22,25,10,'un'],
-    ['Fluido Hidraulico 1L','manutencao',52,30,20,5,'un'],
-    ['Graxa Maritima 500g','manutencao',28.9,15,40,10,'un'],
-    ['Fita Isolante Maritima','equipamento',18.5,8,50,15,'un'],
-    ['Colete Salva-vidas Adulto','equipamento',220,140,15,5,'un'],
-    ['Colete Infantil','equipamento',180,110,8,3,'un'],
-    ['Corda Nautica 10m','equipamento',65,35,20,5,'un'],
-    ['Ancora 5kg','equipamento',380,250,6,2,'un'],
-    ['Extintor CO2 2kg','equipamento',145,90,12,4,'un'],
-    ['Cerveja Lata 350ml','bebida',8,3.5,120,30,'un'],
-    ['Agua Mineral 500ml','bebida',4,1.5,200,50,'un'],
-    ['Refrigerante Lata','bebida',7,3,80,20,'un'],
-    ['Energetico 250ml','bebida',12,6,60,15,'un'],
-    ['Salgadinho Pacote','alimento',6.5,3,100,20,'un'],
-    ['Barra de Cereal','alimento',4.5,2,80,20,'un'],
-    ['Protetor Solar FPS60','outros',35,18,45,10,'un'],
-    ['Toalha de Praia','outros',55,28,20,5,'un'],
-    ['Limpador Embarcacao 1L','limpeza',42,22,30,8,'un'],
-    ['Esponja Maritima','limpeza',12,5,60,15,'un'],
-  ];
-  const iids = storeItems.map(it => Number(dbRun('INSERT INTO store_items(name,category,price,cost,stock,min_stock,unit) VALUES(?,?,?,?,?,?,?)', it).lastInsertRowid));
-
-  dbRun(`INSERT INTO store_pix_config(key,key_type,merchant_name,city,active) VALUES(?,'telefone','Marina One','Sao Paulo',1)`, ['11999990000']);
-
-  const pmts = ['dinheiro', 'pix', 'cartao'];
-  for (let i = 25; i >= 1; i--) {
-    const d  = new Date(); d.setDate(d.getDate() - i);
-    const ds = d.toISOString().replace('T', ' ').slice(0, 19);
-    const cidx = Math.floor(Math.random() * 8), vidx = Math.floor(Math.random() * 8);
-    const n = Math.floor(Math.random() * 3) + 1;
-    const items = [];
-    for (let j = 0; j < n; j++) {
-      const iidx = Math.floor(Math.random() * storeItems.length);
-      items.push({ item_id: iids[iidx], name: storeItems[iidx][0], qty: Math.floor(Math.random() * 2) + 1, price: storeItems[iidx][2] });
-    }
-    const subtotal = items.reduce((s, x) => s + x.price * x.qty, 0);
-    dbRun(`INSERT INTO store_orders(vessel_id,client_id,items,subtotal,discount,total,status,payment_method,created_at) VALUES(?,?,?,?,0,?,'paid',?,?)`,
-          [vids[vidx], cids[cidx], JSON.stringify(items), subtotal, subtotal, pmts[Math.floor(Math.random() * 3)], ds]);
-  }
-
-  const ops = ['descida', 'subida', 'atracacao'];
-  const opers = ['Joao Silva', 'Pedro Santos', 'Maria Oliveira'];
-  for (let i = 20; i >= 1; i--) {
-    const d  = new Date(); d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0, 16).replace('T', ' ') + ':00';
-    const de = d.toISOString().slice(0, 16).replace('T', ' ') + ':30';
-    const idx = Math.floor(Math.random() * 8);
-    dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,requested_at,started_at,completed_at,operator) VALUES(?,?,?,'completed',?,?,?,?)`,
-          [vids[idx], cids[idx], ops[Math.floor(Math.random() * 3)], ds, ds, de, opers[Math.floor(Math.random() * 3)]]);
-  }
-  dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority) VALUES(?,?,'descida','waiting',1)`, [vids[0], cids[0]]);
-  dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority) VALUES(?,?,'subida','in_progress',0)`, [vids[3], cids[3]]);
-  dbRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority) VALUES(?,?,'atracacao','waiting',1)`, [vids[6], cids[6]]);
-
-  const maintData = [
-    [vids[0],'OS-20240101-001','preventiva','Revisao anual motor','completed','normal',daysAgo(20),daysAgo(18),4,3.5,850,'Joao Mecanico'],
-    [vids[1],'OS-20240102-002','preventiva','Troca de oleo e filtros','completed','normal',daysAgo(15),daysAgo(14),2,1.5,320,'Pedro Tecnico'],
-    [vids[2],'OS-20240103-003','corretiva','Reparo no sistema de direcao','in_progress','high',daysAgo(5),null,6,null,1200,'Joao Mecanico'],
-    [vids[3],'OS-20240104-004','corretiva','Substituicao bomba dagua','open','urgent',todayStr(),null,3,null,650,null],
-    [vids[4],'OS-20240105-005','preventiva','Lubrificacao geral e revisao','open','normal',daysAhead(7),null,2,null,280,null],
-    [vids[7],'OS-20240106-006','preventiva','Revisao eletrica completa','open','high',daysAhead(3),null,8,null,2200,'Maria Eletrica'],
-  ];
-  for (const m of maintData)
-    dbRun('INSERT INTO maintenance_os(vessel_id,os_number,type,description,status,priority,scheduled_date,completed_date,estimated_hours,actual_hours,cost,technician) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', m);
-
-  const alertsData = [
-    ['financeiro','2 cobrancas em atraso - total R$ 380,00','warning'],
-    ['manutencao','OS urgente: Substituicao bomba dagua - Sereia','error'],
-    ['estoque','Estoque baixo: Ancora 5kg (6 un)','warning'],
-    ['contrato','3 contratos vencem em 30 dias','info'],
-    ['sistema','Sistema Marina One iniciado com sucesso','info'],
-  ];
-  for (const a of alertsData)
-    dbRun('INSERT INTO alerts(type,message,severity) VALUES(?,?,?)', a);
-
-  console.log('✅ Banco de dados populado com dados de exemplo!');
-}
-
-// ── HTTP SERVER ───────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+//  SERVIDOR HTTP
+// ═════════════════════════════════════════════════════════════════════
 const server = http.createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') { setCors(res); res.writeHead(204); res.end(); return; }
+  setCors(res);
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
-  const urlPath = req.url.split('?')[0];
+  const urlpath = (req.url || '/').split('?')[0];
 
-  // Static file serving
-  if (req.method === 'GET' && !urlPath.startsWith('/api')) {
-    const fileName = urlPath === '/' ? 'frontend.html' : urlPath.slice(1);
-    const fullPath = path.join(__dirname, fileName);
-    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
-      const ext = path.extname(fullPath);
-      const ct  = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css' }[ext] || 'text/plain';
-      setCors(res); res.writeHead(200, { 'Content-Type': ct });
-      fs.createReadStream(fullPath).pipe(res);
-      return;
-    }
-    setCors(res); res.writeHead(404); res.end('Not found'); return;
+  // ── Serve frontend ─────────────────────────────────────────────────
+  if (req.method === 'GET' && (urlpath === '/' || urlpath === '/index.html' || urlpath === '/frontend.html')) {
+    try {
+      let html = fs.readFileSync(path.join(__dirname, 'frontend.html'), 'utf8');
+      // Injeta variáveis de ambiente no frontend para resolução de subdomínio
+      const inject = `<script>
+window.BASE_DOMAIN="${(process.env.BASE_DOMAIN||'').replace(/"/g,'')}";
+window.APP_ENV="${process.env.NODE_ENV||'development'}";
+</script>`;
+      html = html.replace('</head>', inject + '</head>');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(html);
+    } catch { res.writeHead(404); return res.end('Not found'); }
   }
 
-  if (!urlPath.startsWith('/api')) { sendJson(res, { error: 'Not found' }, 404); return; }
-
-  const match = matchRoute(req.method, urlPath);
-  if (!match) { sendJson(res, { error: 'Not found' }, 404); return; }
-
-  const user = getAuth(req);
-  if (urlPath !== '/api/auth/login' && !user) { sendJson(res, { error: 'Token inválido' }, 401); return; }
-
-  const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await parseBody(req) : {};
-  const qs   = getQS(req.url);
+  // ── Rotas da API ────────────────────────────────────────────────────
+  if (!urlpath.startsWith('/api/')) { res.writeHead(404); return res.end('Not found'); }
 
   try {
-    await match.fn(req, res, { body, params: match.params, qs, user });
-  } catch (e) {
-    console.error('[Error]', req.method, urlPath, e.message);
-    sendJson(res, { error: 'Internal server error' }, 500);
+    const body = req.method !== 'GET' ? await parseBody(req) : {};
+    const qs   = getQS(req.url || '');
+
+    // Contexto base
+    const ctx = { body, qs, params: {}, user: null, tenantSlug: null, tenant: null, db: null };
+
+    // ── Middleware: tenant ───────────────────────────────────────────
+    let tenantResolved = false;
+    await tenantMiddleware(req, res, () => { tenantResolved = true; });
+    if (!tenantResolved) return; // tenant middleware já respondeu
+
+    ctx.tenantSlug = req.tenantSlug;
+    ctx.tenant     = req.tenant;
+
+    // Cria helpers DB específicos do tenant (exceto rotas sem tenant)
+    if (ctx.tenantSlug) {
+      ctx.db = createDbHelpers(ctx.tenantSlug);
+    }
+
+    // ── Middleware: auth ─────────────────────────────────────────────
+    let authResolved = false;
+    authMiddleware(req, res, () => { authResolved = true; });
+    if (!authResolved) return;
+    ctx.user = req.user;
+
+    // ── Despacha rota ────────────────────────────────────────────────
+    const match = matchRoute(req.method, urlpath);
+    if (!match) {
+      return sendJson(res, { error: 'Rota não encontrada' }, 404);
+    }
+    ctx.params = match.params;
+    await match.fn(req, res, ctx);
+
+  } catch (err) {
+    console.error('[server] Erro:', err.message, err.stack);
+    sendJson(res, { error: 'Erro interno do servidor' }, 500);
   }
 });
 
-// ── START ─────────────────────────────────────────────────────────────
-initDb();
+// ═════════════════════════════════════════════════════════════════════
+//  BOOT
+// ═════════════════════════════════════════════════════════════════════
+async function boot() {
+  console.log(`\n🚢  Marina One v${APP_VERSION} (SaaS Multi-Tenant)`);
+  console.log('    Node.js:', process.version);
+  console.log('    Banco:   PostgreSQL (via postgres.js)');
 
-function migrateDb() {
-  // Add new columns to store_orders (ignore error if already exist)
-  try { db.exec(`ALTER TABLE store_orders ADD COLUMN delivery_status TEXT DEFAULT NULL`); } catch(e) {}
-  try { db.exec(`ALTER TABLE store_orders ADD COLUMN whatsapp_sent INTEGER DEFAULT 0`); } catch(e) {}
-  try { db.exec(`ALTER TABLE store_orders ADD COLUMN comprovante_data TEXT`); } catch(e) {}
-  try { db.exec(`ALTER TABLE store_orders ADD COLUMN comprovante_name TEXT`); } catch(e) {}
-  try { db.exec(`ALTER TABLE store_orders ADD COLUMN pay_notes TEXT`); } catch(e) {}
-  try { db.exec(`ALTER TABLE store_orders ADD COLUMN paid_date TEXT`); } catch(e) {}
-  // Settings table (idempotent)
-  try { db.exec(`CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL DEFAULT '',updated_at TEXT DEFAULT (datetime('now')))`); } catch(e) {}
-  try { db.exec(`CREATE TABLE IF NOT EXISTS payment_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,charge_id INTEGER NOT NULL,client_id INTEGER,client_name TEXT,description TEXT,amount REAL,payment_method TEXT,pay_notes TEXT,comprovante_data TEXT,comprovante_name TEXT,user_id INTEGER,user_email TEXT,user_name TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP)`); } catch(e) {}
-  try { db.exec(`ALTER TABLE contracts ADD COLUMN contract_file TEXT`); } catch(e) {}
-  try { db.exec(`ALTER TABLE contracts ADD COLUMN contract_file_name TEXT`); } catch(e) {}
-  try { db.exec(`ALTER TABLE vessels ADD COLUMN size TEXT DEFAULT 'media'`); } catch(e) {}
-  try { db.exec(`ALTER TABLE queue_operations ADD COLUMN queue_order INTEGER`); } catch(e) {}
-  try { db.exec(`CREATE TABLE IF NOT EXISTS system_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,user_name TEXT,action TEXT,details TEXT,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`); } catch(e) {}
-  // Initialize queue_order for existing waiting ops that don't have it set
-  try {
-    const noOrder = dbAll(`SELECT id FROM queue_operations WHERE status='waiting' AND queue_order IS NULL ORDER BY priority DESC, requested_at ASC`);
-    noOrder.forEach((op, i) => dbRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [i+1, op.id]));
-  } catch(e) {}
-  // Seed default settings (INSERT OR IGNORE)
-  const defSettings = [
-    ['marina_name','Marina One'],['marina_cnpj','00.000.000/0001-00'],
-    ['marina_address','Av. do Porto, 100 - São Paulo, SP'],['marina_phone','(11) 99999-0000'],
-    ['marina_whatsapp','5511999990000'],['marina_email','contato@marinaone.com'],
-    ['marina_city','São Paulo'],['marina_state','SP'],['marina_cep','01000-000'],
-    ['bank_name','Banco do Brasil'],['bank_agency','1234-5'],['bank_account','00000-0'],
-    ['bank_pix_key','11999990000'],['bank_pix_type','telefone'],['bank_pix_beneficiary','Marina One LTDA'],
-    ['store_whatsapp','5511999990000'],
-    ['store_whatsapp_template','Olá {cliente}! Segue seu orçamento da {marina}:\n\n🛥️ Embarcação: {embarcacao}\n📋 Itens: {itens}\n💰 Total: {total}\n\nPara pagamento via PIX:\nChave: {pix_key}\n\n{qrcode_link}\n\nApós o pagamento, envie o comprovante para este número. Obrigado!'],
-    ['license_plan','professional'],['license_valid_until','2027-12-31'],['license_marina_id','MRN-001'],
-    // Average operation times in minutes per vessel size
-    ['avg_time_descida_pequena','20'],['avg_time_descida_media','35'],['avg_time_descida_grande','60'],
-    ['avg_time_subida_pequena','20'],['avg_time_subida_media','35'],['avg_time_subida_grande','60'],
-    ['avg_time_atracacao_pequena','15'],['avg_time_atracacao_media','25'],['avg_time_atracacao_grande','40'],
-    ['maneuver_time_min','10'],
-    ['ops_start_time','07:00'],
-    ['ops_end_time','18:00'],
-    // Operation checklists (JSON arrays)
-    ['checklist_descida','["Verificar condições do cais e amarras","Conferir equipamentos de içamento","Checar comunicação com a equipe","Confirmar profundidade e maré","Verificar documentação da embarcação"]'],
-    ['checklist_subida','["Verificar condições do cais e amarras","Confirmar disponibilidade de vaga em terra","Checar equipamentos de içamento","Avisar cliente sobre retirada","Inspecionar casco antes de içar"]'],
-    ['checklist_atracacao','["Verificar disponibilidade da vaga","Conferir amarras e defensas","Checar condições climáticas","Confirmar calado da embarcação","Orientar tripulação sobre manobra"]'],
-  ];
-  for (const [k,v] of defSettings) {
-    try { dbRun(`INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)`,[k,v]); } catch(e) {}
+  // 1. Inicializa schema global saas
+  await initSaasSchema();
+
+  // 2. Se SINGLE_TENANT_SLUG definido, garante que o tenant existe e está migrado
+  if (process.env.SINGLE_TENANT_SLUG) {
+    const slug = process.env.SINGLE_TENANT_SLUG;
+    const name = process.env.SINGLE_TENANT_NAME || slug;
+    console.log(`\n    Modo single-tenant: ${slug}`);
+    await provisionTenant(slug, {
+      marinaName:    name,
+      adminEmail:    process.env.ADMIN_EMAIL    || 'admin@marina.com',
+      adminPassword: process.env.ADMIN_PASSWORD || 'marina123',
+    });
   }
-  // Add client users
-  const pwd = sha256('senha123');
-  const logins = [
-    ['carlos@marinaone.com','Carlos Eduardo Souza'],
-    ['ana@marinaone.com','Ana Paula Ferreira'],
-    ['roberto@marinaone.com','Roberto Alves Lima'],
-    ['mariana@marinaone.com','Mariana Costa Pinto'],
-    ['fernando@marinaone.com','Fernando Oliveira'],
-    ['juliana@marinaone.com','Juliana Santos Cruz'],
-    ['marcelo@marinaone.com','Marcelo Rodrigues'],
-    ['patricia@marinaone.com','Patricia Mendes Luz'],
-  ];
-  for (const [email,name] of logins) {
-    try { dbRun('INSERT INTO users(email,password_hash,name,role) VALUES(?,?,?,?)',[email,pwd,name,'client']); }
-    catch(e) {}
-  }
-}
-migrateDb();
 
-// Run seed (wrapped to catch & report errors clearly)
-try { seedDb(); }
-catch (e) { console.error('[Seed Error]', e.message); process.exit(1); }
-
-function startServer() {
   server.listen(PORT, () => {
-    console.log('='.repeat(50));
-    console.log('  ⚓  Marina One — Sistema de Gestao de Marina');
-    console.log('='.repeat(50));
-    console.log(`\n✅ Rodando em: http://localhost:${PORT}`);
-    console.log(`   Acesse  : http://localhost:${PORT}/frontend.html`);
-    console.log(`   Login   : admin@marina.com / marina123`);
-    console.log('\n   Ctrl+C para encerrar.\n');
+    console.log(`\n✅  Servidor iniciado em http://localhost:${PORT}`);
+    if (GIT_HASH) console.log(`    Commit: ${GIT_HASH}`);
+    console.log('');
   });
 }
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.warn(`⚠️  Porta ${PORT} em uso — encerrando processo anterior...`);
-    const { execSync } = require('child_process');
-    try {
-      if (process.platform === 'win32') {
-        // Encontra e mata o processo usando a porta no Windows
-        const out = execSync(`netstat -ano | findstr :${PORT}`, { encoding: 'utf8' });
-        const pids = [...new Set(
-          out.split('\n')
-            .map(l => l.trim().split(/\s+/).pop())
-            .filter(p => p && /^\d+$/.test(p) && p !== '0' && Number(p) !== process.pid)
-        )];
-        for (const pid of pids) {
-          try { execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' }); } catch(_) {}
-        }
-      } else {
-        execSync(`fuser -k ${PORT}/tcp`, { stdio: 'ignore' });
-      }
-    } catch(_) {}
-    // Aguarda um momento e tenta novamente
-    setTimeout(() => {
-      server.removeAllListeners('error');
-      server.on('error', (e) => { console.error('❌ Erro ao iniciar servidor:', e.message); process.exit(1); });
-      startServer();
-    }, 1000);
-  } else {
-    console.error('❌ Erro ao iniciar servidor:', err.message);
-    process.exit(1);
-  }
+boot().catch(err => {
+  console.error('❌  Falha no boot:', err);
+  process.exit(1);
 });
-
-startServer();

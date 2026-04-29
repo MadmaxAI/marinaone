@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .env
 node_modules/
+server.log
+*.log
+_tmp_*.json
+.claude/

@@ -1,0 +1,57 @@
+version: "3.9"
+
+# ============================================================
+#  Marina One v2.0 — Stack local de desenvolvimento
+#  Uso: docker compose up -d
+# ============================================================
+
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: marinaone_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       marinaone
+      POSTGRES_USER:     marinaone
+      POSTGRES_PASSWORD: marina_dev_2025
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marinaone"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Aplicação ─────────────────────────────────────────────
+  app:
+    build: .
+    container_name: marinaone_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV:              production
+      PORT:                  3000
+      DATABASE_URL:          postgres://marinaone:marina_dev_2025@db:5432/marinaone
+      DB_SSL:                "false"
+      JWT_SECRET:            marina_dev_jwt_secret_2025
+      BASE_DOMAIN:           localhost
+      SINGLE_TENANT_SLUG:    demo
+      SINGLE_TENANT_NAME:    Marina Demo
+      ADMIN_EMAIL:           admin@marina.com
+      ADMIN_PASSWORD:        marina123
+      SUPER_ADMIN_EMAIL:     arthur@marinaone.com.br
+      SUPER_ADMIN_PASSWORD:  SaaS@Marina2025!
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+volumes:
+  pg_data:
