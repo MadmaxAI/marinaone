@@ -5,6 +5,11 @@ Tipos: `feat` (novo), `fix` (correção), `break` (migração manual necessária
 
 ---
 
+## [2.0.3] — 2026-04-30 — feat
+- GitHub App Railway autorizado — auto-deploy ativo
+- Domínio wildcard *.marinaone.com.br configurado no Cloudflare
+- BASE_DOMAIN atualizado para marinaone.com.br
+
 ## [2.0.2] — 2026-04-29 — fix
 - Remove vercel.json (conflito com deploy Railway)
 - Railway agora é o único destino de deploy
