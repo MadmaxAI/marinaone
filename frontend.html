@@ -5740,8 +5740,9 @@ async function saViewTenant(idx) {
   const st = window._saStatsAll[idx] || {};
   const fmtBRL = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
   const planLabel = {professional:'Professional',starter:'Starter',enterprise:'Enterprise'};
-  const devUrl  = `${window.location.origin}?tenant=${t.slug}`;
-  const prodUrl = `https://${t.slug}.<seu-domínio>`;
+  const devUrl  = `http://localhost:3000?tenant=${t.slug}`;
+  const _bd     = (window.BASE_DOMAIN && window.BASE_DOMAIN !== 'localhost') ? window.BASE_DOMAIN : 'marinaone.com.br';
+  const prodUrl = `https://${t.slug}.${_bd}`;
   const logoHtml = st.marina_logo
     ? `<img src="${st.marina_logo}" alt="Logo" style="max-height:72px;max-width:180px;object-fit:contain;border-radius:8px;border:1px solid var(--border)">`
     : `<div style="width:72px;height:72px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px">⚓</div>`;

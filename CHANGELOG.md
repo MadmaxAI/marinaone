@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.0.6] -- 2026-04-30
+- fix url producao e credenciais no painel super-admin
+
 ## [2.0.5] -- 2026-04-30
 - teste de publicacao
 
@@ -111,5 +114,6 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 

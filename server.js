@@ -387,14 +387,38 @@ addRoute('POST', '/api/superadmin/tenants', async (req, res, ctx) => {
 
 addRoute('GET', '/api/superadmin/tenants/:slug/credentials', async (req, res, ctx) => {
   if (!requireSuperAdmin(ctx, res)) return;
+  const slug = ctx.params.slug;
   const row = await saasGet(
     `SELECT admin_email, admin_password_plain FROM saas.tenants WHERE slug=$1`,
-    [ctx.params.slug]
+    [slug]
   );
   if (!row) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+
+  let email    = row.admin_email         || '';
+  let password = row.admin_password_plain || '';
+
+  // Fallback: busca admin direto na schema do tenant quando não há credenciais salvas
+  if (!email) {
+    try {
+      const { dbGet } = createDbHelpers(slug);
+      const admin = await dbGet(
+        "SELECT email FROM users WHERE role='admin' ORDER BY id LIMIT 1", []
+      );
+      if (admin) email = admin.email;
+    } catch {}
+  }
+
+  // Persiste o e-mail encontrado para não buscar novamente
+  if (email && !row.admin_email) {
+    await saasRun(
+      'UPDATE saas.tenants SET admin_email=$1 WHERE slug=$2',
+      [email, slug]
+    ).catch(() => {});
+  }
+
   sendJson(res, {
-    admin_email:    row.admin_email    || '',
-    admin_password: row.admin_password_plain || '',
+    admin_email:    email,
+    admin_password: password,
   });
 });
 
