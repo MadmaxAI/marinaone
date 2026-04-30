@@ -5,6 +5,10 @@ Tipos: `feat` (novo), `fix` (correção), `break` (migração manual necessária
 
 ---
 
+## [2.0.2] — 2026-04-29 — fix
+- Remove vercel.json (conflito com deploy Railway)
+- Railway agora é o único destino de deploy
+
 ## [2.0.1] — 2026-04-29 — feat
 - Integração GitHub → Railway (deploy automático a cada push)
 - Scripts de publicação com versionamento automático (publicar.bat / publicar.sh)
