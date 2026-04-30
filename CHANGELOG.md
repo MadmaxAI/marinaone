@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.0.12] -- 2026-04-30
+- Ver Detalhes de embarcação: layout completo com foto, locação e dados técnicos
+
 ## [2.0.11] -- 2026-04-30
 - CLAUDE.md: regra crítica de consistência banco+código a cada publicação
 
@@ -129,6 +132,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
