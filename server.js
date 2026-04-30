@@ -813,8 +813,17 @@ addRoute('GET', '/api/vessels/:id', async (req, res, ctx) => {
 addRoute('POST', '/api/vessels', async (req, res, ctx) => {
   const b = ctx.body;
   const { dbRun: tRun } = ctx.db;
-  const r = await tRun('INSERT INTO vessels(client_id,name,type,size,length,beam,draft,year,registration,model,manufacturer,engine,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                       [b.client_id, b.name, b.type, b.size||'media', b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes]);
+  const r = await tRun(
+    `INSERT INTO vessels(client_id,name,type,size,length,beam,draft,year,registration,model,manufacturer,engine,notes,
+      photo,available_for_rental,rental_passengers,rental_sailor,rental_days,rental_hours_start,rental_hours_end,
+      rental_price_4h,rental_price_6h,rental_price_8h,rental_notes)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [b.client_id, b.name, b.type, b.size||'media', b.length||null, b.beam||null, b.draft||null, b.year||null,
+     b.registration||'', b.model||'', b.manufacturer||'', b.engine||'', b.notes||'',
+     b.photo||null, b.available_for_rental?1:0, b.rental_passengers||null, b.rental_sailor||1,
+     b.rental_days||null, b.rental_hours_start||null, b.rental_hours_end||null,
+     b.rental_price_4h||null, b.rental_price_6h||null, b.rental_price_8h||null, b.rental_notes||'']
+  );
   sendJson(res, { id: r.lastInsertRowid }, 201);
 });
 
@@ -823,8 +832,16 @@ addRoute('PUT', '/api/vessels/:id', async (req, res, ctx) => {
   if (!b.name) return sendJson(res, { error: 'Nome obrigatório' }, 400);
   const { dbRun: tRun } = ctx.db;
   await tRun(
-    'UPDATE vessels SET name=?,client_id=?,type=?,size=?,length=?,beam=?,draft=?,year=?,registration=?,model=?,manufacturer=?,engine=?,notes=? WHERE id=?',
-    [b.name, b.client_id||null, b.type, b.size||'media', b.length||null, b.beam||null, b.draft||null, b.year||null, b.registration||'', b.model||'', b.manufacturer||'', b.engine||'', b.notes||'', ctx.params.id]
+    `UPDATE vessels SET name=?,client_id=?,type=?,size=?,length=?,beam=?,draft=?,year=?,registration=?,model=?,
+      manufacturer=?,engine=?,notes=?,photo=?,available_for_rental=?,rental_passengers=?,rental_sailor=?,
+      rental_days=?,rental_hours_start=?,rental_hours_end=?,rental_price_4h=?,rental_price_6h=?,rental_price_8h=?,
+      rental_notes=? WHERE id=?`,
+    [b.name, b.client_id||null, b.type, b.size||'media', b.length||null, b.beam||null, b.draft||null, b.year||null,
+     b.registration||'', b.model||'', b.manufacturer||'', b.engine||'', b.notes||'',
+     b.photo||null, b.available_for_rental?1:0, b.rental_passengers||null, b.rental_sailor||1,
+     b.rental_days||null, b.rental_hours_start||null, b.rental_hours_end||null,
+     b.rental_price_4h||null, b.rental_price_6h||null, b.rental_price_8h||null, b.rental_notes||'',
+     ctx.params.id]
   );
   sendJson(res, { ok: true });
 });

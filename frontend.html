@@ -2092,23 +2092,34 @@ function renderVesselsRows(vessels) {
 }
 function _vesselsTheadCells() {
   const TK = 'vessels';
-  return _th(TK,'name','Embarcação') + _th(TK,'type','Tipo') + _th(TK,'client_name','Cliente') +
-    '<th>Vaga</th>' + _th(TK,'vessel_status','Status') + '<th>Registro</th>' + '<th>Ações</th>';
+  return '<th style="width:56px"></th>' +
+    _th(TK,'name','Embarcação') + _th(TK,'type','Tipo') + _th(TK,'client_name','Cliente') +
+    '<th>Vaga</th>' + _th(TK,'vessel_status','Status') +
+    '<th title="Disponível para locação">Locação</th>' + '<th>Ações</th>';
 }
 function _renderVesselsTbody(vessels) {
-  if (!vessels.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
-  return vessels.map(v=>`<tr class="row-link" onclick="viewVessel(${v.id})" title="Clique para ver detalhes">
-    <td><div class="font-bold">${v.name}</div><div class="text-xs text-muted">${v.model||''} ${v.manufacturer||''}</div></td>
-    <td><span class="badge badge-info">${v.type||'—'}</span></td>
-    <td>${v.client_name} ${tierBadge(v.client_tier)}</td>
-    <td>${v.spot_number?`<span class="badge badge-success">${v.spot_number}</span>`:'<span class="badge badge-gray">—</span>'}</td>
-    <td>${VESSEL_STATUS_BADGE(v.vessel_status)}</td>
-    <td>${v.registration||'—'}</td>
-    <td onclick="event.stopPropagation()"><div class="flex gap-2">
-      <button class="btn btn-ghost btn-sm" onclick="viewVessel(${v.id})" title="Ver detalhes da embarcação">👁</button>
-      <button class="btn btn-ghost btn-sm" onclick="openVesselModal(${v.id})" title="Editar embarcação">✏️</button>
-    </div></td>
-  </tr>`).join('');
+  if (!vessels.length) return '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
+  return vessels.map(v => {
+    const photoHtml = v.photo
+      ? `<img src="${v.photo}" alt="${v.name}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block">`
+      : `<div style="width:48px;height:40px;border-radius:6px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:20px;border:1px solid var(--border)">🛥️</div>`;
+    const rentalHtml = v.available_for_rental
+      ? `<span class="badge badge-success" title="Disponível para locação" style="font-size:10px">✅ Sim</span>`
+      : `<span class="badge badge-gray" title="Não disponível para locação" style="font-size:10px">—</span>`;
+    return `<tr class="row-link" onclick="viewVessel(${v.id})" title="Clique para ver detalhes">
+      <td style="padding:6px 8px">${photoHtml}</td>
+      <td><div class="font-bold">${v.name}</div><div class="text-xs text-muted">${v.model||''} ${v.manufacturer||''}</div></td>
+      <td><span class="badge badge-info">${v.type||'—'}</span></td>
+      <td>${v.client_name} ${tierBadge(v.client_tier)}</td>
+      <td>${v.spot_number?`<span class="badge badge-success">${v.spot_number}</span>`:'<span class="badge badge-gray">—</span>'}</td>
+      <td>${VESSEL_STATUS_BADGE(v.vessel_status)}</td>
+      <td>${rentalHtml}</td>
+      <td onclick="event.stopPropagation()"><div class="flex gap-2">
+        <button class="btn btn-ghost btn-sm" onclick="viewVessel(${v.id})" title="Ver detalhes da embarcação">👁</button>
+        <button class="btn btn-ghost btn-sm" onclick="openVesselModal(${v.id})" title="Editar embarcação">✏️</button>
+      </div></td>
+    </tr>`;
+  }).join('');
 }
 
 async function searchVessels() {
@@ -2178,47 +2189,263 @@ async function openVesselModal(id=null, clientsArg=null) {
         </div>`}
     </div>` : `<div style="font-size:12px;color:var(--text3);margin-bottom:4px">💡 Salve a embarcação primeiro para atribuir uma vaga.</div>`;
 
-  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+  // Dias de locação já selecionados
+  const rentalDays = (() => { try { return JSON.parse(v.rental_days||'[]'); } catch { return []; } })();
+  const dayOpts = [
+    {k:'seg',l:'Seg'},{k:'ter',l:'Ter'},{k:'qua',l:'Qua'},{k:'qui',l:'Qui'},
+    {k:'sex',l:'Sex'},{k:'sab',l:'Sáb'},{k:'dom',l:'Dom'}
+  ];
+
+  // Foto atual
+  const photoPreviewHtml = v.photo
+    ? `<img src="${v.photo}" alt="Foto" style="max-height:100px;max-width:180px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`
+    : `<div style="width:100px;height:80px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px;border:2px dashed var(--border)">📷</div>`;
+
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()" style="max-width:700px">
     <div class="modal-title">${id?'Editar':'Nova'} Embarcação</div>
-    <div class="form-row cols2">
-      <div class="form-group"><label>Nome *</label><input id="vm-name" value="${v.name||''}"></div>
-      <div class="form-group"><label>Proprietário *</label>
-        <select id="vm-client">${(typeof clients==='string'?JSON.parse(clients):clients).map(c=>`<option value="${c.id}" ${v.client_id==c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+
+    <div class="tabs" style="margin-bottom:18px">
+      <div class="tab active" id="vtab-dados"   onclick="vmTab('dados')">📋 Dados Gerais</div>
+      <div class="tab"       id="vtab-locacao"  onclick="vmTab('locacao')">🛥️ Locação</div>
+    </div>
+
+    <!-- ABA DADOS GERAIS -->
+    <div id="vpane-dados">
+      <!-- FOTO -->
+      <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+          📷 Foto da Embarcação <span style="color:var(--danger)">*</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div id="vm-photo-preview">${photoPreviewHtml}</div>
+          <div>
+            <input type="file" id="vm-photo-file" accept="image/*" style="display:none" onchange="vmPreviewPhoto(this)">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('vm-photo-file').click()">
+              📁 ${v.photo ? 'Trocar Foto' : 'Selecionar Foto'}
+            </button>
+            ${v.photo ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger);margin-left:6px" onclick="vmClearPhoto()">✕ Remover</button>` : ''}
+            <div style="font-size:11px;color:var(--text3);margin-top:6px">JPG, PNG ou WEBP · máx. 2 MB</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row cols2">
+        <div class="form-group"><label>Nome *</label><input id="vm-name" value="${v.name||''}" placeholder="Nome da embarcação"></div>
+        <div class="form-group"><label>Proprietário *</label>
+          <select id="vm-client">${(typeof clients==='string'?JSON.parse(clients):clients).map(c=>`<option value="${c.id}" ${v.client_id==c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="form-row cols3">
+        <div class="form-group"><label>Tipo</label>
+          <select id="vm-type">${['lancha','veleiro','jetski','catamarã','iate','barco a remo','outro'].map(t=>`<option ${v.type===t?'selected':''}>${t}</option>`).join('')}</select>
+        </div>
+        <div class="form-group"><label>Porte</label>
+          <select id="vm-size">
+            <option value="pequena" ${(v.size||'media')==='pequena'?'selected':''}>🚤 Pequena (até 6m)</option>
+            <option value="media"   ${(v.size||'media')==='media'  ?'selected':''}>🛥️ Média (6–12m)</option>
+            <option value="grande"  ${(v.size||'media')==='grande' ?'selected':''}>🛳️ Grande (acima 12m)</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Modelo</label><input id="vm-model" value="${v.model||''}"></div>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Fabricante</label><input id="vm-manufacturer" value="${v.manufacturer||''}"></div>
+        <div class="form-group"><label>Motor</label><input id="vm-engine" value="${v.engine||''}"></div>
+      </div>
+      <div class="form-row cols3">
+        <div class="form-group"><label>Comprimento (m)</label><input id="vm-length" type="number" step=".1" value="${v.length||''}"></div>
+        <div class="form-group"><label>Boca (m)</label><input id="vm-beam" type="number" step=".1" value="${v.beam||''}"></div>
+        <div class="form-group"><label>Calado (m)</label><input id="vm-draft" type="number" step=".1" value="${v.draft||''}"></div>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group"><label>Ano</label><input id="vm-year" type="number" value="${v.year||''}"></div>
+        <div class="form-group"><label>Registro</label><input id="vm-registration" value="${v.registration||''}"></div>
+      </div>
+      <div class="form-group"><label>Observações</label><textarea id="vm-notes">${v.notes||''}</textarea></div>
+      ${spotBlock}
+    </div>
+
+    <!-- ABA LOCAÇÃO -->
+    <div id="vpane-locacao" style="display:none">
+      <div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface2);border-radius:10px;margin-bottom:16px">
+        <label class="toggle" style="margin:0">
+          <input type="checkbox" id="vm-rental" ${v.available_for_rental?'checked':''} onchange="vmToggleRental(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+        <div>
+          <div style="font-weight:600;font-size:14px">Disponível para Locação</div>
+          <div style="font-size:12px;color:var(--text3)">Habilita esta embarcação para passeios e fretamentos</div>
+        </div>
+      </div>
+
+      <div id="vm-rental-fields" style="${v.available_for_rental?'':'display:none'}">
+        <!-- Capacidade -->
+        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">👥 Capacidade</div>
+        <div class="form-row cols2" style="margin-bottom:16px">
+          <div class="form-group"><label>Passageiros *</label>
+            <input id="vm-rental-pax" type="number" min="1" max="200" value="${v.rental_passengers||''}" placeholder="Ex: 10" oninput="vmCalcRentalPrices()">
+          </div>
+          <div class="form-group"><label>Marinheiro(s)</label>
+            <input id="vm-rental-sailor" type="number" min="0" max="10" value="${v.rental_sailor||1}" placeholder="1">
+          </div>
+        </div>
+
+        <!-- Disponibilidade -->
+        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📅 Disponibilidade</div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:8px">Dias da semana:</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${dayOpts.map(d=>`
+              <label style="cursor:pointer;user-select:none">
+                <input type="checkbox" id="vm-day-${d.k}" ${rentalDays.includes(d.k)?'checked':''} style="display:none">
+                <span id="vm-day-lbl-${d.k}" onclick="vmToggleDay('${d.k}')"
+                  style="display:inline-block;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:2px solid ${rentalDays.includes(d.k)?'var(--accent)':'var(--border)'};background:${rentalDays.includes(d.k)?'var(--accent)':'var(--surface2)'};color:${rentalDays.includes(d.k)?'#fff':'var(--text2)'};transition:.15s">${d.l}</span>
+              </label>`).join('')}
+          </div>
+        </div>
+        <div class="form-row cols2" style="margin-bottom:16px">
+          <div class="form-group"><label>Horário início</label>
+            <input id="vm-rental-hstart" type="time" value="${v.rental_hours_start||'08:00'}">
+          </div>
+          <div class="form-group"><label>Horário término</label>
+            <input id="vm-rental-hend" type="time" value="${v.rental_hours_end||'18:00'}">
+          </div>
+        </div>
+
+        <!-- Preços -->
+        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💰 Tabela de Preços</div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>Valor base — Passeio de 4 horas (R$) *</label>
+          <input id="vm-rental-p4h" type="number" step="0.01" min="0" value="${v.rental_price_4h||''}"
+                 placeholder="Ex: 800,00" oninput="vmCalcRentalPrices()">
+        </div>
+
+        <!-- Tabela sugerida -->
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--text2)">📊 Tabela de Passeios</div>
+          <table style="width:100%;font-size:13px;border-collapse:collapse">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:6px 8px;color:var(--text3)">Duração</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3)">Desconto</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3)">Valor Sugerido</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3)">Valor Final (editável)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:8px">⏱️ 4 horas</td>
+                <td style="padding:8px;color:var(--text3)">—</td>
+                <td id="vm-sug-4h" style="padding:8px;font-weight:600">—</td>
+                <td style="padding:8px"><input id="vm-rental-p4h-final" type="number" step="0.01" min="0" value="${v.rental_price_4h||''}" style="width:120px" placeholder="R$ 0,00" oninput="vmSyncPrice('4h')"></td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:8px">⏱️ 6 horas</td>
+                <td style="padding:8px;color:var(--success)">−10%</td>
+                <td id="vm-sug-6h" style="padding:8px;font-weight:600;color:var(--success)">—</td>
+                <td style="padding:8px"><input id="vm-rental-p6h" type="number" step="0.01" min="0" value="${v.rental_price_6h||''}" style="width:120px" placeholder="R$ 0,00"></td>
+              </tr>
+              <tr>
+                <td style="padding:8px">⏱️ 8 horas</td>
+                <td style="padding:8px;color:var(--accent2)">−20%</td>
+                <td id="vm-sug-8h" style="padding:8px;font-weight:600;color:var(--accent2)">—</td>
+                <td style="padding:8px"><input id="vm-rental-p8h" type="number" step="0.01" min="0" value="${v.rental_price_8h||''}" style="width:120px" placeholder="R$ 0,00"></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="font-size:11px;color:var(--text3);margin-top:8px">💡 Valores calculados automaticamente com desconto proporcional. Edite livremente.</div>
+        </div>
+
+        <div class="form-group">
+          <label>Observações de locação</label>
+          <textarea id="vm-rental-notes" placeholder="Ex: Necessário agendamento prévio, inclui equipamentos de segurança...">${v.rental_notes||''}</textarea>
+        </div>
       </div>
     </div>
-    <div class="form-row cols3">
-      <div class="form-group"><label>Tipo</label>
-        <select id="vm-type">${['lancha','veleiro','jetski','catamarã','iate','barco a remo','outro'].map(t=>`<option ${v.type===t?'selected':''}>${t}</option>`).join('')}</select>
-      </div>
-      <div class="form-group"><label>Porte</label>
-        <select id="vm-size">
-          <option value="pequena" ${(v.size||'media')==='pequena'?'selected':''}>🚤 Pequena (até 6m)</option>
-          <option value="media"   ${(v.size||'media')==='media'  ?'selected':''}>🛥️ Média (6–12m)</option>
-          <option value="grande"  ${(v.size||'media')==='grande' ?'selected':''}>🛳️ Grande (acima 12m)</option>
-        </select>
-      </div>
-      <div class="form-group"><label>Modelo</label><input id="vm-model" value="${v.model||''}"></div>
-    </div>
-    <div class="form-row cols2">
-      <div class="form-group"><label>Fabricante</label><input id="vm-manufacturer" value="${v.manufacturer||''}"></div>
-    </div>
-    <div class="form-row cols3">
-      <div class="form-group"><label>Comprimento (m)</label><input id="vm-length" type="number" step=".1" value="${v.length||''}"></div>
-      <div class="form-group"><label>Boca (m)</label><input id="vm-beam" type="number" step=".1" value="${v.beam||''}"></div>
-      <div class="form-group"><label>Calado (m)</label><input id="vm-draft" type="number" step=".1" value="${v.draft||''}"></div>
-    </div>
-    <div class="form-row cols3">
-      <div class="form-group"><label>Ano</label><input id="vm-year" type="number" value="${v.year||''}"></div>
-      <div class="form-group"><label>Registro</label><input id="vm-registration" value="${v.registration||''}"></div>
-      <div class="form-group"><label>Motor</label><input id="vm-engine" value="${v.engine||''}"></div>
-    </div>
-    <div class="form-group"><label>Observações</label><textarea id="vm-notes">${v.notes||''}</textarea></div>
-    ${spotBlock}
+
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveVessel(${id||'null'})">Salvar</button>
+      <button class="btn btn-primary" onclick="saveVessel(${id||'null'})">Salvar Embarcação</button>
     </div>
   </div>`);
+
+  // Inicializa foto base64 com o valor existente
+  window._vmPhotoBase64 = v.photo || null;
+  // Calcula preços se já houver valor base
+  if (v.rental_price_4h) vmCalcRentalPrices();
+}
+
+// ── Helpers do modal de embarcação ───────────────────
+function vmTab(tab) {
+  ['dados','locacao'].forEach(t => {
+    document.getElementById(`vtab-${t}`)?.classList.toggle('active', t === tab);
+    const p = document.getElementById(`vpane-${t}`);
+    if (p) p.style.display = t === tab ? '' : 'none';
+  });
+}
+
+function vmToggleRental(on) {
+  const el = document.getElementById('vm-rental-fields');
+  if (el) el.style.display = on ? '' : 'none';
+}
+
+function vmToggleDay(day) {
+  const cb  = document.getElementById(`vm-day-${day}`);
+  const lbl = document.getElementById(`vm-day-lbl-${day}`);
+  if (!cb || !lbl) return;
+  cb.checked = !cb.checked;
+  lbl.style.background  = cb.checked ? 'var(--accent)' : 'var(--surface2)';
+  lbl.style.borderColor = cb.checked ? 'var(--accent)' : 'var(--border)';
+  lbl.style.color       = cb.checked ? '#fff'          : 'var(--text2)';
+}
+
+function vmCalcRentalPrices() {
+  const base = parseFloat(document.getElementById('vm-rental-p4h')?.value) || 0;
+  const fmt  = v => v > 0 ? 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
+  const sug6 = base > 0 ? Math.round(base * 1.5 * 0.90 * 100)/100 : 0;  // 6h = 1.5× com 10% desc
+  const sug8 = base > 0 ? Math.round(base * 2.0 * 0.80 * 100)/100 : 0;  // 8h = 2× com 20% desc
+
+  const s4 = document.getElementById('vm-sug-4h'); if (s4) s4.textContent = fmt(base);
+  const s6 = document.getElementById('vm-sug-6h'); if (s6) s6.textContent = fmt(sug6);
+  const s8 = document.getElementById('vm-sug-8h'); if (s8) s8.textContent = fmt(sug8);
+
+  // Preenche os campos finais apenas se ainda estiverem vazios
+  const f6 = document.getElementById('vm-rental-p6h');
+  const f8 = document.getElementById('vm-rental-p8h');
+  if (f6 && !f6.value && sug6) f6.value = sug6.toFixed(2);
+  if (f8 && !f8.value && sug8) f8.value = sug8.toFixed(2);
+
+  // Sincroniza campo "4h final"
+  const f4f = document.getElementById('vm-rental-p4h-final');
+  if (f4f && !f4f.value && base) f4f.value = base.toFixed(2);
+}
+
+function vmSyncPrice(dur) {
+  if (dur === '4h') {
+    const v4 = document.getElementById('vm-rental-p4h-final')?.value;
+    const src = document.getElementById('vm-rental-p4h');
+    if (src) src.value = v4;
+    vmCalcRentalPrices();
+  }
+}
+
+function vmPreviewPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('Imagem muito grande. Máx. 2 MB.', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    window._vmPhotoBase64 = e.target.result;
+    const prev = document.getElementById('vm-photo-preview');
+    if (prev) prev.innerHTML = `<img src="${e.target.result}" alt="Foto" style="max-height:100px;max-width:180px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function vmClearPhoto() {
+  window._vmPhotoBase64 = null;
+  const prev = document.getElementById('vm-photo-preview');
+  if (prev) prev.innerHTML = `<div style="width:100px;height:80px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px;border:2px dashed var(--border)">📷</div>`;
 }
 
 // ── Picker visual de vagas ────────────────────────────
@@ -2279,22 +2506,57 @@ async function unassignSpot(vesselId, spotNumber) {
 }
 
 async function saveVessel(id) {
+  const name = document.getElementById('vm-name')?.value.trim();
+  if (!name) { toast('Nome obrigatório','error'); vmTab('dados'); return; }
+
+  // Foto obrigatória apenas para novas embarcações
+  const photo = window._vmPhotoBase64 || null;
+  if (!id && !photo) {
+    toast('Foto da embarcação é obrigatória','error');
+    vmTab('dados');
+    return;
+  }
+
+  // Dados de locação
+  const rental = document.getElementById('vm-rental')?.checked || false;
+  const rentalDays = ['seg','ter','qua','qui','sex','sab','dom']
+    .filter(d => document.getElementById(`vm-day-${d}`)?.checked);
+  const p4h = parseFloat(document.getElementById('vm-rental-p4h-final')?.value ||
+                          document.getElementById('vm-rental-p4h')?.value) || null;
+
+  if (rental && !p4h) {
+    toast('Informe o valor do passeio de 4 horas','error');
+    vmTab('locacao');
+    return;
+  }
+
   const body = {
-    name:         document.getElementById('vm-name').value.trim(),
-    client_id:    parseInt(document.getElementById('vm-client').value) || null,
-    type:         document.getElementById('vm-type').value,
-    size:         document.getElementById('vm-size').value,
-    model:        document.getElementById('vm-model').value.trim(),
-    manufacturer: document.getElementById('vm-manufacturer').value.trim(),
-    length:       parseFloat(document.getElementById('vm-length').value) || null,
-    beam:         parseFloat(document.getElementById('vm-beam').value) || null,
-    draft:        parseFloat(document.getElementById('vm-draft').value) || null,
-    year:         parseInt(document.getElementById('vm-year').value) || null,
-    registration: document.getElementById('vm-registration').value.trim(),
-    engine:       document.getElementById('vm-engine').value.trim(),
-    notes:        document.getElementById('vm-notes').value.trim(),
+    name,
+    client_id:    parseInt(document.getElementById('vm-client')?.value) || null,
+    type:         document.getElementById('vm-type')?.value,
+    size:         document.getElementById('vm-size')?.value,
+    model:        document.getElementById('vm-model')?.value.trim(),
+    manufacturer: document.getElementById('vm-manufacturer')?.value.trim(),
+    length:       parseFloat(document.getElementById('vm-length')?.value) || null,
+    beam:         parseFloat(document.getElementById('vm-beam')?.value) || null,
+    draft:        parseFloat(document.getElementById('vm-draft')?.value) || null,
+    year:         parseInt(document.getElementById('vm-year')?.value) || null,
+    registration: document.getElementById('vm-registration')?.value.trim(),
+    engine:       document.getElementById('vm-engine')?.value.trim(),
+    notes:        document.getElementById('vm-notes')?.value.trim(),
+    photo,
+    available_for_rental: rental,
+    rental_passengers:    parseInt(document.getElementById('vm-rental-pax')?.value) || null,
+    rental_sailor:        parseInt(document.getElementById('vm-rental-sailor')?.value) || 1,
+    rental_days:          rental ? JSON.stringify(rentalDays) : null,
+    rental_hours_start:   document.getElementById('vm-rental-hstart')?.value || null,
+    rental_hours_end:     document.getElementById('vm-rental-hend')?.value || null,
+    rental_price_4h:      p4h,
+    rental_price_6h:      parseFloat(document.getElementById('vm-rental-p6h')?.value) || null,
+    rental_price_8h:      parseFloat(document.getElementById('vm-rental-p8h')?.value) || null,
+    rental_notes:         document.getElementById('vm-rental-notes')?.value.trim() || '',
   };
-  if (!body.name) { toast('Nome obrigatório','error'); return; }
+
   const r = id
     ? await api('PUT', `/vessels/${id}`, body)
     : await api('POST', '/vessels', body);
