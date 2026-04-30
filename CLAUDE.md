@@ -21,14 +21,20 @@ Claude altera código
         ↓
 Claude roda: testar.bat
         ↓
-Claude diz: "Teste em localhost:3000 e diga 'aprovado'"
-        ↓
+Claude diz: "Teste em localhost:3000 (vX.Y.Z) e diga 'aprovado'"
+        ↓         ↑ SEMPRE informar a versão atual do package.json
 Usuário testa e diz: "aprovado"
         ↓
 Claude roda: publicar.bat "descrição da alteração"
         ↓
 Deploy automático no Railway ✅
 ```
+
+## Regra de comunicação — versão obrigatória
+
+Ao finalizar qualquer alteração e avisar o usuário para testar, SEMPRE informar:
+- A versão atual (ex: "v2.0.8") que está rodando no ambiente local
+- Exemplo: **"Alteração feita. Teste em http://localhost:3000 (v2.0.8) e me diga 'aprovado' para publicar."**
 
 ## Comandos disponíveis
 

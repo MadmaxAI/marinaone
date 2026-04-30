@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.0.8] -- 2026-04-30
+- fix encoding UTF-8 acentos + saveVessel com client_id + tooltips nas tabelas
+
 ## [2.0.7] -- 2026-04-30
 - versao no header do painel super-admin
 
@@ -117,6 +120,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

@@ -59,9 +59,12 @@ function sendJson(res, data, status = 200) {
 }
 function parseBody(req) {
   return new Promise(resolve => {
-    let b = '';
-    req.on('data', c => b += c);
-    req.on('end', () => { try { resolve(JSON.parse(b)); } catch { resolve({}); } });
+    const chunks = [];
+    req.on('data', c => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    req.on('end', () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+      catch { resolve({}); }
+    });
   });
 }
 function getQS(url) {
@@ -432,6 +435,32 @@ addRoute('PUT', '/api/superadmin/tenants/:slug', async (req, res, ctx) => {
   sendJson(res, { ok: true });
 });
 
+addRoute('POST', '/api/superadmin/tenants/:slug/reset-admin-password', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const slug = ctx.params.slug;
+  const { email, new_password } = ctx.body || {};
+  if (!new_password || new_password.length < 6)
+    return sendJson(res, { error: 'Senha deve ter pelo menos 6 caracteres' }, 400);
+  try {
+    const { dbRun: tRun, dbGet: tGet } = createDbHelpers(slug);
+    // Se e-mail fornecido, reseta só esse admin; senão, o primeiro admin
+    const user = email
+      ? await tGet('SELECT id FROM users WHERE email=? AND role=?', [email.toLowerCase(), 'admin'])
+      : await tGet("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1", []);
+    if (!user) return sendJson(res, { error: 'Admin não encontrado' }, 404);
+    await tRun('UPDATE users SET password_hash=?, must_change_password=1 WHERE id=?',
+               [sha256(new_password), user.id]);
+    // Persiste nova senha no registro saas
+    await saasRun(
+      'UPDATE saas.tenants SET admin_password_plain=$1 WHERE slug=$2',
+      [new_password, slug]
+    );
+    sendJson(res, { ok: true });
+  } catch (e) {
+    sendJson(res, { error: e.message }, 500);
+  }
+});
+
 addRoute('PUT', '/api/superadmin/tenants/:slug/logo', async (req, res, ctx) => {
   if (!requireSuperAdmin(ctx, res)) return;
   const { logo_base64 = '' } = ctx.body || {};
@@ -503,6 +532,7 @@ addRoute('POST', '/api/auth/login', async (req, res, ctx) => {
     return sendJson(res, { error: 'Credenciais inválidas' }, 401);
   if (user.active === 0) return sendJson(res, { error: 'Usuário desativado' }, 403);
   const permissions = await loadPermissionsAll(user.role, tAll);
+  const mustChange = user.must_change_password === 1 || user.must_change_password === true;
   const token = jwtSign({
     user_id:     user.id,
     email:       user.email,
@@ -512,7 +542,40 @@ addRoute('POST', '/api/auth/login', async (req, res, ctx) => {
     tenant_id:   ctx.tenant?.id,
     tenant_slug: ctx.tenantSlug,
   });
-  sendJson(res, { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, client_id: user.client_id || null, permissions } });
+  sendJson(res, { token, must_change_password: mustChange, user: { id: user.id, name: user.name, email: user.email, role: user.role, client_id: user.client_id || null, permissions } });
+});
+
+// ── Esqueci minha senha — reset para o CPF do usuário ──────────────
+addRoute('POST', '/api/auth/forgot-password', async (req, res, ctx) => {
+  const { email = '', cpf = '' } = ctx.body || {};
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+
+  const cleanCpf = cpf.replace(/\D/g, '');
+  if (!email || cleanCpf.length < 11)
+    return sendJson(res, { error: 'Informe e-mail e CPF válido (11 dígitos)' }, 400);
+
+  const user = await tGet('SELECT * FROM users WHERE email=?', [email.toLowerCase()]);
+  if (!user) return sendJson(res, { error: 'E-mail não encontrado' }, 404);
+
+  // Salva o CPF no usuário (se ainda não tiver) e reseta a senha
+  await tRun(
+    'UPDATE users SET password_hash=?, must_change_password=1, cpf=COALESCE(NULLIF(cpf,\'\'), ?) WHERE id=?',
+    [sha256(cleanCpf), cleanCpf, user.id]
+  );
+  sendJson(res, { ok: true, message: 'Senha redefinida para o seu CPF (somente números). Troque após o login.' });
+});
+
+// ── Trocar senha obrigatória ─────────────────────────────────────────
+addRoute('POST', '/api/auth/change-password', async (req, res, ctx) => {
+  const { new_password = '' } = ctx.body || {};
+  if (new_password.length < 6)
+    return sendJson(res, { error: 'Nova senha deve ter pelo menos 6 caracteres' }, 400);
+  const { dbRun: tRun } = ctx.db;
+  await tRun(
+    'UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?',
+    [sha256(new_password), ctx.user.user_id]
+  );
+  sendJson(res, { ok: true });
 });
 
 addRoute('GET', '/api/auth/me', async (req, res, ctx) => {
@@ -757,9 +820,12 @@ addRoute('POST', '/api/vessels', async (req, res, ctx) => {
 
 addRoute('PUT', '/api/vessels/:id', async (req, res, ctx) => {
   const b = ctx.body;
+  if (!b.name) return sendJson(res, { error: 'Nome obrigatório' }, 400);
   const { dbRun: tRun } = ctx.db;
-  await tRun('UPDATE vessels SET name=?,type=?,size=?,length=?,beam=?,draft=?,year=?,registration=?,model=?,manufacturer=?,engine=?,notes=? WHERE id=?',
-             [b.name, b.type, b.size||'media', b.length, b.beam, b.draft, b.year, b.registration, b.model, b.manufacturer, b.engine, b.notes, ctx.params.id]);
+  await tRun(
+    'UPDATE vessels SET name=?,client_id=?,type=?,size=?,length=?,beam=?,draft=?,year=?,registration=?,model=?,manufacturer=?,engine=?,notes=? WHERE id=?',
+    [b.name, b.client_id||null, b.type, b.size||'media', b.length||null, b.beam||null, b.draft||null, b.year||null, b.registration||'', b.model||'', b.manufacturer||'', b.engine||'', b.notes||'', ctx.params.id]
+  );
   sendJson(res, { ok: true });
 });
 
@@ -789,10 +855,16 @@ addRoute('PUT', '/api/vessels/:id/spot', async (req, res, ctx) => {
   if (spot.vessel_id && String(spot.vessel_id) !== String(vesselId))
     return sendJson(res, { error: `Vaga ${spot.number} já está ocupada por outra embarcação.` }, 400);
 
-  // Embarcação já tem outra vaga? Deve desatribuir primeiro
+  // Embarcação já tem outra vaga? Desatribui automaticamente antes de atribuir a nova
   const existing = await tGet('SELECT * FROM spots WHERE vessel_id=? AND id!=?', [vesselId, spot_id]);
-  if (existing)
-    return sendJson(res, { error: `Esta embarcação já ocupa a vaga ${existing.number}. Remova a vaga atual antes de atribuir outra.` }, 400);
+  if (existing) {
+    const activeContract = await tGet(
+      `SELECT id FROM contracts WHERE spot_id=? AND status='active'`, [existing.id]);
+    if (activeContract)
+      return sendJson(res, { error: `A vaga atual ${existing.number} possui contrato ativo. Cancele o contrato antes de trocar de vaga.` }, 400);
+    // Libera a vaga anterior automaticamente
+    await tRun(`UPDATE spots SET status='available', vessel_id=NULL WHERE id=?`, [existing.id]);
+  }
 
   await tRun(`UPDATE spots SET status='occupied', vessel_id=? WHERE id=?`, [vesselId, spot_id]);
   sendJson(res, { ok: true });
@@ -832,6 +904,29 @@ addRoute('POST', '/api/spots', async (req, res, ctx) => {
   if (!b.number || !b.type) return sendJson(res, { error: 'Número e tipo obrigatórios' }, 400);
   const r = await ctx.db.dbRun('INSERT INTO spots(number,type,status) VALUES(?,?,?)', [b.number, b.type, 'available']);
   sendJson(res, { id: r.lastInsertRowid }, 201);
+});
+
+addRoute('POST', '/api/spots/batch', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const { prefix = '', start, end, type, padding = 2 } = ctx.body || {};
+  const s = parseInt(start, 10), e = parseInt(end, 10);
+  if (!type || isNaN(s) || isNaN(e) || s < 1 || e < s)
+    return sendJson(res, { error: 'Parâmetros inválidos: tipo, início e fim são obrigatórios e início ≤ fim' }, 400);
+  if ((e - s + 1) > 500)
+    return sendJson(res, { error: 'Máximo de 500 vagas por lote' }, 400);
+
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  let created = 0, skipped = 0;
+  const pad = parseInt(padding, 10) || 2;
+
+  for (let i = s; i <= e; i++) {
+    const number = prefix + String(i).padStart(pad, '0');
+    const exists = await tGet('SELECT 1 FROM spots WHERE number=?', [number]);
+    if (exists) { skipped++; continue; }
+    await tRun('INSERT INTO spots(number,type,status) VALUES(?,?,?)', [number, type, 'available']);
+    created++;
+  }
+  sendJson(res, { ok: true, created, skipped }, 201);
 });
 
 addRoute('PUT', '/api/spots/:id', async (req, res, ctx) => {

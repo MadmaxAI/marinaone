@@ -16,10 +16,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 #topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 #content{flex:1;overflow-y:auto;padding:24px}
 /* SIDEBAR */
-.sidebar-logo{padding:16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;align-items:flex-start;gap:2px}
-.sidebar-logo img{max-width:148px;max-height:52px;object-fit:contain;border-radius:4px}
-.sidebar-logo h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sidebar-logo{padding:16px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.sidebar-logo img{max-width:140px;max-height:60px;object-fit:contain;border-radius:6px}
+.sidebar-logo h1{font-size:18px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .sidebar-logo p{font-size:11px;color:var(--text3);margin-top:2px}
+.sidebar-powered{font-size:10px;color:var(--text3);margin-top:4px;letter-spacing:.2px;opacity:.7}
 .sidebar-nav{padding:12px 8px;flex:1}
 .nav-section{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding:16px 8px 6px}
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:13.5px;color:var(--text2);transition:.15s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
@@ -277,10 +278,27 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <p id="login-version" style="font-size:11px;color:var(--text3);margin-top:4px;letter-spacing:.3px"></p>
     </div>
     <div id="login-error" class="login-error"></div>
-    <div class="form-group"><label>E-mail</label><input id="login-email" type="email" value="admin@marina.com"></div>
-    <div class="form-group"><label>Senha</label><input id="login-pass" type="password" value="marina123" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="form-group"><label>E-mail</label><input id="login-email" type="email" placeholder="seu@email.com" autocomplete="username"></div>
+    <div class="form-group">
+      <label>Senha</label>
+      <div style="position:relative">
+        <input id="login-pass" type="password" placeholder="Sua senha" autocomplete="current-password"
+               style="padding-right:40px;width:100%;box-sizing:border-box"
+               onkeydown="if(event.key==='Enter')doLogin()">
+        <button type="button" tabindex="-1"
+                onclick="togglePasswordVisibility('login-pass', this)"
+                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1"
+                title="Mostrar/ocultar senha">👁️</button>
+      </div>
+    </div>
     <button class="btn btn-primary" style="width:100%;margin-top:8px;padding:11px" onclick="doLogin()">Entrar</button>
-    <div style="margin-top:20px;text-align:center;border-top:1px solid var(--border);padding-top:16px">
+    <div style="margin-top:14px;text-align:center">
+      <button onclick="showForgotPassword()"
+              style="background:none;border:none;font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline">
+        Esqueci minha senha
+      </button>
+    </div>
+    <div style="margin-top:12px;text-align:center;border-top:1px solid var(--border);padding-top:16px">
       <button id="sa-toggle-btn" onclick="toggleSAMode()" style="background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;text-decoration:underline">
         🔐 Acesso Administrativo (SaaS)
       </button>
@@ -294,7 +312,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
   <nav id="sidebar">
     <div class="sidebar-logo" id="sidebar-logo">
       <h1>⚓ Marina One</h1>
-      <p>Gestão Integrada</p>
+      <p class="sidebar-powered">Powered by MarinaOne</p>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section" data-section="Principal">Principal</div>
@@ -443,6 +461,148 @@ let pageCharts = {};
   }
 })();
 
+// ── SHOW/HIDE PASSWORD ────────────────────────────────
+function togglePasswordVisibility(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  const isHidden = inp.type === 'password';
+  inp.type = isHidden ? 'text' : 'password';
+  btn.textContent = isHidden ? '🙈' : '👁️';
+}
+
+// ── ESQUECI MINHA SENHA ───────────────────────────────
+function showForgotPassword() {
+  document.getElementById('modal-root').innerHTML = `
+  <div class="modal-overlay" onclick="if(event.target===this)closeForgotModal()" style="z-index:3000">
+    <div class="modal-box" style="max-width:400px">
+      <div class="modal-header">
+        <div class="modal-title">🔑 Redefinir Senha</div>
+        <button class="modal-close" onclick="closeForgotModal()">✕</button>
+      </div>
+      <div style="padding:0 4px">
+        <p style="font-size:13px;color:var(--text3);margin-bottom:16px">
+          Informe seu e-mail e CPF cadastrado. Sua senha será redefinida para o número do seu CPF (somente dígitos) e você deverá trocá-la no próximo acesso.
+        </p>
+        <div id="forgot-error" class="login-error" style="display:none;margin-bottom:12px"></div>
+        <div id="forgot-success" style="display:none;padding:12px;background:rgba(34,197,94,.1);border-radius:8px;border-left:3px solid #22c55e;font-size:13px;color:#22c55e;margin-bottom:12px"></div>
+        <div class="form-group"><label>E-mail</label><input id="forgot-email" type="email" placeholder="seu@email.com"></div>
+        <div class="form-group">
+          <label>CPF</label>
+          <input id="forgot-cpf" type="text" placeholder="000.000.000-00" maxlength="14"
+                 oninput="this.value=this.value.replace(/\D/g,'').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2')">
+        </div>
+        <div class="form-actions" style="margin-top:16px;border-top:none">
+          <button class="btn btn-ghost" onclick="closeForgotModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="submitForgotPassword()">🔑 Redefinir Senha</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(() => document.getElementById('forgot-email')?.focus(), 100);
+}
+
+function closeForgotModal() {
+  document.getElementById('modal-root').innerHTML = '';
+}
+
+async function submitForgotPassword() {
+  const email = document.getElementById('forgot-email').value.trim();
+  const cpf   = document.getElementById('forgot-cpf').value.trim();
+  const errEl = document.getElementById('forgot-error');
+  const okEl  = document.getElementById('forgot-success');
+  errEl.style.display = 'none';
+  okEl.style.display  = 'none';
+
+  try {
+    const r = await fetch(API + '/auth/forgot-password', {
+      method: 'POST',
+      headers: tenantHeaders(),
+      body: JSON.stringify({ email, cpf })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      errEl.textContent = d.error || 'Erro ao redefinir senha';
+      errEl.style.display = 'block';
+    } else {
+      okEl.textContent = '✅ ' + d.message;
+      okEl.style.display = 'block';
+      document.getElementById('forgot-email').disabled = true;
+      document.getElementById('forgot-cpf').disabled   = true;
+    }
+  } catch {
+    errEl.textContent = 'Erro de conexão com o servidor';
+    errEl.style.display = 'block';
+  }
+}
+
+// ── TROCAR SENHA OBRIGATÓRIA ──────────────────────────
+function showChangePasswordModal() {
+  document.getElementById('modal-root').innerHTML = `
+  <div class="modal-overlay" style="z-index:3000">
+    <div class="modal-box" style="max-width:380px">
+      <div class="modal-header">
+        <div class="modal-title">🔐 Troca de Senha Obrigatória</div>
+      </div>
+      <div style="padding:0 4px">
+        <p style="font-size:13px;color:var(--text3);margin-bottom:16px">
+          Por segurança, você precisa definir uma nova senha antes de continuar.
+        </p>
+        <div id="chpwd-error" class="login-error" style="display:none;margin-bottom:12px"></div>
+        <div class="form-group">
+          <label>Nova Senha</label>
+          <div style="position:relative">
+            <input id="chpwd-new" type="password" placeholder="Mínimo 6 caracteres" style="padding-right:40px;width:100%;box-sizing:border-box">
+            <button type="button" tabindex="-1" onclick="togglePasswordVisibility('chpwd-new',this)"
+                    style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0">👁️</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Confirmar Nova Senha</label>
+          <div style="position:relative">
+            <input id="chpwd-confirm" type="password" placeholder="Repita a nova senha" style="padding-right:40px;width:100%;box-sizing:border-box"
+                   onkeydown="if(event.key==='Enter')submitChangePassword()">
+            <button type="button" tabindex="-1" onclick="togglePasswordVisibility('chpwd-confirm',this)"
+                    style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0">👁️</button>
+          </div>
+        </div>
+        <div class="form-actions" style="margin-top:16px;border-top:none">
+          <button class="btn btn-primary" style="width:100%" onclick="submitChangePassword()">Salvar Nova Senha</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(() => document.getElementById('chpwd-new')?.focus(), 100);
+}
+
+async function submitChangePassword() {
+  const newPwd     = document.getElementById('chpwd-new').value;
+  const confirm    = document.getElementById('chpwd-confirm').value;
+  const errEl      = document.getElementById('chpwd-error');
+  errEl.style.display = 'none';
+
+  if (newPwd.length < 6) {
+    errEl.textContent = 'A senha deve ter pelo menos 6 caracteres';
+    errEl.style.display = 'block'; return;
+  }
+  if (newPwd !== confirm) {
+    errEl.textContent = 'As senhas não coincidem';
+    errEl.style.display = 'block'; return;
+  }
+  try {
+    const r = await api('POST', '/auth/change-password', { new_password: newPwd });
+    if (r && r.ok) {
+      document.getElementById('modal-root').innerHTML = '';
+      await openApp();
+    } else {
+      errEl.textContent = r?.error || 'Erro ao salvar senha';
+      errEl.style.display = 'block';
+    }
+  } catch {
+    errEl.textContent = 'Erro de conexão';
+    errEl.style.display = 'block';
+  }
+}
+
 // ── VERSÃO NO LOGIN ───────────────────────────────────
 (function setLoginVersion() {
   const v = window.APP_VERSION;
@@ -473,12 +633,13 @@ async function api(method, path, body) {
 function applyMarinaLogo(sett) {
   const el = document.getElementById('sidebar-logo');
   if (!el) return;
-  const name = (sett && sett.marina_name) || 'Marina One';
-  const logo = sett && sett.marina_logo;
+  const name    = (sett && sett.marina_name) || 'Marina One';
+  const logo    = sett && sett.marina_logo;
+  const powered = `<span class="sidebar-powered">Powered by MarinaOne</span>`;
   if (logo) {
-    el.innerHTML = `<img src="${logo}" alt="${name}"><p style="font-size:11px;color:var(--text3);margin-top:2px">${name}</p>`;
+    el.innerHTML = `<img src="${logo}" alt="${name}">${powered}`;
   } else {
-    el.innerHTML = `<h1>⚓ ${name}</h1><p>Gestão Integrada</p>`;
+    el.innerHTML = `<h1>⚓ ${name}</h1>${powered}`;
   }
 }
 
@@ -534,7 +695,11 @@ async function doLogin() {
     token = d.token;
     currentUser = d.user;
     localStorage.setItem('mo_token', token);
-    await openApp();
+    if (d.must_change_password) {
+      showChangePasswordModal();
+    } else {
+      await openApp();
+    }
   } catch(e) { err.textContent = 'Erro de conexão com o servidor'; err.style.display='block'; }
 }
 
@@ -1767,8 +1932,8 @@ function _renderClientsTbody(clients) {
     <td class="text-success font-bold">${fmt(c.ltv)}</td>
     <td>${_clientUserCell(c)}</td>
     <td><div class="flex gap-2">
-      <button class="btn btn-ghost btn-sm" onclick="viewClient(${c.id})">👁 Ver</button>
-      <button class="btn btn-ghost btn-sm" onclick="openClientModal(${c.id})">✏️</button>
+      <button class="btn btn-ghost btn-sm" onclick="viewClient(${c.id})" title="Ver detalhes do cliente">👁 Ver</button>
+      <button class="btn btn-ghost btn-sm" onclick="openClientModal(${c.id})" title="Editar cliente">✏️</button>
     </div></td>
   </tr>`).join('');
 }
@@ -1940,8 +2105,8 @@ function _renderVesselsTbody(vessels) {
     <td>${VESSEL_STATUS_BADGE(v.vessel_status)}</td>
     <td>${v.registration||'—'}</td>
     <td onclick="event.stopPropagation()"><div class="flex gap-2">
-      <button class="btn btn-ghost btn-sm" onclick="viewVessel(${v.id})">👁</button>
-      <button class="btn btn-ghost btn-sm" onclick="openVesselModal(${v.id})">✏️</button>
+      <button class="btn btn-ghost btn-sm" onclick="viewVessel(${v.id})" title="Ver detalhes da embarcação">👁</button>
+      <button class="btn btn-ghost btn-sm" onclick="openVesselModal(${v.id})" title="Editar embarcação">✏️</button>
     </div></td>
   </tr>`).join('');
 }
@@ -2114,10 +2279,27 @@ async function unassignSpot(vesselId, spotNumber) {
 }
 
 async function saveVessel(id) {
-  const body = {name:document.getElementById('vm-name').value,client_id:parseInt(document.getElementById('vm-client').value),type:document.getElementById('vm-type').value,size:document.getElementById('vm-size').value,model:document.getElementById('vm-model').value,manufacturer:document.getElementById('vm-manufacturer').value,length:parseFloat(document.getElementById('vm-length').value)||null,beam:parseFloat(document.getElementById('vm-beam').value)||null,draft:parseFloat(document.getElementById('vm-draft').value)||null,year:parseInt(document.getElementById('vm-year').value)||null,registration:document.getElementById('vm-registration').value,engine:document.getElementById('vm-engine').value,notes:document.getElementById('vm-notes').value};
+  const body = {
+    name:         document.getElementById('vm-name').value.trim(),
+    client_id:    parseInt(document.getElementById('vm-client').value) || null,
+    type:         document.getElementById('vm-type').value,
+    size:         document.getElementById('vm-size').value,
+    model:        document.getElementById('vm-model').value.trim(),
+    manufacturer: document.getElementById('vm-manufacturer').value.trim(),
+    length:       parseFloat(document.getElementById('vm-length').value) || null,
+    beam:         parseFloat(document.getElementById('vm-beam').value) || null,
+    draft:        parseFloat(document.getElementById('vm-draft').value) || null,
+    year:         parseInt(document.getElementById('vm-year').value) || null,
+    registration: document.getElementById('vm-registration').value.trim(),
+    engine:       document.getElementById('vm-engine').value.trim(),
+    notes:        document.getElementById('vm-notes').value.trim(),
+  };
   if (!body.name) { toast('Nome obrigatório','error'); return; }
-  if (id) await api('PUT',`/vessels/${id}`,body); else await api('POST','/vessels',body);
-  toast('Embarcação salva!'); closeModalForce(); pages.vessels();
+  const r = id
+    ? await api('PUT', `/vessels/${id}`, body)
+    : await api('POST', '/vessels', body);
+  if (!r || r.error) { toast(r?.error || 'Erro ao salvar embarcação', 'error'); return; }
+  toast('✅ Embarcação salva!'); closeModalForce(); pages.vessels();
 }
 
 // ── PAGE: SPOTS ─────────────────────────────────────
@@ -2217,24 +2399,96 @@ async function deleteSpot(id) {
 }
 
 function openNewSpotModal() {
-  modal(`<div class="modal" onclick="event.stopPropagation()">
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="min-width:420px">
     <div class="modal-title">Nova Vaga</div>
-    <div class="form-row cols2">
-      <div class="form-group"><label>Número / Identificação *</label>
-        <input id="ns-number" placeholder="Ex: S-101, M-05...">
+
+    <div class="tabs" style="margin-bottom:18px">
+      <div class="tab active" id="spot-tab-single" onclick="spotSwitchTab('single')">➕ Individual</div>
+      <div class="tab"       id="spot-tab-batch"  onclick="spotSwitchTab('batch')">📦 Em Lote</div>
+    </div>
+
+    <!-- ABA INDIVIDUAL -->
+    <div id="spot-pane-single">
+      <div class="form-row cols2">
+        <div class="form-group"><label>Número / Identificação *</label>
+          <input id="ns-number" placeholder="Ex: S-101, M-05...">
+        </div>
+        <div class="form-group"><label>Tipo *</label>
+          <select id="ns-type">
+            <option value="seca">🏗️ Armazenagem Seca</option>
+            <option value="molhada">🌊 Armazenagem Molhada</option>
+          </select>
+        </div>
       </div>
-      <div class="form-group"><label>Tipo *</label>
-        <select id="ns-type">
-          <option value="seca">🏗️ Armazenagem Seca</option>
-          <option value="molhada">🌊 Armazenagem Molhada</option>
-        </select>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveNewSpot()">Criar Vaga</button>
       </div>
     </div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveNewSpot()">Criar Vaga</button>
+
+    <!-- ABA EM LOTE -->
+    <div id="spot-pane-batch" style="display:none">
+      <div class="form-row cols2">
+        <div class="form-group"><label>Prefixo</label>
+          <input id="nb-prefix" placeholder="Ex: S-, SECA-, MOL-" oninput="spotBatchPreview()">
+        </div>
+        <div class="form-group"><label>Tipo *</label>
+          <select id="nb-type" onchange="spotBatchPreview()">
+            <option value="seca">🏗️ Armazenagem Seca</option>
+            <option value="molhada">🌊 Armazenagem Molhada</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row cols3">
+        <div class="form-group"><label>Início *</label>
+          <input id="nb-start" type="number" min="1" value="1" oninput="spotBatchPreview()">
+        </div>
+        <div class="form-group"><label>Fim *</label>
+          <input id="nb-end" type="number" min="1" value="10" oninput="spotBatchPreview()">
+        </div>
+        <div class="form-group"><label>Zeros à esquerda</label>
+          <select id="nb-padding" onchange="spotBatchPreview()">
+            <option value="1">Nenhum (1, 2…)</option>
+            <option value="2" selected>2 dígitos (01, 02…)</option>
+            <option value="3">3 dígitos (001, 002…)</option>
+          </select>
+        </div>
+      </div>
+      <div id="nb-preview" style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text3);margin-bottom:14px;min-height:36px"></div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveNewSpotBatch()">📦 Criar Vagas em Lote</button>
+      </div>
     </div>
   </div>`);
+  spotBatchPreview();
+}
+
+function spotSwitchTab(tab) {
+  document.getElementById('spot-tab-single').classList.toggle('active', tab === 'single');
+  document.getElementById('spot-tab-batch').classList.toggle('active',  tab === 'batch');
+  document.getElementById('spot-pane-single').style.display = tab === 'single' ? '' : 'none';
+  document.getElementById('spot-pane-batch').style.display  = tab === 'batch'  ? '' : 'none';
+}
+
+function spotBatchPreview() {
+  const prefix  = document.getElementById('nb-prefix')?.value || '';
+  const start   = parseInt(document.getElementById('nb-start')?.value || '1', 10);
+  const end     = parseInt(document.getElementById('nb-end')?.value   || '10', 10);
+  const padding = parseInt(document.getElementById('nb-padding')?.value || '2', 10);
+  const el      = document.getElementById('nb-preview');
+  if (!el) return;
+  if (isNaN(start) || isNaN(end) || end < start) {
+    el.textContent = '⚠️ Intervalo inválido';
+    return;
+  }
+  const total = end - start + 1;
+  if (total > 500) { el.textContent = '⚠️ Máximo de 500 vagas por lote'; return; }
+  const examples = [];
+  for (let i = start; i <= Math.min(end, start + 4); i++)
+    examples.push(prefix + String(i).padStart(padding, '0'));
+  const more = total > 5 ? ` … ${prefix}${String(end).padStart(padding,'0')}` : '';
+  el.innerHTML = `<strong>${total} vagas:</strong> ${examples.join(', ')}${more}`;
 }
 
 async function saveNewSpot() {
@@ -2244,6 +2498,23 @@ async function saveNewSpot() {
   const r = await api('POST', '/spots', { number, type });
   if (r && r.id) { toast('Vaga criada!'); closeModalForce(); pages.spots(); }
   else toast(r?.error || 'Erro ao criar vaga','error');
+}
+
+async function saveNewSpotBatch() {
+  const prefix  = document.getElementById('nb-prefix').value.trim();
+  const start   = parseInt(document.getElementById('nb-start').value, 10);
+  const end     = parseInt(document.getElementById('nb-end').value,   10);
+  const type    = document.getElementById('nb-type').value;
+  const padding = parseInt(document.getElementById('nb-padding').value, 10);
+  if (isNaN(start) || isNaN(end) || end < start) { toast('Intervalo inválido','error'); return; }
+  const r = await api('POST', '/spots/batch', { prefix, start, end, type, padding });
+  if (r && r.ok) {
+    toast(`✅ ${r.created} vaga(s) criada(s)${r.skipped ? ` · ${r.skipped} já existiam` : ''}!`);
+    closeModalForce();
+    pages.spots();
+  } else {
+    toast(r?.error || 'Erro ao criar vagas em lote', 'error');
+  }
 }
 
 // ── PAGE: CONTRACTS ───────────────────────────────────
@@ -2298,7 +2569,7 @@ function _renderContractsTbody(contracts) {
     <td>${fmtDate(c.start_date)} → ${c.end_date?fmtDate(c.end_date):'Indeterminado'}</td>
     <td>${statusBadge(c.status)}</td>
     <td onclick="event.stopPropagation()"><div class="flex gap-2">
-      <button class="btn btn-ghost btn-sm" onclick="viewContract(${c.id})">👁</button>
+      <button class="btn btn-ghost btn-sm" onclick="viewContract(${c.id})" title="Ver detalhes do contrato">👁</button>
       ${c.status==='active'?`<button class="btn btn-danger btn-sm" onclick="cancelContract(${c.id})">Cancelar</button>`:''}
     </div></td>
   </tr>`).join('');
@@ -3746,7 +4017,7 @@ async function renderStoreItems() {
     <td>${fmt(i.stock*i.cost)}</td>
     <td>${urgBadge(i)}</td>
     <td><div class="flex gap-1">
-      <button class="btn btn-ghost btn-sm" onclick="openItemModal(${i.id})">✏️</button>
+      <button class="btn btn-ghost btn-sm" onclick="openItemModal(${i.id})" title="Editar item da loja">✏️</button>
       <button class="btn btn-danger btn-sm" onclick="deleteItem(${i.id})">🗑</button>
     </div></td>
   </tr>`).join('') || `<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Nenhum item encontrado</td></tr>`;
@@ -4202,7 +4473,7 @@ function _renderMaintTbody(items) {
     <td>${fmt(m.cost)}</td>
     <td>${statusBadge(m.status)}</td>
     <td><div class="flex gap-2">
-      <button class="btn btn-ghost btn-sm" onclick="openMaintenanceModal(${m.id})">✏️</button>
+      <button class="btn btn-ghost btn-sm" onclick="openMaintenanceModal(${m.id})" title="Editar ordem de serviço">✏️</button>
       ${m.status!=='completed'?`<button class="btn btn-success btn-sm" onclick="completeMaintenance(${m.id})">✓</button>`:''}
     </div></td>
   </tr>`).join('');
@@ -5831,34 +6102,43 @@ async function saViewTenant(idx) {
   saApi('GET', `/superadmin/tenants/${t.slug}/credentials`).then(creds => {
     const el = document.getElementById('sv-credentials');
     if (!el) return;
+    const title = `<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🔑 Credenciais do Administrador</div>`;
     if (!creds || creds.error) {
-      el.innerHTML = `
-        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🔑 Credenciais do Administrador</div>
-        <div style="font-size:12px;color:var(--text3)">Informações de acesso não disponíveis para esta marina.</div>`;
+      el.innerHTML = title + `<div style="font-size:12px;color:var(--text3)">Informações de acesso não disponíveis.</div>`;
       return;
     }
-    const email    = creds.admin_email    || '—';
-    const password = creds.admin_password || '—';
-    el.innerHTML = `
-      <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🔑 Credenciais do Administrador</div>
+    const email    = creds.admin_email    || '';
+    const password = creds.admin_password || '';
+    const emailHtml = email
+      ? `<span style="font-family:monospace;font-weight:600;color:var(--text)">${email}</span>
+         <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Copiar e-mail"
+                 onclick="navigator.clipboard.writeText('${email}');toast('E-mail copiado!')">📋</button>`
+      : `<span style="color:var(--text3);font-size:12px">Não informado</span><span></span>`;
+    const pwdHtml = password
+      ? `<span id="sv-pwd-text" style="font-family:monospace;font-weight:600;color:var(--text);letter-spacing:2px">••••••••</span>
+         <div style="display:flex;gap:4px">
+           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Mostrar/ocultar"
+                   onclick="(function(btn){const el=document.getElementById('sv-pwd-text');const shown=el.dataset.shown==='1';el.textContent=shown?'••••••••':'${password}';el.dataset.shown=shown?'0':'1';btn.textContent=shown?'👁️':'🙈';})(this)">👁️</button>
+           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Copiar senha"
+                   onclick="navigator.clipboard.writeText('${password}');toast('Senha copiada!')">📋</button>
+         </div>`
+      : `<span style="color:var(--text3);font-size:12px">Não armazenada</span>
+         <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;color:var(--warning)" title="Redefinir senha do admin"
+                 onclick="saResetAdminPassword('${t.slug}', '${email}')">🔑 Redefinir</button>`;
+    const warningHtml = password
+      ? `<div style="margin-top:10px;font-size:11px;color:var(--text3);padding:8px 10px;background:rgba(239,68,68,.08);border-radius:6px;border-left:3px solid #ef4444">
+           ⚠️ Credenciais iniciais. Oriente o admin a trocar a senha no primeiro acesso.
+         </div>`
+      : `<div style="margin-top:10px;font-size:11px;color:var(--text3);padding:8px 10px;background:rgba(245,158,11,.08);border-radius:6px;border-left:3px solid var(--warning)">
+           ℹ️ Senha criada antes do registro de credenciais. Use "Redefinir" para gerar uma nova.
+         </div>`;
+    el.innerHTML = title + `
       <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px 12px;align-items:center;font-size:13px">
         <span style="color:var(--text3);white-space:nowrap">E-mail:</span>
-        <span style="font-family:monospace;font-weight:600;color:var(--text)">${email}</span>
-        <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Copiar e-mail"
-                onclick="navigator.clipboard.writeText('${email}');toast('E-mail copiado!')">📋</button>
-
+        ${emailHtml}
         <span style="color:var(--text3);white-space:nowrap">Senha:</span>
-        <span id="sv-pwd-text" style="font-family:monospace;font-weight:600;color:var(--text);letter-spacing:2px">••••••••</span>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Mostrar/ocultar senha"
-                  onclick="(function(btn){const el=document.getElementById('sv-pwd-text');const shown=el.dataset.shown==='1';el.textContent=shown?'••••••••':'${password}';el.dataset.shown=shown?'0':'1';btn.textContent=shown?'👁️':'🙈';})(this)">👁️</button>
-          <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Copiar senha"
-                  onclick="navigator.clipboard.writeText('${password}');toast('Senha copiada!')">📋</button>
-        </div>
-      </div>
-      <div style="margin-top:10px;font-size:11px;color:var(--text3);padding:8px 10px;background:rgba(239,68,68,.08);border-radius:6px;border-left:3px solid #ef4444">
-        ⚠️ Estas são as credenciais iniciais. Oriente o administrador da marina a alterar a senha após o primeiro acesso.
-      </div>`;
+        ${pwdHtml}
+      </div>` + warningHtml;
   });
 }
 
@@ -6111,6 +6391,17 @@ function saAutoSlug() {
 function saCloseModal() {
   document.getElementById('modal-root').innerHTML = '';
   window._seLogoBase64 = undefined; // limpa logo pendente do modal de edição
+}
+
+async function saResetAdminPassword(slug, email) {
+  const newPwd = prompt(`Redefinir senha do administrador de "${slug}".\n\nDigite a nova senha (mín. 6 caracteres):`);
+  if (!newPwd || newPwd.length < 6) { toast('Operação cancelada ou senha muito curta.'); return; }
+  const r = await saApi('POST', `/superadmin/tenants/${slug}/reset-admin-password`, { email, new_password: newPwd });
+  if (r && r.ok) {
+    toast(`✅ Senha do admin de "${slug}" redefinida com sucesso!`);
+  } else {
+    toast('❌ Erro ao redefinir senha: ' + (r?.error || 'desconhecido'));
+  }
 }
 
 async function saCreateTenant() {
