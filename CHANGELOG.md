@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.0.10] -- 2026-04-30
+- Fix: rodar migrations em todos os tenants no boot (corrige coluna photo em prod)
+
 ## [2.0.9] -- 2026-04-30
 - Foto e badge de locação na lista de embarcações
 
@@ -123,6 +126,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

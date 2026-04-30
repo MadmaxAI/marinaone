@@ -1958,6 +1958,22 @@ async function boot() {
     });
   }
 
+  // 3. Roda migrações pendentes em TODOS os tenants existentes (produção multi-tenant)
+  try {
+    const { getGlobalPool } = require('./src/db/pool');
+    const tenants = await getGlobalPool().unsafe(`SELECT slug FROM saas.tenants`);
+    for (const { slug } of tenants) {
+      try {
+        await runMigrations(slug);
+      } catch (e) {
+        console.error(`[boot] Erro ao migrar tenant ${slug}:`, e.message);
+      }
+    }
+    if (tenants.length > 0) console.log(`[boot] Migrations aplicadas em ${tenants.length} tenant(s).`);
+  } catch (e) {
+    console.error('[boot] Erro ao listar tenants para migração:', e.message);
+  }
+
   server.listen(PORT, () => {
     console.log(`\n✅  Servidor iniciado em http://localhost:${PORT}`);
     if (GIT_HASH) console.log(`    Commit: ${GIT_HASH}`);
