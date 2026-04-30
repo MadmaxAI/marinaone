@@ -50,8 +50,7 @@ S_TOC_ITEM = st('sTocItem',  fontSize=10, textColor=CINZA,       spaceBefore=3, 
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
 def section_header(num, title):
-    """Bloco de cabeçalho de seção com fundo azul."""
-    data = [[Paragraph(f'<font color="white"><b>Seção {num}</b></font>', S_BADGE),
+    data = [[Paragraph(f'<font color="white"><b>Secao {num}</b></font>', S_BADGE),
              Paragraph(f'<font color="white"><b>{title}</b></font>',
                        ParagraphStyle('sh', fontSize=13, textColor=BRANCO,
                                       fontName='Helvetica-Bold', leading=18))]]
@@ -63,7 +62,6 @@ def section_header(num, title):
         ('RIGHTPADDING',(0,0),(-1,-1), 10),
         ('TOPPADDING', (0,0), (-1,-1), 10),
         ('BOTTOMPADDING',(0,0),(-1,-1), 10),
-        ('ROUNDEDCORNERS', [6, 6, 6, 6]),
     ]))
     return [Spacer(1, 10), t, Spacer(1, 10)]
 
@@ -90,7 +88,6 @@ def code_block(lines):
         ('BOTTOMPADDING', (0,0), (-1,-1), 8),
         ('LINEAFTER', (0,0), (0,-1), 3, colors.HexColor('#6366f1')),
         ('BOX', (0,0), (-1,-1), 0.5, CINZA_MED),
-        ('ROUNDEDCORNERS', [4,4,4,4]),
     ]))
     return [t, Spacer(1, 6)]
 
@@ -123,7 +120,7 @@ def bullet(text):
 
 def step_block(num, title, lines):
     elems = []
-    elems.append(Paragraph(f'<b>Passo {num} — {title}</b>', S_H2))
+    elems.append(Paragraph(f'<b>Passo {num} - {title}</b>', S_H2))
     elems += code_block(lines)
     return elems
 
@@ -134,17 +131,17 @@ def checklist_item(text, done=False):
 # ── CAPA ──────────────────────────────────────────────────────────────────────
 def build_cover():
     cover = Table(
-        [[Paragraph('⚓', ParagraphStyle('ico', fontSize=60, textColor=BRANCO, alignment=TA_CENTER))],
+        [[Paragraph('&#9875;', ParagraphStyle('ico', fontSize=60, textColor=BRANCO, alignment=TA_CENTER))],
          [Spacer(1, 20)],
          [Paragraph('Marina One', S_TITULO)],
-         [Paragraph('Sistema de Gestão Integrada de Marina', S_SUB)],
+         [Paragraph('Sistema SaaS de Gestao Integrada de Marina', S_SUB)],
          [Spacer(1, 30)],
          [HRFlowable(width='60%', color=colors.HexColor('#3b82f6'), thickness=2)],
          [Spacer(1, 30)],
-         [Paragraph('Manual de Implantação', ParagraphStyle('mt', fontSize=20, textColor=BRANCO,
+         [Paragraph('Manual de Implantacao', ParagraphStyle('mt', fontSize=20, textColor=BRANCO,
                     alignment=TA_CENTER, fontName='Helvetica-Bold', leading=28))],
          [Spacer(1, 16)],
-         [Paragraph('Versão 1.0 &nbsp;·&nbsp; 2025', S_VERSION)],
+         [Paragraph('Versao 2.0 &nbsp;&middot;&nbsp; 2026', S_VERSION)],
         ],
         colWidths=[16.5*cm]
     )
@@ -157,7 +154,6 @@ def build_cover():
         ('LEFTPADDING', (0,0), (-1,-1), 30),
         ('RIGHTPADDING', (0,0), (-1,-1), 30),
     ]))
-    # Wrap in a full-page-height table
     page_cover = Table([[cover]], colWidths=[16.5*cm], rowHeights=[22*cm])
     page_cover.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), AZUL),
@@ -166,27 +162,29 @@ def build_cover():
     ]))
     return [page_cover, PageBreak()]
 
-# ── SUMÁRIO ───────────────────────────────────────────────────────────────────
+# ── SUMARIO ───────────────────────────────────────────────────────────────────
 def build_toc():
     secoes = [
-        ('1', 'Visão Geral do Sistema'),
-        ('2', 'Requisitos de Infraestrutura'),
-        ('3', 'Licenças e Dependências'),
-        ('4', 'Passo a Passo de Implantação'),
-        ('5', 'Checklist Pré-Entrega'),
-        ('6', 'Custos de Operação Mensais'),
-        ('7', 'Escalabilidade'),
-        ('8', 'Suporte e Contato'),
+        ('1', 'Visao Geral do Sistema'),
+        ('2', 'Arquitetura SaaS Multi-Tenant'),
+        ('3', 'Requisitos e Infraestrutura'),
+        ('4', 'Licencas e Dependencias'),
+        ('5', 'Deploy em Producao (Railway)'),
+        ('6', 'Configuracao de Dominio (Cloudflare)'),
+        ('7', 'Checklist Pre-Entrega'),
+        ('8', 'Custos de Operacao'),
+        ('9', 'Escalabilidade'),
+        ('10', 'Suporte e Contato'),
     ]
     elems = []
-    elems.append(Paragraph('Sumário', S_TOC_H))
+    elems.append(Paragraph('Sumario', S_TOC_H))
     elems.append(HRFlowable(width='100%', color=AZUL_LIGHT, thickness=1))
     elems.append(Spacer(1, 12))
     for num, title in secoes:
         row = Table([[
-            Paragraph(f'<b>Seção {num}</b>', ParagraphStyle('tn', fontSize=10, textColor=AZUL_LIGHT, fontName='Helvetica-Bold')),
+            Paragraph(f'<b>Secao {num}</b>', ParagraphStyle('tn', fontSize=10, textColor=AZUL_LIGHT, fontName='Helvetica-Bold')),
             Paragraph(title, S_TOC_ITEM),
-        ]], colWidths=[2.5*cm, 14*cm])
+        ]], colWidths=[2.8*cm, 13.7*cm])
         row.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
             ('TOPPADDING', (0,0), (-1,-1), 5),
@@ -197,45 +195,49 @@ def build_toc():
     elems.append(PageBreak())
     return elems
 
-# ── CONTEÚDO ──────────────────────────────────────────────────────────────────
+# ── CONTEUDO ──────────────────────────────────────────────────────────────────
 def build_body():
     E = []
 
-    # ── S1 — VISÃO GERAL ────────────────────────────────────────────────────
-    E += section_header('1', 'Visão Geral do Sistema')
-    E += info_box('<b>Marina One</b> é um sistema SaaS de gestão integrada para marinas, '
-                  'desenvolvido em Node.js com banco de dados SQLite. Arquitetura leve, '
-                  'sem dependências pagas, pronto para produção com um único comando.')
+    # ── S1 — VISAO GERAL ────────────────────────────────────────────────────
+    E += section_header('1', 'Visao Geral do Sistema')
+    E += info_box('<b>Marina One v2.0</b> e um sistema SaaS multi-tenant de gestao integrada para marinas. '
+                  'Cada marina opera em schema isolado no PostgreSQL. '
+                  'Deploy automatico via GitHub Actions e Railway. '
+                  'Acesso por subdominio personalizado: <b>porto-belo.marinaone.com.br</b>.')
 
-    E.append(Paragraph('<b>Stack Tecnológico</b>', S_H2))
+    E.append(Paragraph('<b>Stack Tecnologico</b>', S_H2))
     badges = [
         ('Node.js v20 LTS', AZUL),
-        ('SQLite built-in', colors.HexColor('#0f766e')),
-        ('Chart.js', colors.HexColor('#7c3aed')),
-        ('HTML5 / CSS3 / JS', colors.HexColor('#b45309')),
+        ('PostgreSQL 16', colors.HexColor('#0f766e')),
+        ('postgres.js', colors.HexColor('#7c3aed')),
+        ('Chart.js', colors.HexColor('#b45309')),
+        ('Docker', colors.HexColor('#0369a1')),
+        ('Railway', colors.HexColor('#1d4ed8')),
     ]
-    badge_cells = []
-    for label, color in badges:
-        cell = Table([[Paragraph(label, S_BADGE)]], colWidths=[3.8*cm])
-        cell.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), color),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-            ('LEFTPADDING', (0,0), (-1,-1), 8),
-            ('RIGHTPADDING', (0,0), (-1,-1), 8),
-            ('ROUNDEDCORNERS', [4,4,4,4]),
-        ]))
-        badge_cells.append(cell)
-    badge_row = Table([badge_cells], colWidths=[4*cm]*4)
-    badge_row.setStyle(TableStyle([('ALIGN',(0,0),(-1,-1),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE')]))
-    E.append(badge_row)
-    E.append(Spacer(1,10))
+    rows = [badges[:3], badges[3:]]
+    for row_badges in rows:
+        badge_cells = []
+        for label, color in row_badges:
+            cell = Table([[Paragraph(label, S_BADGE)]], colWidths=[5.2*cm])
+            cell.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), color),
+                ('TOPPADDING', (0,0), (-1,-1), 6),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+                ('LEFTPADDING', (0,0), (-1,-1), 8),
+                ('RIGHTPADDING', (0,0), (-1,-1), 8),
+            ]))
+            badge_cells.append(cell)
+        badge_row = Table([badge_cells], colWidths=[5.5*cm]*3)
+        badge_row.setStyle(TableStyle([('ALIGN',(0,0),(-1,-1),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE')]))
+        E.append(badge_row)
+        E.append(Spacer(1,6))
 
-    E.append(Paragraph('<b>Módulos do Sistema</b>', S_H2))
+    E.append(Paragraph('<b>Modulos do Sistema</b>', S_H2))
     modulos = [
-        ['Dashboard', 'Fila de Operações', 'Clientes', 'Embarcações'],
+        ['Dashboard', 'Fila de Operacoes', 'Clientes', 'Embarcacoes'],
         ['Vagas', 'Contratos', 'Financeiro', 'Loja / PDV'],
-        ['Manutenção', 'Analytics', 'Alertas', 'Configurações'],
+        ['Manutencao', 'Analytics', 'Alertas', 'Super-Admin'],
     ]
     mod_data = []
     for row in modulos:
@@ -251,200 +253,238 @@ def build_body():
     E.append(mt)
     E.append(PageBreak())
 
-    # ── S2 — INFRAESTRUTURA ─────────────────────────────────────────────────
-    E += section_header('2', 'Requisitos de Infraestrutura')
+    # ── S2 — ARQUITETURA MULTI-TENANT ─────────────────────────────────────
+    E += section_header('2', 'Arquitetura SaaS Multi-Tenant')
+    E += info_box('<b>Modelo schema-per-tenant:</b> cada marina possui seu proprio schema PostgreSQL isolado '
+                  '(<b>marina_&lt;slug&gt;</b>). O schema <b>saas</b> e global e armazena a tabela de tenants '
+                  'e super_admins. Nenhuma marina acessa dados de outra.')
 
-    E.append(Paragraph('Opção A — VPS em Nuvem (Recomendada)', S_H2))
+    E.append(Paragraph('<b>Resolucao de Tenant (ordem de prioridade)</b>', S_H2))
     E += mk_table(
-        ['Recurso', 'Especificação', 'Custo Estimado'],
+        ['Prioridade', 'Metodo', 'Exemplo'],
         [
-            ['Servidor VPS', '2 vCPU · 2 GB RAM · 40 GB SSD', 'R$ 50–120/mês'],
-            ['Domínio', 'Ex: gestao.marinacliente.com.br', 'R$ 40–60/ano'],
-            ['SSL (HTTPS)', 'Let\'s Encrypt (automático)', 'Gratuito'],
-            ['Backup automático', 'Snapshot diário no provedor', 'R$ 10–30/mês'],
+            ['1 (maior)', 'Header X-Tenant-Slug', 'X-Tenant-Slug: porto-belo'],
+            ['2', 'Subdominio', 'porto-belo.marinaone.com.br'],
+            ['3', 'Query string', '?tenant=porto-belo'],
+            ['4 (menor)', 'Env SINGLE_TENANT_SLUG', 'SINGLE_TENANT_SLUG=demo'],
         ],
-        [5*cm, 7*cm, 4.5*cm]
+        [3.5*cm, 5*cm, 8*cm]
     )
-    E.append(Paragraph('<b>Provedores recomendados:</b> Hostinger VPS · DigitalOcean · Vultr · AWS Lightsail', S_BODY))
-    E.append(Spacer(1, 10))
 
-    E.append(Paragraph('Opção B — Servidor Local na Marina', S_H2))
-    E += info_box('Indicado para marinas com <b>internet instável</b>. O sistema roda internamente '
-                  'e o acesso remoto é feito via <b>Tailscale</b> ou <b>Cloudflare Tunnel</b> (ambos gratuitos).')
+    E.append(Paragraph('<b>Schemas no PostgreSQL</b>', S_H2))
     E += mk_table(
-        ['Item', 'Especificação', 'Custo'],
+        ['Schema', 'Conteudo'],
         [
-            ['Mini PC (Intel NUC ou similar)', '4 GB RAM · SSD 120 GB', 'R$ 800–1.500 (único)'],
-            ['Acesso remoto', 'Tailscale ou Cloudflare Tunnel', 'Gratuito'],
-            ['Nobreak (recomendado)', '600VA ou superior', 'R$ 200–400 (único)'],
+            ['saas', 'Tabela global de tenants, super_admins'],
+            ['marina_porto-belo', 'Dados exclusivos da Marina Porto Belo'],
+            ['marina_santos', 'Dados exclusivos da Marina Santos'],
+            ['marina_&lt;slug&gt;', 'Schema de cada marina cadastrada'],
         ],
-        [6*cm, 6.5*cm, 4*cm]
+        [5*cm, 11.5*cm]
     )
+
+    E += info_box('<b>Super-Admin:</b> Painel exclusivo do administrador em <b>/api/superadmin/*</b> '
+                  'para criar, gerenciar e monitorar todas as marinas. Acesso por JWT separado com '
+                  'privilegios de nivel global.')
     E.append(PageBreak())
 
-    # ── S3 — LICENÇAS ───────────────────────────────────────────────────────
-    E += section_header('3', 'Licenças e Dependências')
-    E += info_box('&#9989; <b>Custo total de licenças de software: R$ 0,00.</b> '
-                  'Todo o stack é open source e de uso livre, inclusive para fins comerciais.')
+    # ── S3 — INFRAESTRUTURA ─────────────────────────────────────────────────
+    E += section_header('3', 'Requisitos e Infraestrutura')
+    E += info_box('<b>Railway</b> e a plataforma de hospedagem utilizada. Deploy automatico via GitHub. '
+                  'Sem necessidade de servidor VPS ou configuracao de SO.')
+
+    E.append(Paragraph('<b>Componentes Railway</b>', S_H2))
     E += mk_table(
-        ['Componente', 'Licença', 'Uso', 'Custo'],
+        ['Componente', 'Detalhe', 'Custo'],
         [
-            ['Node.js v20 LTS', 'MIT', 'Runtime do servidor', 'Gratuito'],
-            ['node:sqlite (built-in)', 'MIT', 'Banco de dados embutido', 'Gratuito'],
-            ['Chart.js (CDN)', 'MIT', 'Gráficos e analytics', 'Gratuito'],
-            ['Ubuntu 22.04 LTS', 'Free / GPL', 'Sistema operacional', 'Gratuito'],
-            ['NGINX', 'BSD', 'Proxy reverso + HTTPS', 'Gratuito'],
-            ['PM2', 'AGPL', 'Gerenciador de processo', 'Gratuito'],
-            ['Let\'s Encrypt / Certbot', 'Apache 2.0', 'Certificado SSL', 'Gratuito'],
+            ['App (marina-one-app)', 'Node.js via Dockerfile', 'Plano Hobby: US$ 5/mes'],
+            ['PostgreSQL', 'Gerenciado pelo Railway', 'Incluso no plano'],
+            ['Volume persistente', 'postgres-volume', 'Incluso'],
+            ['Dominio Railway', 'marina-one-app.up.railway.app', 'Gratuito'],
+            ['Dominio customizado', '*.marinaone.com.br (Cloudflare)', 'Dominio: R$ 40/ano'],
         ],
-        [5*cm, 2.8*cm, 5*cm, 3.2*cm]
+        [5.5*cm, 6.5*cm, 4.5*cm]
+    )
+
+    E.append(Paragraph('<b>Variaveis de Ambiente Obrigatorias</b>', S_H2))
+    E += code_block([
+        'DATABASE_URL=${{Postgres.DATABASE_URL}}',
+        'NODE_ENV=production',
+        'PORT=3000',
+        'DB_SSL=true',
+        'JWT_SECRET=&lt;chave-secreta-forte&gt;',
+        'BASE_DOMAIN=marinaone.com.br',
+    ])
+    E.append(PageBreak())
+
+    # ── S4 — LICENCAS ───────────────────────────────────────────────────────
+    E += section_header('4', 'Licencas e Dependencias')
+    E += info_box('&#9989; <b>Custo total de licencas de software: R$ 0,00.</b> '
+                  'Todo o stack open source e de uso livre, inclusive para fins comerciais.')
+    E += mk_table(
+        ['Componente', 'Licenca', 'Custo'],
+        [
+            ['Node.js v20 LTS', 'MIT', 'Gratuito'],
+            ['PostgreSQL 16', 'PostgreSQL License', 'Gratuito'],
+            ['postgres.js', 'MIT', 'Gratuito'],
+            ['Chart.js', 'MIT', 'Gratuito'],
+            ['Docker', 'Apache 2.0', 'Gratuito'],
+            ['Railway', 'Comercial', 'US$ 5/mes (Hobby)'],
+            ['Cloudflare', 'Comercial (Free tier)', 'Gratuito'],
+            ['TOTAL LICENCAS SOFTWARE', '', 'R$ 0'],
+        ],
+        [6*cm, 5*cm, 5.5*cm]
     )
     E.append(PageBreak())
 
-    # ── S4 — IMPLANTAÇÃO ────────────────────────────────────────────────────
-    E += section_header('4', 'Passo a Passo de Implantação')
+    # ── S5 — DEPLOY RAILWAY ─────────────────────────────────────────────────
+    E += section_header('5', 'Deploy em Producao (Railway)')
 
-    E += step_block('1', 'Preparar o Servidor',
-        ['$ sudo apt update &amp;&amp; sudo apt upgrade -y',
-         '$ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -',
-         '$ sudo apt install -y nodejs',
-         '$ node -v   # Esperado: v20.x.x'])
+    E += step_block('1', 'Pre-requisitos',
+        ['- Conta Railway (railway.app)',
+         '- Conta GitHub com repositorio do projeto',
+         '- Railway CLI: npm install -g @railway/cli'])
 
-    E += step_block('2', 'Enviar os Arquivos do Sistema',
-        ['# Via SCP (transferência direta):',
-         '$ scp -r ./marina-one usuario@IP_SERVIDOR:/home/usuario/marina-one',
-         '',
-         '# Via Git (recomendado para atualizações futuras):',
-         '$ git clone https://repositorio/marina-one.git'])
+    E += step_block('2', 'Criar projeto Railway',
+        ['railway login',
+         'railway init --name "marina-one"'])
 
-    E += step_block('3', 'Configurar PM2 — Processo Sempre Online',
-        ['$ sudo npm install -g pm2',
-         '$ cd /home/usuario/marina-one',
-         '$ pm2 start server.js --name marina-one',
-         '$ pm2 startup    # Configura para iniciar com o SO',
-         '$ pm2 save       # Salva a configuração'])
+    E += step_block('3', 'Adicionar PostgreSQL',
+        ['railway add --database postgres'])
 
-    E.append(PageBreak())
+    E += step_block('4', 'Configurar variaveis de ambiente',
+        ['railway variables set NODE_ENV=production PORT=3000 DB_SSL=true',
+         'railway variables set JWT_SECRET=&lt;chave-secreta-forte&gt;',
+         'railway variables set DATABASE_URL="${{Postgres.DATABASE_URL}}"',
+         'railway variables set BASE_DOMAIN=marinaone.com.br'])
 
-    E += step_block('4', 'Configurar NGINX + HTTPS (SSL Gratuito)',
-        ['$ sudo apt install -y nginx certbot python3-certbot-nginx',
-         '',
-         '# Criar arquivo de configuração do site:',
-         '$ sudo nano /etc/nginx/sites-available/marina-one',
-         '',
-         '  server {',
-         '    server_name gestao.marinacliente.com.br;',
-         '    location / {',
-         '      proxy_pass http://localhost:3000;',
-         '      proxy_set_header Host $host;',
-         '    }',
-         '  }',
-         '',
-         '$ sudo ln -s /etc/nginx/sites-available/marina-one /etc/nginx/sites-enabled/',
-         '$ sudo nginx -t &amp;&amp; sudo systemctl reload nginx',
-         '$ sudo certbot --nginx -d gestao.marinacliente.com.br'])
+    E += step_block('5', 'Deploy inicial',
+        ['railway up --service marina-one-app'])
 
-    E += step_block('5', 'Backup Automático Diário',
-        ['# Criar script de backup:',
-         '$ nano /home/usuario/backup-marina.sh',
-         '',
-         '  #!/bin/bash',
-         '  DATE=$(date +%Y-%m-%d)',
-         '  cp marina.db /backups/marina-$DATE.db',
-         '  find /backups/ -name "*.db" -mtime +30 -delete',
-         '',
-         '$ chmod +x backup-marina.sh',
-         '$ crontab -e',
-         '  # Adicionar: 0 2 * * * /home/usuario/backup-marina.sh'])
+    E += step_block('6', 'Conectar GitHub (auto-deploy)',
+        ['No painel Railway: Settings > Source > MadmaxAI/marinaone > branch main',
+         'No GitHub: Settings > Installed Apps > Railway App > Configure > autorizar repo'])
 
-    E += step_block('6', 'Personalização para o Cliente',
-        ['# No arquivo server.js — trocar credenciais padrão:',
-         "  ['admin@marina.com', 'marina123']",
-         "  # Alterar para dados reais do cliente",
-         '',
-         '# No frontend.html — personalizar nome da marina',
-         '# Acessar Configuracoes > Ajustar horarios de operacao',
-         '# Criar usuarios iniciais para a equipe'])
+    E += step_block('7', 'Gerar dominio publico Railway',
+        ['Via painel Railway: Settings > Networking > Generate Domain',
+         '# URL gerada: marina-one-app.up.railway.app'])
+
+    E += step_block('8', 'Atualizacoes futuras (automaticas)',
+        ['publicar.bat "descricao da alteracao"',
+         '# bump versao > commit > push GitHub > Railway detecta > deploy automatico'])
 
     E.append(PageBreak())
 
-    # ── S5 — CHECKLIST ──────────────────────────────────────────────────────
-    E += section_header('5', 'Checklist Pré-Entrega')
+    # ── S6 — CLOUDFLARE ─────────────────────────────────────────────────────
+    E += section_header('6', 'Configuracao de Dominio (Cloudflare)')
+    E += info_box('<b>Por que Cloudflare?</b> O registro.br nao suporta wildcards DNS (* CNAME). '
+                  'O Cloudflare (free tier) permite wildcard e delega o DNS do dominio. '
+                  'Resultado: cada marina acessa por subdominio proprio.')
+
+    E += step_block('1', 'Adicionar dominio no Cloudflare',
+        ['Acesse cloudflare.com > Add site > marinaone.com.br'])
+
+    E.append(Paragraph('<b>Passo 2 - Configurar DNS no Cloudflare</b>', S_H2))
+    E += mk_table(
+        ['Nome', 'Tipo', 'Destino', 'Proxy'],
+        [
+            ['*', 'CNAME', 'q8n07iv8.up.railway.app', 'DNS only (cinza)'],
+            ['_acme-challenge', 'CNAME', 'q8n07iv8.authorize.railwaydns.net', 'DNS only (cinza)'],
+        ],
+        [3*cm, 2*cm, 7.5*cm, 4*cm]
+    )
+    E += info_box('<b>IMPORTANTE:</b> Ambos os registros devem estar como <b>DNS only (icone cinza)</b>, '
+                  'nao como Proxied (laranja). O _acme-challenge e necessario para o Railway emitir '
+                  'certificado SSL wildcard via Let\'s Encrypt.')
+
+    E += step_block('3', 'Trocar nameservers no registro.br',
+        ['- jeff.ns.cloudflare.com',
+         '- kallie.ns.cloudflare.com',
+         '# Aguardar propagacao: 5 min a 24h'])
+
+    E += step_block('4', 'Verificar acesso por subdominio',
+        ['https://porto-belo.marinaone.com.br  --> Marina Porto Belo',
+         'https://santos.marinaone.com.br      --> Marina Santos'])
+
+    E.append(PageBreak())
+
+    # ── S7 — CHECKLIST ──────────────────────────────────────────────────────
+    E += section_header('7', 'Checklist Pre-Entrega')
     itens = [
-        'Domínio apontando corretamente para o IP do servidor',
-        'HTTPS funcionando (cadeado verde no navegador)',
-        'Credenciais padrão de administrador substituídas',
-        'Nome e informações da marina personalizados',
-        'Backup automático configurado e testado',
-        'PM2 reiniciando automaticamente após reboot do servidor',
-        'Firewall configurado: ufw allow 80,443,22/tcp',
-        'Sistema testado em celular (responsividade mobile)',
-        'Usuários iniciais criados para toda a equipe',
-        'Demonstração completa realizada com o cliente',
-        'Treinamento básico ministrado para os operadores',
-        'Documentação de acesso entregue ao responsável',
+        'Projeto Railway criado e PostgreSQL provisionado',
+        'Variaveis de ambiente configuradas corretamente',
+        'Deploy inicial bem-sucedido (railway up)',
+        'GitHub App Railway autorizado no repositorio',
+        'Auto-deploy testado (push na branch main aciona deploy)',
+        'Dominio customizado configurado no Cloudflare',
+        'Nameservers atualizados no registro.br',
+        'HTTPS funcionando (certificado SSL ativo)',
+        'Super-admin criado e funcional',
+        'Primeiro tenant (marina) provisionado e testado',
+        'Credenciais padrao alteradas',
+        'Sistema testado em mobile (responsividade)',
+        'publicar.bat funcionando corretamente',
+        'Treinamento realizado com os operadores',
     ]
     for item in itens:
         E.append(checklist_item(item))
         E.append(Spacer(1, 4))
     E.append(PageBreak())
 
-    # ── S6 — CUSTOS ─────────────────────────────────────────────────────────
-    E += section_header('6', 'Custos de Operação Mensais')
+    # ── S8 — CUSTOS ─────────────────────────────────────────────────────────
+    E += section_header('8', 'Custos de Operacao')
     E += mk_table(
-        ['Item', 'Descrição', 'Custo Mensal'],
+        ['Item', 'Descricao', 'Custo Mensal'],
         [
-            ['VPS (servidor)', 'Hostinger / DigitalOcean / Vultr', 'R$ 50–120'],
-            ['Domínio (pro-rata)', '.com.br ou .com', 'R$ 5'],
-            ['SSL (Let\'s Encrypt)', 'Renovação automática gratuita', 'R$ 0'],
-            ['Licenças de software', 'Todas MIT/Open Source', 'R$ 0'],
-            ['TOTAL INFRAESTRUTURA', '', 'R$ 55–125'],
+            ['Railway Hobby Plan', 'App + PostgreSQL gerenciado', 'US$ 5/mes (~R$ 30)'],
+            ['Dominio marinaone.com.br', 'registro.br', 'R$ 40/ano (~R$ 4/mes)'],
+            ['Cloudflare', 'DNS + CDN + SSL', 'Gratuito'],
+            ['GitHub', 'Repositorio + CI/CD', 'Gratuito'],
+            ['TOTAL', '', '~R$ 34/mes'],
         ],
         [5*cm, 7*cm, 4.5*cm]
     )
-    E += info_box('<b>Observação:</b> O custo real para o cliente é a mensalidade de manutenção '
-                  'contratada com o fornecedor (R$ 1.000/mês), que <b>já inclui</b> a hospedagem, '
-                  'monitoramento, atualizações e suporte técnico.')
+    E += info_box('<b>Nota:</b> O custo real para o cliente e a mensalidade de manutencao '
+                  'contratada (R$ 1.000/mes), que <b>ja inclui</b> hospedagem Railway, '
+                  'monitoramento, atualizacoes e suporte tecnico.')
     E.append(PageBreak())
 
-    # ── S7 — ESCALABILIDADE ─────────────────────────────────────────────────
-    E += section_header('7', 'Escalabilidade')
-    E += info_box('O sistema utiliza <b>SQLite</b>, ideal para até ~10 usuários simultâneos '
-                  'e volumes de até milhares de registros. Para marinas de grande porte, '
-                  'recomenda-se migrar para <b>PostgreSQL</b> — o código do server.js '
-                  'suporta essa transição com pequenas alterações nas queries SQL.')
+    # ── S9 — ESCALABILIDADE ─────────────────────────────────────────────────
+    E += section_header('9', 'Escalabilidade')
+    E += info_box('<b>Atual:</b> Railway Hobby (US$5/mes) — suporta ate ~50 usuarios simultaneos '
+                  'com PostgreSQL. A migracao para PostgreSQL ja foi realizada — base preparada '
+                  'para escala horizontal.')
     E.append(Paragraph('<b>Quando escalar:</b>', S_H2))
     for item in [
-        'Mais de 10 usuários simultâneos intensos',
-        'Volume de pedidos/operações acima de 500/dia',
-        'Necessidade de relatórios em tempo real com alta concorrência',
-        'Integração com sistemas externos (ERP, contabilidade, etc.)',
+        'Mais de 50 usuarios simultaneos',
+        'Multiplas marinas grandes com relatorios pesados em tempo real',
+        'Necessidade de Redis para cache de sessao',
+        'Integracao com sistemas externos (ERP, contabilidade)',
     ]:
         E.append(bullet(item))
     E.append(Spacer(1,10))
-    E.append(Paragraph('Contrate o plano de <b>personalização por hora (R$ 150/h)</b> '
-                        'para executar a migração sem interrupção do serviço.', S_BODY))
+    E.append(Paragraph('<b>Opcoes de upgrade:</b> Railway Pro (US$20/mes), multiplas instâncias, '
+                        'Redis para cache, load balancer.', S_BODY))
     E.append(PageBreak())
 
-    # ── S8 — SUPORTE ────────────────────────────────────────────────────────
-    E += section_header('8', 'Suporte e Contato')
-
+    # ── S10 — SUPORTE ────────────────────────────────────────────────────────
+    E += section_header('10', 'Suporte e Contato')
     planos = [
-        ['Implantação', 'R$ 3.000', 'Pagamento único', 'Configuração completa, personalização inicial,\ntreinamento da equipe e go-live supervisionado'],
-        ['Manutenção Mensal', 'R$ 1.000/mês', 'Recorrente', 'Hospedagem, monitoramento 24/7, atualizações\ndo sistema e suporte técnico ilimitado'],
-        ['Personalização', 'R$ 150/hora', 'Sob demanda', 'Novos módulos, integrações, relatórios\ncustomizados e ajustes específicos'],
+        ['Implantacao', 'R$ 3.000', 'Unico', 'Configuracao Railway, dominio, primeiro tenant, treinamento'],
+        ['Manutencao Mensal', 'R$ 1.000/mes', 'Recorrente', 'Hospedagem, atualizacoes, suporte, monitoramento'],
+        ['Novo Tenant', 'R$ 500', 'Por marina', 'Provisionamento, personalizacao, treinamento'],
+        ['Personalizacao', 'R$ 150/hora', 'Sob demanda', 'Novos modulos, integracoes, relatorios'],
     ]
     E += mk_table(
-        ['Plano', 'Valor', 'Cobrança', 'Inclui'],
+        ['Plano', 'Valor', 'Cobranca', 'Inclui'],
         planos,
         [3.5*cm, 3*cm, 3*cm, 7*cm]
     )
     E.append(Spacer(1,10))
-
     contact = Table([
         [Paragraph('<b>Arthur Noli</b>', ParagraphStyle('cn', fontSize=13, textColor=AZUL,
                    fontName='Helvetica-Bold'))],
-        [Paragraph('Especialista em Sistemas de Gestão para Marinas', S_BODY)],
+        [Paragraph('Especialista em Sistemas de Gestao para Marinas', S_BODY)],
         [Spacer(1,6)],
         [Paragraph('&#9993; rj.madmax@gmail.com', ParagraphStyle('ce', fontSize=11,
                    textColor=AZUL_LIGHT, fontName='Helvetica-Bold'))],
@@ -465,18 +505,16 @@ def on_first_page(canvas, doc):
 
 def on_later_pages(canvas, doc):
     canvas.saveState()
-    # Header bar
     canvas.setFillColor(AZUL)
     canvas.rect(0, H - 1*cm, W, 1*cm, fill=1, stroke=0)
     canvas.setFillColor(BRANCO)
     canvas.setFont('Helvetica-Bold', 9)
-    canvas.drawString(2*cm, H - 0.65*cm, 'Marina One — Manual de Implantação')
+    canvas.drawString(2*cm, H - 0.65*cm, 'Marina One - Manual de Implantacao')
     canvas.setFont('Helvetica', 9)
-    canvas.drawRightString(W - 2*cm, H - 0.65*cm, 'Versão 1.0 · 2025')
-    # Footer
+    canvas.drawRightString(W - 2*cm, H - 0.65*cm, 'Versao 2.0 - 2026')
     canvas.setFillColor(CINZA)
     canvas.setFont('Helvetica', 8)
-    canvas.drawCentredString(W/2, 0.7*cm, f'Página {doc.page}')
+    canvas.drawCentredString(W/2, 0.7*cm, f'Pagina {doc.page}')
     canvas.setFillColor(CINZA_LIGHT)
     canvas.rect(2*cm, 0.5*cm, W - 4*cm, 0.02*cm, fill=1, stroke=0)
     canvas.restoreState()
@@ -487,15 +525,14 @@ def main():
         OUT, pagesize=A4,
         leftMargin=2*cm, rightMargin=2*cm,
         topMargin=1.5*cm, bottomMargin=1.5*cm,
-        title='Manual de Implantação — Marina One',
+        title='Manual de Implantacao - Marina One',
         author='Arthur Noli',
-        subject='Sistema de Gestão Integrada de Marina',
+        subject='Sistema SaaS de Gestao Integrada de Marina',
     )
     story = []
     story += build_cover()
     story += build_toc()
     story += build_body()
-
     doc.build(story, onFirstPage=on_first_page, onLaterPages=on_later_pages)
     print(f'PDF gerado: {OUT}')
 

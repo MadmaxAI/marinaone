@@ -1748,6 +1748,7 @@ const server = http.createServer(async (req, res) => {
       const inject = `<script>
 window.BASE_DOMAIN="${(process.env.BASE_DOMAIN||'').replace(/"/g,'')}";
 window.APP_ENV="${process.env.NODE_ENV||'development'}";
+window.APP_VERSION="${APP_VERSION}";
 </script>`;
       html = html.replace('</head>', inject + '</head>');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

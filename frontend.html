@@ -274,6 +274,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <div style="font-size:48px;margin-bottom:8px" id="login-icon">⚓</div>
       <h1>Marina One</h1>
       <p id="login-subtitle">Sistema de Gestão de Marina</p>
+      <p id="login-version" style="font-size:11px;color:var(--text3);margin-top:4px;letter-spacing:.3px"></p>
     </div>
     <div id="login-error" class="login-error"></div>
     <div class="form-group"><label>E-mail</label><input id="login-email" type="email" value="admin@marina.com"></div>
@@ -425,9 +426,27 @@ let pageCharts = {};
     if (prevSlug && prevSlug !== newSlug) localStorage.removeItem('mo_token');
     window.TENANT_SLUG = newSlug;
     localStorage.setItem('mo_tenant', newSlug);
+  } else if (baseDomain === 'localhost') {
+    // No ambiente local o servidor resolve o tenant via SINGLE_TENANT_SLUG.
+    // Não usar localStorage para não contaminar com slugs de sessões anteriores.
+    window.TENANT_SLUG = '';
   } else {
     window.TENANT_SLUG = localStorage.getItem('mo_tenant') || '';
   }
+
+  // Se estamos no root domain (produção) sem tenant: redireciona para demo.
+  // Ignora localhost para não quebrar o ambiente local de desenvolvimento.
+  const isRootDomain = baseDomain && baseDomain !== 'localhost' && (window.location.hostname.toLowerCase() === baseDomain);
+  if (isRootDomain && !window.TENANT_SLUG) {
+    window.location.replace('https://demo.' + baseDomain);
+  }
+})();
+
+// ── VERSÃO NO LOGIN ───────────────────────────────────
+(function setLoginVersion() {
+  const v = window.APP_VERSION;
+  const el = document.getElementById('login-version');
+  if (el && v) el.textContent = 'v' + v;
 })();
 
 // ── AUTH ──────────────────────────────────────────────
@@ -535,10 +554,16 @@ async function tryAutoLogin() {
 }
 
 async function _loadVersionBadge() {
+  // Mostra versão imediatamente com o valor injetado pelo servidor
+  const el = document.getElementById('topbar-version');
+  if (el && window.APP_VERSION) {
+    el.textContent = `v${window.APP_VERSION}`;
+    el.style.display = '';
+  }
+  // Enriquece com dados detalhados via API
   try {
     const v = await api('GET', '/version');
     if (!v || !v.version) return;
-    const el = document.getElementById('topbar-version');
     if (!el) return;
     el.textContent = `v${v.version}`;
     el.title = [
