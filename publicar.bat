@@ -15,7 +15,7 @@ if "%TIPO%"=="" set "TIPO=patch"
 
 echo.
 echo  ==================================================
-echo   Marinah One - Publicacao
+echo    Marina One - Publicacao
 echo  ==================================================
 
 REM Verificar se ha alteracoes
@@ -27,7 +27,6 @@ REM Checar arquivos nao rastreados
 for /f %%i in ('git status --porcelain') do goto :tem_alteracoes
 
 echo  [AVISO] Nenhuma alteracao detectada.
-echo  Adicione suas mudancas com: git add .
 goto :fim
 
 :tem_alteracoes
@@ -62,12 +61,10 @@ node -e "const fs=require('fs');const pkg=JSON.parse(fs.readFileSync('package.js
 echo  package.json atualizado
 
 REM Atualizar CHANGELOG
-for /f "tokens=1-3 delims=/" %%a in ("%date%") do set "DATA=%%c-%%a-%%b"
-REM Tenta obter data no formato ISO
 for /f %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "DATA=%%d"
 
 if exist CHANGELOG.md (
-  powershell -NoProfile -Command "$c=Get-Content 'CHANGELOG.md' -Raw; $entry=\"## [%NOVA_VERSAO%] — %DATA%`n- %MENSAGEM%`n\"; $lines=$c -split \"`n\"; $first=$lines[0]; $rest=($lines | Select-Object -Skip 1) -join \"`n\"; Set-Content 'CHANGELOG.md' ($first + \"`n`n\" + $entry + $rest)"
+  powershell -NoProfile -Command "$c=Get-Content 'CHANGELOG.md' -Raw; $entry='## [%NOVA_VERSAO%] -- %DATA%' + [char]10 + '- %MENSAGEM%' + [char]10; $lines=$c -split [char]10; $first=$lines[0]; $rest=($lines | Select-Object -Skip 1) -join [char]10; Set-Content 'CHANGELOG.md' ($first + [char]10 + [char]10 + $entry + $rest) -Encoding utf8"
 ) else (
   echo # Changelog - Marina One > CHANGELOG.md
   echo. >> CHANGELOG.md
@@ -85,8 +82,9 @@ git push origin "v%NOVA_VERSAO%"
 
 echo.
 echo  ==================================================
-echo   Publicado! v%NOVA_VERSAO% - GitHub - Railway
-echo   https://marina-one-app-production.up.railway.app
+echo    Publicado! v%NOVA_VERSAO% enviado ao GitHub
+echo    Railway fara o deploy automaticamente.
+echo    https://marina-one-app.up.railway.app
 echo  ==================================================
 
 :fim

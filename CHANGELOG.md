@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.0.5] -- 2026-04-30
+- teste de publicacao
+
 ## [2.0.4] — 2026-04-30
 - versao nas telas de login e sistema + fix login local com tenant em cache
 
@@ -108,4 +111,5 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
