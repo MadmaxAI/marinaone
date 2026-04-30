@@ -353,6 +353,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:14px">
+      <span id="sa-version-badge" style="font-size:10px;color:var(--text3);letter-spacing:.3px;cursor:default"></span>
       <span id="sa-user-name" style="font-size:13px;color:var(--text3)"></span>
       <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 10px;border-radius:10px;background:linear-gradient(135deg,#7c3aed,#4c1d95);color:#fff">SUPERADMIN</span>
       <button class="btn btn-ghost btn-sm" onclick="saLogout()">Sair</button>
@@ -5590,6 +5591,9 @@ function saShowPanel() {
   const sa = document.getElementById('sa-app');
   sa.style.display = 'flex';
   document.getElementById('sa-user-name').textContent = window.saUser?.name || window.saUser?.email || '';
+  // Versão no header do super-admin
+  const vb = document.getElementById('sa-version-badge');
+  if (vb && window.APP_VERSION) vb.textContent = 'v' + window.APP_VERSION;
   saLoadTenants();
 }
 
