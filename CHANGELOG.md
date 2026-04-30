@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.0.11] -- 2026-04-30
+- CLAUDE.md: regra crítica de consistência banco+código a cada publicação
+
 ## [2.0.10] -- 2026-04-30
 - Fix: rodar migrations em todos os tenants no boot (corrige coluna photo em prod)
 
@@ -126,6 +129,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
