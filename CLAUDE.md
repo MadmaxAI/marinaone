@@ -1,0 +1,56 @@
+# Marina One — Guia para o Claude Code
+
+## Regra principal — NUNCA publicar em produção sem aprovação
+
+Após qualquer alteração de código, o Claude deve:
+1. Aplicar as mudanças nos arquivos
+2. Rodar `testar.bat` para atualizar o ambiente local
+3. Informar ao usuário: **"Alteração feita. Teste em http://localhost:3000 e me diga 'aprovado' para publicar."**
+4. **AGUARDAR** o usuário dizer "aprovado" (ou variações: "ok", "pode publicar", "publish", "deploy")
+5. Somente então rodar `publicar.bat "descrição"`
+
+## NUNCA fazer isso sozinho
+- Nunca rodar `publicar.bat` sem aprovação explícita do usuário
+- Nunca fazer `git push` diretamente
+- Nunca fazer `railway up` sem aprovação
+
+## Fluxo obrigatório
+
+```
+Claude altera código
+        ↓
+Claude roda: testar.bat
+        ↓
+Claude diz: "Teste em localhost:3000 e diga 'aprovado'"
+        ↓
+Usuário testa e diz: "aprovado"
+        ↓
+Claude roda: publicar.bat "descrição da alteração"
+        ↓
+Deploy automático no Railway ✅
+```
+
+## Comandos disponíveis
+
+| Comando | Quando usar |
+|---------|------------|
+| `testar.bat` | Após cada alteração — aplica no Docker local |
+| `publicar.bat "msg"` | Somente após aprovação do usuário |
+| `publicar.bat "msg" minor` | Nova funcionalidade aprovada |
+| `publicar.bat "msg" major` | Mudança grande aprovada |
+
+## Ambientes
+
+| Ambiente | URL | Banco |
+|----------|-----|-------|
+| Local (Docker) | http://localhost:3000 | PostgreSQL local (marinaone_db) |
+| Produção (Railway) | https://marina-one-app.up.railway.app | PostgreSQL Railway |
+
+## Tenant local
+O ambiente local usa `SINGLE_TENANT_SLUG=demo` — acesse direto sem `?tenant=`.
+
+## Stack
+- Node.js 20 + PostgreSQL (postgres.js)
+- Docker Compose para dev local
+- Railway + GitHub Actions para produção
+- Dockerfile como base de build
