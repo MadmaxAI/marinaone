@@ -461,6 +461,31 @@ addRoute('POST', '/api/superadmin/tenants/:slug/reset-admin-password', async (re
   }
 });
 
+addRoute('PUT', '/api/superadmin/tenants/:slug/change-admin-email', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const slug = ctx.params.slug;
+  const { old_email, new_email } = ctx.body || {};
+  if (!new_email || !new_email.includes('@'))
+    return sendJson(res, { error: 'E-mail inválido' }, 400);
+  try {
+    const { dbRun: tRun, dbGet: tGet } = createDbHelpers(slug);
+    // Encontra o admin pelo e-mail antigo ou pelo primeiro admin do tenant
+    const user = old_email
+      ? await tGet('SELECT id FROM users WHERE email=? AND role=?', [old_email.toLowerCase(), 'admin'])
+      : await tGet("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1", []);
+    if (!user) return sendJson(res, { error: 'Admin não encontrado' }, 404);
+    // Verifica se o novo e-mail já está em uso
+    const conflict = await tGet('SELECT id FROM users WHERE email=? AND id!=?', [new_email.toLowerCase(), user.id]);
+    if (conflict) return sendJson(res, { error: 'Esse e-mail já está em uso por outro usuário' }, 409);
+    await tRun('UPDATE users SET email=? WHERE id=?', [new_email.toLowerCase(), user.id]);
+    // Atualiza também no registro saas
+    await saasRun('UPDATE saas.tenants SET admin_email=$1 WHERE slug=$2', [new_email.toLowerCase(), slug]);
+    sendJson(res, { ok: true });
+  } catch (e) {
+    sendJson(res, { error: e.message }, 500);
+  }
+});
+
 addRoute('PUT', '/api/superadmin/tenants/:slug/logo', async (req, res, ctx) => {
   if (!requireSuperAdmin(ctx, res)) return;
   const { logo_base64 = '' } = ctx.body || {};

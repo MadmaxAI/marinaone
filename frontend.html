@@ -6809,9 +6809,15 @@ async function saViewTenant(idx) {
     const password = creds.admin_password || '';
     const emailHtml = email
       ? `<span style="font-family:monospace;font-weight:600;color:var(--text)">${email}</span>
-         <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Copiar e-mail"
-                 onclick="navigator.clipboard.writeText('${email}');toast('E-mail copiado!')">📋</button>`
-      : `<span style="color:var(--text3);font-size:12px">Não informado</span><span></span>`;
+         <div style="display:flex;gap:4px">
+           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Copiar e-mail"
+                   onclick="navigator.clipboard.writeText('${email}');toast('E-mail copiado!')">📋</button>
+           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;color:var(--primary)" title="Alterar e-mail do admin"
+                   onclick="saChangeAdminEmail('${t.slug}','${email}')">✏️ Alterar</button>
+         </div>`
+      : `<span style="color:var(--text3);font-size:12px">Não informado</span>
+         <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;color:var(--primary)" title="Definir e-mail do admin"
+                 onclick="saChangeAdminEmail('${t.slug}','')">✏️ Definir</button>`;
     const pwdHtml = password
       ? `<span id="sv-pwd-text" style="font-family:monospace;font-weight:600;color:var(--text);letter-spacing:2px">••••••••</span>
          <div style="display:flex;gap:4px">
@@ -7099,6 +7105,23 @@ async function saResetAdminPassword(slug, email) {
     toast(`✅ Senha do admin de "${slug}" redefinida com sucesso!`);
   } else {
     toast('❌ Erro ao redefinir senha: ' + (r?.error || 'desconhecido'));
+  }
+}
+
+async function saChangeAdminEmail(slug, currentEmail) {
+  const newEmail = prompt(`Alterar e-mail do administrador de "${slug}".\n\nE-mail atual: ${currentEmail || '(não definido)'}\n\nDigite o novo e-mail:`);
+  if (!newEmail) return;
+  if (!newEmail.includes('@') || !newEmail.includes('.')) { toast('E-mail inválido.', 'error'); return; }
+  if (newEmail.toLowerCase() === currentEmail.toLowerCase()) { toast('O e-mail informado é igual ao atual.'); return; }
+  const r = await saApi('PUT', `/superadmin/tenants/${slug}/change-admin-email`, { old_email: currentEmail || null, new_email: newEmail });
+  if (r && r.ok) {
+    toast(`✅ E-mail do admin de "${slug}" alterado para ${newEmail}!`);
+    // Fecha e reabre o modal para refletir o novo e-mail
+    const idx = (window._saTenants || []).findIndex(t => t.slug === slug);
+    saCloseModal();
+    if (idx >= 0) setTimeout(() => saViewTenant(idx), 300);
+  } else {
+    toast('❌ Erro ao alterar e-mail: ' + (r?.error || 'desconhecido'), 'error');
   }
 }
 
