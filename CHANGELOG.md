@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.0.13] -- 2026-05-01
+- Ver Detalhes embarcação: dias disponíveis, nº marinheiros, fonte normalizada
+
 ## [2.0.12] -- 2026-04-30
 - Ver Detalhes de embarcação: layout completo com foto, locação e dados técnicos
 
@@ -132,6 +135,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
