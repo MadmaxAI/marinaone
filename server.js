@@ -984,9 +984,14 @@ addRoute('GET', '/api/contracts', async (req, res, ctx) => {
   const { status = '' } = ctx.qs;
   const { dbAll: tAll } = ctx.db;
   let sql = `SELECT ct.*, c.name as client_name, c.tier as client_tier,
-    v.name as vessel_name, s.number as spot_number
+    v.name as vessel_name,
+    COALESCE(s.number, ds.number) as spot_number,
+    COALESCE(s.type,   ds.type)   as spot_type
     FROM contracts ct JOIN clients c ON ct.client_id=c.id
-    JOIN vessels v ON ct.vessel_id=v.id LEFT JOIN spots s ON ct.spot_id=s.id WHERE 1=1`;
+    JOIN vessels v ON ct.vessel_id=v.id
+    LEFT JOIN spots s  ON s.id = ct.spot_id
+    LEFT JOIN spots ds ON ds.vessel_id = ct.vessel_id
+    WHERE 1=1`;
   const a = [];
   const scope = clientScope(ctx.user);
   if (scope !== null) { sql += ' AND ct.client_id=?'; a.push(scope); }
@@ -997,9 +1002,14 @@ addRoute('GET', '/api/contracts', async (req, res, ctx) => {
 addRoute('GET', '/api/contracts/:id', async (req, res, ctx) => {
   const { dbGet: tGet } = ctx.db;
   const ct = await tGet(`SELECT ct.*, c.name as client_name, c.tier as client_tier,
-    v.name as vessel_name, s.number as spot_number
+    v.name as vessel_name,
+    COALESCE(s.number, ds.number) as spot_number,
+    COALESCE(s.type,   ds.type)   as spot_type
     FROM contracts ct JOIN clients c ON ct.client_id=c.id
-    JOIN vessels v ON ct.vessel_id=v.id LEFT JOIN spots s ON ct.spot_id=s.id WHERE ct.id=?`, [ctx.params.id]);
+    JOIN vessels v ON ct.vessel_id=v.id
+    LEFT JOIN spots s  ON s.id = ct.spot_id
+    LEFT JOIN spots ds ON ds.vessel_id = ct.vessel_id
+    WHERE ct.id=?`, [ctx.params.id]);
   if (!ct) return sendJson(res, { error: 'Não encontrado' }, 404);
   sendJson(res, ct);
 });
@@ -1399,9 +1409,17 @@ addRoute('POST', '/api/store/orders', async (req, res, ctx) => {
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
   const discount = b.discount || 0;
   const total    = subtotal - discount;
-  const forcedStatus = b.payment_method === 'ficha' ? 'pending_payment' : (b.status || 'open');
-  const r = await tRun('INSERT INTO store_orders(vessel_id,client_id,items,subtotal,discount,total,status,payment_method,notes) VALUES(?,?,?,?,?,?,?,?,?)',
-                       [b.vessel_id||null, b.client_id||null, JSON.stringify(items), subtotal, discount, total, forcedStatus, b.payment_method||null, b.notes||null]);
+  const isFiado  = b.payment_method === 'fiado';
+  const isFicha  = b.payment_method === 'ficha';
+  // fiado e ficha → paid+preparando direto (dívida rastreada pela aba/paid_date)
+  const isOnAccount        = isFiado || isFicha;
+  const forcedStatus       = isOnAccount ? 'paid' : (b.status || 'open');
+  const forcedDelivery     = isOnAccount ? 'preparando' : (b.delivery_status || null);
+  const forcedPaidDate     = isOnAccount ? null : (forcedStatus === 'paid' ? todayStr() : null);
+  const r = await tRun('INSERT INTO store_orders(vessel_id,client_id,items,subtotal,discount,total,status,payment_method,notes,tab_id,delivery_status,paid_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                       [b.vessel_id||null, b.client_id||null, JSON.stringify(items), subtotal, discount, total,
+                        forcedStatus, b.payment_method||null, b.notes||null, b.tab_id||null,
+                        forcedDelivery, forcedPaidDate]);
   for (const item of items) await tRun('UPDATE store_items SET stock=GREATEST(0,stock-?) WHERE id=?', [item.qty, item.item_id]);
   await checkStock(tAll, tAll, tGet, tRun);
   sendJson(res, { id: r.lastInsertRowid, total }, 201);
@@ -1438,12 +1456,71 @@ addRoute('PUT', '/api/store/orders/:id/confirm-payment', async (req, res, ctx) =
   sendJson(res, { ok: true });
 });
 
+// ── Contas abertas (fiado) ────────────────────────────────────────────
+addRoute('GET', '/api/store/tabs', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { dbAll: tAll } = ctx.db;
+  const tabs = await tAll(`
+    SELECT t.id, t.client_id, t.status, t.opened_at, t.notes,
+           c.name as client_name, c.phone as client_phone, c.tier as client_tier,
+           COALESCE(SUM(o.total),0) as total,
+           COUNT(o.id) as order_count
+    FROM client_tabs t
+    JOIN clients c ON c.id = t.client_id
+    LEFT JOIN store_orders o ON o.tab_id = t.id AND o.paid_date IS NULL
+    WHERE t.status = 'open'
+    GROUP BY t.id, t.client_id, t.status, t.opened_at, t.notes, c.name, c.phone, c.tier
+    ORDER BY t.opened_at DESC`);
+  sendJson(res, tabs);
+});
+
+addRoute('POST', '/api/store/tabs', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const { client_id, notes } = ctx.body;
+  if (!client_id) return sendJson(res, { error: 'client_id obrigatório' }, 400);
+  const existing = await tGet(`SELECT id FROM client_tabs WHERE client_id=? AND status='open'`, [client_id]);
+  if (existing) return sendJson(res, { error: 'Cliente já possui conta aberta', tab_id: existing.id }, 409);
+  const r = await tRun(`INSERT INTO client_tabs(client_id, notes) VALUES(?,?)`, [client_id, notes||'']);
+  sendJson(res, { id: r.lastInsertRowid }, 201);
+});
+
+addRoute('GET', '/api/store/tabs/check/:client_id', async (req, res, ctx) => {
+  const { dbGet: tGet } = ctx.db;
+  const tab = await tGet(`SELECT id, opened_at FROM client_tabs WHERE client_id=? AND status='open'`, [ctx.params.client_id]);
+  sendJson(res, tab || null);
+});
+
+addRoute('PUT', '/api/store/tabs/:id/close', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { dbRun: tRun, dbAll: tAll } = ctx.db;
+  const { payment_method } = ctx.body;
+  if (!payment_method) return sendJson(res, { error: 'payment_method obrigatório' }, 400);
+  await tRun(`UPDATE store_orders SET paid_date=CURRENT_DATE, payment_method=COALESCE(?,payment_method)
+              WHERE tab_id=? AND paid_date IS NULL`, [payment_method, ctx.params.id]);
+  await tRun(`UPDATE client_tabs SET status='closed', closed_at=NOW() WHERE id=?`, [ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+addRoute('GET', '/api/store/tabs/:id/orders', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { dbAll: tAll } = ctx.db;
+  const orders = await tAll(`SELECT o.*, v.name as vessel_name FROM store_orders o
+    LEFT JOIN vessels v ON o.vessel_id=v.id
+    WHERE o.tab_id=? AND o.paid_date IS NULL ORDER BY o.created_at ASC`, [ctx.params.id]);
+  for (const r of orders) { try { r.items = JSON.parse(r.items); } catch {} }
+  sendJson(res, orders);
+});
+
 addRoute('GET', '/api/store/client-accounts', async (req, res, ctx) => {
   if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
   const { dbAll: tAll } = ctx.db;
+
+  // Pendentes avulsos (PIX WhatsApp, etc.) — status=pending_payment, excluindo fiado (já tem aba)
   const rows = await tAll(`SELECT o.*, c.name as client_name, c.phone as client_phone, c.tier as client_tier, v.name as vessel_name
     FROM store_orders o LEFT JOIN clients c ON o.client_id=c.id LEFT JOIN vessels v ON o.vessel_id=v.id
-    WHERE o.status='pending_payment' ORDER BY o.created_at ASC`);
+    WHERE o.status='pending_payment' AND (o.payment_method IS NULL OR o.payment_method NOT IN ('fiado'))
+    ORDER BY o.created_at ASC`);
   for (const r of rows) { try { r.items = JSON.parse(r.items); } catch {} }
   const map = {};
   for (const o of rows) {
@@ -1452,9 +1529,37 @@ addRoute('GET', '/api/store/client-accounts', async (req, res, ctx) => {
     map[key].orders.push(o);
     map[key].total += Number(o.total);
   }
-  const accounts   = Object.values(map).sort((a, b) => b.total - a.total);
-  const grand_total = accounts.reduce((s, a) => s + a.total, 0);
-  sendJson(res, { accounts, grand_total });
+  const accounts = Object.values(map).sort((a, b) => b.total - a.total);
+
+  // Contas ficha — pedidos paid, payment_method='ficha', paid_date=null (dívida ainda não quitada)
+  const fichaRows = await tAll(`SELECT o.*, c.name as client_name, c.phone as client_phone, c.tier as client_tier, v.name as vessel_name
+    FROM store_orders o LEFT JOIN clients c ON o.client_id=c.id LEFT JOIN vessels v ON o.vessel_id=v.id
+    WHERE o.payment_method='ficha' AND o.paid_date IS NULL AND o.status='paid'
+    ORDER BY o.created_at ASC`);
+  for (const r of fichaRows) { try { r.items = JSON.parse(r.items); } catch {} }
+  const fichaMap = {};
+  for (const o of fichaRows) {
+    const key = o.client_id || 0;
+    if (!fichaMap[key]) fichaMap[key] = { client_id: o.client_id, client_name: o.client_name||'Balcão', client_phone: o.client_phone, client_tier: o.client_tier, orders: [], total: 0 };
+    fichaMap[key].orders.push(o);
+    fichaMap[key].total += Number(o.total);
+  }
+  const ficha_accounts = Object.values(fichaMap).sort((a, b) => b.total - a.total);
+
+  const grand_total = accounts.reduce((s, a) => s + a.total, 0)
+                    + ficha_accounts.reduce((s, a) => s + a.total, 0);
+  sendJson(res, { accounts, ficha_accounts, grand_total });
+});
+
+addRoute('PUT', '/api/store/ficha-accounts/:client_id/settle', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { payment_method } = ctx.body || {};
+  await ctx.db.dbRun(
+    `UPDATE store_orders SET paid_date=CURRENT_DATE, payment_method=COALESCE(?,payment_method)
+     WHERE client_id=? AND payment_method='ficha' AND paid_date IS NULL AND status='paid'`,
+    [payment_method || null, ctx.params.client_id]
+  );
+  sendJson(res, { ok: true });
 });
 
 addRoute('GET', '/api/store/stats', async (req, res, ctx) => {
@@ -1559,8 +1664,8 @@ addRoute('POST', '/api/maintenance', async (req, res, ctx) => {
   const b      = ctx.body;
   const { dbRun: tRun } = ctx.db;
   const os_num = `OS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*900)+100}`;
-  const r = await tRun('INSERT INTO maintenance_os(vessel_id,os_number,type,description,status,priority,scheduled_date,estimated_hours,cost,technician,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                       [b.vessel_id||null, os_num, b.type, b.description, b.status||'open', b.priority||'normal', b.scheduled_date||null, b.estimated_hours||null, b.cost||0, b.technician||null, b.notes||null]);
+  const r = await tRun('INSERT INTO maintenance_os(vessel_id,os_number,type,description,status,priority,scheduled_date,estimated_hours,cost,technician,technician_level,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                       [b.vessel_id||null, os_num, b.type, b.description, b.status||'open', b.priority||'normal', b.scheduled_date||null, b.estimated_hours||null, b.cost||0, b.technician||null, b.technician_level||null, b.notes||null]);
   if (['urgent','high'].includes(b.priority))
     await addAlert('manutencao', `OS urgente: ${b.description.slice(0,50)}`, 'warning', null, null, tRun);
   sendJson(res, { id: r.lastInsertRowid, os_number: os_num }, 201);
@@ -1572,10 +1677,13 @@ addRoute('PUT', '/api/maintenance/:id', async (req, res, ctx) => {
   const old = await tGet('SELECT * FROM maintenance_os WHERE id=?', [ctx.params.id]);
   const ns  = b.status || old.status;
   const completed_date = (ns === 'completed' && !old.completed_date) ? todayStr() : (b.completed_date || old.completed_date || null);
-  await tRun('UPDATE maintenance_os SET status=?,priority=?,scheduled_date=?,completed_date=?,actual_hours=?,cost=?,technician=?,notes=? WHERE id=?',
-             [ns, b.priority||old.priority, b.scheduled_date||old.scheduled_date||null, completed_date,
+  await tRun('UPDATE maintenance_os SET vessel_id=?,type=?,description=?,status=?,priority=?,scheduled_date=?,completed_date=?,actual_hours=?,cost=?,technician=?,technician_level=?,notes=? WHERE id=?',
+             [b.vessel_id!==undefined ? (b.vessel_id||null) : old.vessel_id,
+              b.type||old.type, b.description||old.description, ns,
+              b.priority||old.priority, b.scheduled_date||old.scheduled_date||null, completed_date,
               b.actual_hours||old.actual_hours||null, b.cost!==undefined ? b.cost : old.cost,
-              b.technician||old.technician||null, b.notes||old.notes||null, ctx.params.id]);
+              b.technician||old.technician||null, b.technician_level||old.technician_level||null,
+              b.notes!==undefined ? b.notes : old.notes, ctx.params.id]);
   sendJson(res, { ok: true });
 });
 

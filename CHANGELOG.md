@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.1.0] -- 2026-05-01
+- Financeiro: badges A Vencer/Pendente/Vencido e filtros coerentes; Loja/PDV: ficha e fiado vao direto para preparo sem etapa de aguardando, contas por cliente com quitacao, metodo de pgto pre-selecionado no modal, label Conta no lugar de ficha, filtro de embarcacoes por cliente; Manutencao: correcao do editar OS, nivel do profissional com calculo automatico de valor total, configuracao de custo por nivel em Configuracoes; Migrations 005 e 006
+
 ## [2.0.13] -- 2026-05-01
 - Ver Detalhes embarcação: dias disponíveis, nº marinheiros, fonte normalizada
 
@@ -135,6 +138,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

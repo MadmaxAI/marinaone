@@ -149,6 +149,9 @@ async function seedTenant(tenantSlug, opts = {}) {
     ['checklist_descida', '["Verificar condições do cais e amarras","Conferir equipamentos de içamento","Checar comunicação com a equipe","Confirmar profundidade e maré","Verificar documentação da embarcação"]'],
     ['checklist_subida', '["Verificar condições do cais e amarras","Confirmar disponibilidade de vaga em terra","Checar equipamentos de içamento","Avisar cliente sobre retirada","Inspecionar casco antes de içar"]'],
     ['checklist_atracacao', '["Verificar disponibilidade da vaga","Conferir amarras e defensas","Checar condições climáticas","Confirmar calado da embarcação","Orientar tripulação sobre manobra"]'],
+    ['maint_cost_junior', '80'],
+    ['maint_cost_pleno',  '130'],
+    ['maint_cost_senior', '200'],
   ];
 
   for (const [k, v] of defSettings) {
