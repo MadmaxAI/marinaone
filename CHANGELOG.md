@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.2.2] -- 2026-05-04
+- fix corrige 3h ao iniciar operacao na fila encode WhatsApp banner avisos PDV recibo
+
 ## [2.2.0] -- 2026-05-04
 - Avisos de reordenacao de fila: justificativa publica obrigatoria pre-preenchida com template configuravel; banner no calendario para clientes afetados; fix calendario travado; hardening de migrations com 3 camadas de protecao e alertas criticos no boot
 
@@ -144,6 +147,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

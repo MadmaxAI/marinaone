@@ -866,6 +866,10 @@ function refreshPage() { nav(currentPage); }
 // ── HELPERS ──────────────────────────────────────────
 const fmt = n => n == null ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 const fmtNum = n => n == null ? '—' : new Intl.NumberFormat('pt-BR').format(n);
+// Formata moeda sem espaço não-quebrável (para mensagens de texto puro, ex: WhatsApp)
+const fmtPlain = n => n == null ? '—' : 'R$ ' + new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+// Escapa HTML para evitar XSS e encoding indevido ao renderizar dados do usuário
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 // Local date string "YYYY-MM-DD" using machine timezone (never UTC)
 const todayLocal = () => { const d=new Date(),p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
 // Parse "YYYY-MM-DD HH:MM:SS" stored as local time safely (avoids UTC misinterpretation)
@@ -1578,25 +1582,17 @@ async function renderQueueCalendar() {
   try { noticesRaw = await api('GET','/queue/notices') || []; } catch(_) {}
   if (!Array.isArray(noticesRaw)) noticesRaw = [];
 
-  // Render notice banners (filter by role for clients)
-  const activeNotices = noticesRaw.filter(n => {
-    if (!isCliente()) return true; // admin/operator see all
-    // client sees notice only if they had an op in queue before the reorder
-    const allOps = [...(cal.active||[]), ...(cal.done||[])];
-    return allOps.some(op => op.id <= n.max_op_id);
-  });
-  if (activeNotices.length) {
-    const bannerHtml = activeNotices.map(n => `
-      <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1.5px solid #f59e0b;border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start">
-        <div style="font-size:22px;line-height:1">📢</div>
-        <div>
-          <div style="font-weight:700;color:#92400e;font-size:13px;margin-bottom:4px">Aviso — Alteração de Fila</div>
-          <div style="color:#78350f;font-size:13px;line-height:1.5">${n.message}</div>
-          <div style="color:#a16207;font-size:11px;margin-top:6px">Informado por ${n.created_by_name||'Sistema'} • ${new Date(n.created_at).toLocaleString('pt-BR')}</div>
-        </div>
-      </div>`).join('');
-    container.insertAdjacentHTML('afterbegin', bannerHtml);
-  }
+  // Monta HTML dos avisos para incluir no innerHTML final (não usar insertAdjacentHTML pois
+  // o container.innerHTML abaixo sobrescreveria os banners)
+  const noticesBannerHtml = noticesRaw.length ? noticesRaw.map(n => `
+    <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1.5px solid #f59e0b;border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start">
+      <div style="font-size:22px;line-height:1">📢</div>
+      <div>
+        <div style="font-weight:700;color:#92400e;font-size:13px;margin-bottom:4px">Aviso — Alteração de Fila</div>
+        <div style="color:#78350f;font-size:13px;line-height:1.5">${esc(n.message)}</div>
+        <div style="color:#a16207;font-size:11px;margin-top:6px">Informado por ${esc(n.created_by_name||'Sistema')} • ${new Date(n.created_at).toLocaleString('pt-BR')}</div>
+      </div>
+    </div>`).join('') : '';
 
   const opColors = { descida:'#3b82f6', subida:'#f59e0b', atracacao:'#8b5cf6', completed_descida:'#93c5fd', completed_subida:'#fcd34d', completed_atracacao:'#c4b5fd', cancelled:'#d1d5db' };
   const opLabel  = { descida:'⬇ Descida', subida:'⬆ Subida', atracacao:'⚓ Atracação' };
@@ -1619,7 +1615,7 @@ async function renderQueueCalendar() {
   allOps.sort((a,b) => a._start - b._start);
 
   if (!allOps.length) {
-    container.innerHTML = `<div class="card" style="text-align:center;padding:40px">
+    container.innerHTML = noticesBannerHtml + `<div class="card" style="text-align:center;padding:40px">
       <div style="font-size:48px;margin-bottom:12px">📅</div>
       <div style="font-size:16px;color:var(--text2);font-weight:600">${todayStr}</div>
       <div style="color:var(--text3);margin-top:8px">Nenhuma operação agendada para hoje</div>
@@ -1728,7 +1724,7 @@ async function renderQueueCalendar() {
     </tr>`;
   }).join('');
 
-  container.innerHTML = `
+  container.innerHTML = noticesBannerHtml + `
   <div class="card mb-2" style="padding:16px">
     <div class="flex justify-between items-center mb-3">
       <div>
@@ -4214,7 +4210,7 @@ async function sendWhatsApp() {
   }
   const marinaName = sett?.marina_name || 'Marina One';
   const pixKey     = sett?.bank_pix_key || pixPayload;
-  const itemsList  = cart.map(i=>`• ${i.name} x${i.qty} = ${fmt(i.price*i.qty)}`).join('\n');
+  const itemsList  = cart.map(i=>`• ${i.name} x${i.qty} = ${fmtPlain(i.price*i.qty)}`).join('\n');
   const cl  = client_id ? (clients||[]).find(c=>String(c.id)===String(client_id)) : null;
   const ves = vessel_id ? (await api('GET','/vessels')||[]).find(v=>String(v.id)===String(vessel_id)) : null;
   const template = sett?.store_whatsapp_template || '{marina} — Pedido #{id}\n\n{itens}\n\nTotal: {total}\n\nPIX: {pix_key}\n{qrcode_link}';
@@ -4223,7 +4219,7 @@ async function sendWhatsApp() {
     .replace('{marina}',    marinaName)
     .replace('{embarcacao}',ves?.name||'—')
     .replace('{itens}',     itemsList)
-    .replace('{total}',     fmt(total))
+    .replace('{total}',     fmtPlain(total))
     .replace('{pix_key}',   pixKey)
     .replace('{qrcode_link}',qrImgUrl||'')
     .replace('{id}',        r.id);
@@ -4247,7 +4243,61 @@ async function confirmSale() {
     vessel_id:  vessel_id  ? parseInt(vessel_id)  : null,
     payment_method: payment, status: 'paid', delivery_status: 'preparando'
   });
-  if (r && r.id) { toast(`✅ Venda finalizada! Total: ${fmt(r.total)}`); cart=[]; pages.store(); }
+  if (!r || !r.id) { toast('Erro ao finalizar venda','error'); return; }
+
+  // Verifica se cliente tem telefone para oferecer WhatsApp
+  const [clients, sett] = await Promise.all([api('GET','/clients'), api('GET','/settings')]);
+  const cl  = client_id ? (clients||[]).find(c=>String(c.id)===String(client_id)) : null;
+  const phone = cl?.phone?.replace(/\D/g,'') || '';
+
+  if (phone && phone.length >= 10) {
+    const ves = vessel_id ? (await api('GET','/vessels')||[]).find(v=>String(v.id)===String(vessel_id)) : null;
+    window._saleReceipt = { orderId: r.id, items: [...cart], total: r.total, cl, ves, sett };
+    cart = [];
+    modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
+      <div class="modal-title">✅ Venda Finalizada — Pedido #${r.id}</div>
+      <div style="background:var(--success-bg,rgba(16,185,129,.1));border:1px solid var(--success);border-radius:8px;padding:12px 16px;margin-bottom:16px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--success)">${fmtPlain(r.total)}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">Pagamento registrado com sucesso</div>
+      </div>
+      <p style="margin:0 0 16px;font-size:14px;color:var(--text2)">
+        Deseja enviar o comprovante para <strong>${esc(cl.name)}</strong> via WhatsApp?
+      </p>
+      <div class="form-actions" style="justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeModalForce();pages.store()">Fechar</button>
+        <button class="btn btn-success" onclick="sendWhatsAppReceipt()">📲 Enviar Comprovante</button>
+      </div>
+    </div>`);
+  } else {
+    toast(`✅ Venda finalizada! Total: ${fmtPlain(r.total)}`);
+    cart = [];
+    pages.store();
+  }
+}
+
+function sendWhatsAppReceipt() {
+  const { orderId, items, total, cl, ves, sett } = window._saleReceipt || {};
+  if (!cl?.phone) return;
+  const phone = cl.phone.replace(/\D/g,'');
+  const marinaName = sett?.marina_name || 'Marina One';
+  const itemsList  = items.map(i=>`• ${i.name} x${i.qty} = ${fmtPlain(i.price*i.qty)}`).join('\n');
+  const lines = [
+    `✅ Comprovante de Compra — ${marinaName}`,
+    ``,
+    `Pedido #${orderId}`,
+    cl?.name   ? `Cliente: ${cl.name}` : null,
+    ves?.name  ? `Embarcação: ${ves.name}` : null,
+    ``,
+    `Itens:`,
+    itemsList,
+    ``,
+    `Total: ${fmtPlain(total)}`,
+    ``,
+    `Obrigado pela preferência! 🛥️`,
+  ].filter(l => l !== null).join('\n');
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(lines)}`, '_blank');
+  closeModalForce();
+  pages.store();
 }
 
 // ── Confirmar Pagamento PIX com Comprovante ───────────────────────────

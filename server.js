@@ -73,15 +73,24 @@ function getQS(url) {
   return o;
 }
 
-// ── Date helpers ─────────────────────────────────────────────────────
+// ── Date helpers (BRT = UTC-3, Brasil sem horário de verão desde 2019) ──
 const _pad = n => String(n).padStart(2, '0');
-const _localDate = (d = new Date()) => `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}`;
-const _localDateTime = (d = new Date()) => `${_localDate(d)} ${_pad(d.getHours())}:${_pad(d.getMinutes())}:${_pad(d.getSeconds())}`;
+const BRT_OFFSET_MS = -3 * 60 * 60 * 1000; // UTC-3 fixo
+const _brt = (d = new Date()) => new Date(d.getTime() + BRT_OFFSET_MS);
+
+const _localDate = (d = new Date()) => {
+  const b = _brt(d);
+  return `${b.getUTCFullYear()}-${_pad(b.getUTCMonth()+1)}-${_pad(b.getUTCDate())}`;
+};
+const _localDateTime = (d = new Date()) => {
+  const b = _brt(d);
+  return `${b.getUTCFullYear()}-${_pad(b.getUTCMonth()+1)}-${_pad(b.getUTCDate())} ${_pad(b.getUTCHours())}:${_pad(b.getUTCMinutes())}:${_pad(b.getUTCSeconds())}`;
+};
 const nowStr   = () => _localDateTime();
 const todayStr = () => _localDate();
-function monthStart() { const d = new Date(); d.setDate(1); return _localDate(d); }
-function daysAgo(n)   { const d = new Date(); d.setDate(d.getDate() - n); return _localDate(d); }
-function daysAhead(n) { const d = new Date(); d.setDate(d.getDate() + n); return _localDate(d); }
+function monthStart() { const b = _brt(); return `${b.getUTCFullYear()}-${_pad(b.getUTCMonth()+1)}-01`; }
+function daysAgo(n)   { return _localDate(new Date(Date.now() - n * 86400000)); }
+function daysAhead(n) { return _localDate(new Date(Date.now() + n * 86400000)); }
 
 // ── PIX ──────────────────────────────────────────────────────────────
 function crc16(data) {
@@ -287,16 +296,22 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
   // Converte "HH:MM" para minutos desde meia-noite
   const hhmm2min = s => { const [h, m] = (s || '00:00').split(':').map(Number); return h * 60 + m; };
 
+  // Minutos desde meia-noite em BRT (independente do TZ do servidor)
+  const brtMinOfDay = (date) => { const b = _brt(date); return b.getUTCHours() * 60 + b.getUTCMinutes(); };
+
+  // Define hora BRT em um objeto Date (converte BRT→UTC: +3h)
+  const setBrtHhmm = (date, totalBrtMin) => {
+    const r = new Date(date);
+    r.setUTCHours(Math.floor(totalBrtMin / 60) + 3, totalBrtMin % 60, 0, 0);
+    return r;
+  };
+
   // Garante que o cursor respeita o horário de início das operações
   const clampToOpsStart = (date) => {
     if (!opsStart) return date;
     const startMin = hhmm2min(opsStart);
-    const dateMin  = date.getHours() * 60 + date.getMinutes();
-    if (dateMin < startMin) {
-      const clamped = new Date(date);
-      clamped.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
-      return clamped;
-    }
+    const dateMin  = brtMinOfDay(date);
+    if (dateMin < startMin) return setBrtHhmm(date, startMin);
     return date;
   };
 
@@ -307,7 +322,7 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
   const inProg = enriched.find(r => r.status === 'in_progress');
   if (inProg && inProg.started_at) {
     // Se há op em andamento: cursor = fim dela + tempo de manobra
-    const startedAt = new Date(String(inProg.started_at).replace(' ', 'T'));
+    const startedAt = new Date(String(inProg.started_at).replace(' ', 'T') + '-03:00');
     const endTime   = new Date(startedAt);
     endTime.setMinutes(endTime.getMinutes() + (inProg.estimated_duration_min || 0));
     const effectiveEnd = isNaN(endTime) || endTime < now ? new Date(now) : endTime;
@@ -1268,7 +1283,7 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
   const hhmm2min    = s => { const [h, m] = (s||'00:00').split(':').map(Number); return h*60+m; };
   const fmtMin      = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
   const now         = new Date();
-  const nowMin      = now.getHours()*60 + now.getMinutes();
+  const nowMin      = _brt(now).getUTCHours()*60 + _brt(now).getUTCMinutes();
   const startMin    = hhmm2min(opsStart);
   const endMin      = hhmm2min(opsEnd);
 
@@ -1287,10 +1302,10 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
     if (op.status === 'in_progress' && op.started_at) {
       hasInProgress = true;
       // Calcula quando termina a op em andamento
-      const sa = new Date(String(op.started_at).replace(' ', 'T'));
+      const sa = new Date(String(op.started_at).replace(' ', 'T') + '-03:00');
       const estimatedEnd = new Date(sa.getTime() + dur * 60000);
       if (!isNaN(estimatedEnd) && estimatedEnd > now) {
-        const opEndMin = estimatedEnd.getHours()*60 + estimatedEnd.getMinutes();
+        const opEndMin = _brt(estimatedEnd).getUTCHours()*60 + _brt(estimatedEnd).getUTCMinutes();
         if (opEndMin > cursorMin) cursorMin = opEndMin;
       }
     } else if (op.status === 'waiting') {
