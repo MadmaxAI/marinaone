@@ -41,15 +41,17 @@ async function runMigrations(tenantSlug) {
 
   // Garante que o schema existe
   await pool.unsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-  await pool.unsafe(`SET search_path TO "${schemaName}", public`);
 
-  // Lê arquivos de migração em ordem
+  // Lê arquivos de migração em ordem determinística
   const files = fs.readdirSync(MIGRATIONS_DIR)
     .filter(f => f.endsWith('.sql'))
     .sort();
 
+  let applied = 0;
+  let errors  = 0;
+
   for (const file of files) {
-    // Verifica se já foi aplicada (tabela _migrations pode não existir ainda)
+    // Verifica se já foi aplicada
     let alreadyApplied = false;
     try {
       const rows = await pool.unsafe(
@@ -57,25 +59,49 @@ async function runMigrations(tenantSlug) {
         [file]
       );
       alreadyApplied = rows.length > 0;
-    } catch (_) {
-      // Tabela _migrations ainda não existe — primeira migração cria ela
+    } catch (checkErr) {
+      // _migrations ainda não existe (primeira migration vai criá-la)
+      if (!checkErr.message.includes('does not exist')) {
+        console.error(`[migrate] ${tenantSlug}: erro ao verificar ${file}: ${checkErr.message}`);
+      }
+      alreadyApplied = false;
     }
 
     if (alreadyApplied) continue;
 
-    const sqlContent = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
-    await pool.unsafe(sqlContent);
-
-    // Registra migração aplicada
+    // Aplica a migration — cada uma isolada; falha não bloqueia as demais
     try {
+      const sqlContent = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+      await pool.unsafe(sqlContent);
+
       await pool.unsafe(
         `INSERT INTO _migrations(filename) VALUES($1) ON CONFLICT DO NOTHING`,
         [file]
       );
-    } catch (_) {}
 
-    console.log(`[migrate] ${tenantSlug}: migração ${file} aplicada.`);
+      console.log(`[migrate] ${tenantSlug}: ✅ ${file} aplicada.`);
+      applied++;
+    } catch (applyErr) {
+      console.error(`[migrate] ${tenantSlug}: ❌ ERRO ao aplicar ${file}: ${applyErr.message}`);
+      errors++;
+      // Continua para tentar as próximas (não aborta o boot inteiro)
+    }
   }
+
+  if (applied > 0 || errors > 0) {
+    console.log(`[migrate] ${tenantSlug}: ${applied} migration(s) aplicada(s), ${errors} erro(s).`);
+  }
+
+  // Verificação pós-migração: garante que todos os arquivos estão registrados
+  const allFiles = files;
+  try {
+    const registered = await pool.unsafe(`SELECT filename FROM _migrations`);
+    const registeredSet = new Set(registered.map(r => r.filename));
+    const missing = allFiles.filter(f => !registeredSet.has(f));
+    if (missing.length > 0) {
+      console.error(`[migrate] ${tenantSlug}: ⚠️  ALERTA — ${missing.length} migration(s) NAO registrada(s) em _migrations: ${missing.join(', ')}`);
+    }
+  } catch (_) { /* _migrations pode não existir ainda em tenant vazio */ }
 }
 
 // ── Seed de dados iniciais para o tenant ─────────────────────────────

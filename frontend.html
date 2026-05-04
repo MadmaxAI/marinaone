@@ -418,7 +418,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
 
 <script>
 const API = window.location.origin + '/api';
-let token = localStorage.getItem('mo_token') || '';
+let token = sessionStorage.getItem('mo_token') || '';
 let currentUser = null;
 let currentPage = 'dashboard';
 let pageCharts = {};
@@ -443,7 +443,7 @@ let pageCharts = {};
   const newSlug = (urlTenant || subdomainTenant || '').toLowerCase().trim();
   if (newSlug) {
     const prevSlug = localStorage.getItem('mo_tenant');
-    if (prevSlug && prevSlug !== newSlug) localStorage.removeItem('mo_token');
+    if (prevSlug && prevSlug !== newSlug) sessionStorage.removeItem('mo_token');
     window.TENANT_SLUG = newSlug;
     localStorage.setItem('mo_tenant', newSlug);
   } else if (baseDomain === 'localhost') {
@@ -678,7 +678,7 @@ async function doLogin() {
       if (!r.ok) { err.textContent = d.error || 'Credenciais inválidas'; err.style.display='block'; return; }
       window.saToken = d.token;
       window.saUser  = d.admin;
-      localStorage.setItem('mo_sa_token', d.token);
+      sessionStorage.setItem('mo_sa_token', d.token);
       saShowPanel();
     } catch(e) { err.textContent = 'Erro de conexão com o servidor'; err.style.display='block'; }
     return;
@@ -695,7 +695,7 @@ async function doLogin() {
     if (!r.ok) { err.textContent = d.error||'Erro ao entrar'; err.style.display='block'; return; }
     token = d.token;
     currentUser = d.user;
-    localStorage.setItem('mo_token', token);
+    sessionStorage.setItem('mo_token', token);
     if (d.must_change_password) {
       showChangePasswordModal();
     } else {
@@ -705,7 +705,7 @@ async function doLogin() {
 }
 
 function logout() {
-  localStorage.removeItem('mo_token');
+  sessionStorage.removeItem('mo_token');
   location.reload();
 }
 
@@ -714,7 +714,7 @@ async function tryAutoLogin() {
   if (!token) return;
   try {
     const r = await fetch(API+'/auth/me', {headers: tenantHeaders({'Authorization':'Bearer '+token})});
-    if (!r.ok) { localStorage.removeItem('mo_token'); return; }
+    if (!r.ok) { sessionStorage.removeItem('mo_token'); return; }
     currentUser = await r.json();
     await openApp();
   } catch(e) {}
@@ -1430,7 +1430,9 @@ function renderQueue(queue) {
         }
       } else if (q.status === 'waiting' && q.estimated_start_at) {
         const start = _parseLocalDT(q.estimated_start_at);
-        if (start && start < now) {
+        // Tolerância de 3 minutos: evita que a op apareça vermelha logo ao ser adicionada
+        const GRACE_MS = 3 * 60 * 1000;
+        if (start && (now - start) > GRACE_MS) {
           isOverdue   = true;
           overdueBase = start.getTime();
           overdueMin  = Math.round((now - start) / 60000);
@@ -1515,14 +1517,22 @@ async function cancelQueueOp(id) {
   pages.queue();
 }
 
-function reorderQueueOp(id, direction) {
+async function reorderQueueOp(id, direction) {
   const dirLabel = direction === 'up' ? 'Mover para Frente' : 'Mover para Trás';
+  const sett = await api('GET', '/settings');
+  const defaultNotice = (sett && sett.queue_reorder_notice_template) ||
+    'Informamos que houve uma reordenação na fila de operações. Os horários previstos foram ajustados. Agradecemos a compreensão.';
   modal(`<div class="modal" onclick="event.stopPropagation()">
     <div class="modal-title">🔀 ${dirLabel} na Fila</div>
-    <div class="settings-info-box" style="margin-bottom:12px">Uma justificativa é obrigatória. A ação será registrada no log do sistema com data, hora e usuário responsável.</div>
+    <div class="settings-info-box" style="margin-bottom:12px">Ambas as justificativas são obrigatórias. A ação será registrada no log com data, hora e usuário responsável.</div>
     <div class="form-group">
-      <label>Justificativa *</label>
+      <label>Justificativa Interna *</label>
       <textarea id="reorder-just" rows="3" placeholder="Ex: Cliente VIP com urgência médica, operação de manutenção crítica..."></textarea>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Aviso aos Clientes em Fila *</label>
+      <textarea id="reorder-public" rows="3">${defaultNotice}</textarea>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">📢 Aparece no topo do calendário para os clientes afetados até a última operação da fila atual ser concluída.</div>
     </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
@@ -1533,8 +1543,10 @@ function reorderQueueOp(id, direction) {
 
 async function submitReorderQueue(id, direction) {
   const justification = document.getElementById('reorder-just')?.value?.trim();
-  if (!justification) { toast('Justificativa obrigatória','error'); return; }
-  const r = await api('PUT', `/queue/${id}/reorder`, { direction, justification });
+  if (!justification) { toast('Justificativa interna obrigatória','error'); return; }
+  const public_justification = document.getElementById('reorder-public')?.value?.trim();
+  if (!public_justification) { toast('Aviso aos clientes é obrigatório','error'); return; }
+  const r = await api('PUT', `/queue/${id}/reorder`, { direction, justification, public_justification });
   if (r && r.ok) {
     toast('Fila reordenada com sucesso');
     closeModalForce();
@@ -1561,6 +1573,30 @@ async function renderQueueCalendar() {
   if (!cal) return;
   const container = document.getElementById('cal-container');
   if (!container) return;
+
+  let noticesRaw = [];
+  try { noticesRaw = await api('GET','/queue/notices') || []; } catch(_) {}
+  if (!Array.isArray(noticesRaw)) noticesRaw = [];
+
+  // Render notice banners (filter by role for clients)
+  const activeNotices = noticesRaw.filter(n => {
+    if (!isCliente()) return true; // admin/operator see all
+    // client sees notice only if they had an op in queue before the reorder
+    const allOps = [...(cal.active||[]), ...(cal.done||[])];
+    return allOps.some(op => op.id <= n.max_op_id);
+  });
+  if (activeNotices.length) {
+    const bannerHtml = activeNotices.map(n => `
+      <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1.5px solid #f59e0b;border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start">
+        <div style="font-size:22px;line-height:1">📢</div>
+        <div>
+          <div style="font-weight:700;color:#92400e;font-size:13px;margin-bottom:4px">Aviso — Alteração de Fila</div>
+          <div style="color:#78350f;font-size:13px;line-height:1.5">${n.message}</div>
+          <div style="color:#a16207;font-size:11px;margin-top:6px">Informado por ${n.created_by_name||'Sistema'} • ${new Date(n.created_at).toLocaleString('pt-BR')}</div>
+        </div>
+      </div>`).join('');
+    container.insertAdjacentHTML('afterbegin', bannerHtml);
+  }
 
   const opColors = { descida:'#3b82f6', subida:'#f59e0b', atracacao:'#8b5cf6', completed_descida:'#93c5fd', completed_subida:'#fcd34d', completed_atracacao:'#c4b5fd', cancelled:'#d1d5db' };
   const opLabel  = { descida:'⬇ Descida', subida:'⬆ Subida', atracacao:'⚓ Atracação' };
@@ -5827,17 +5863,35 @@ async function markAllRead() {
 }
 
 // ── PAGE: USERS (admin) ──────────────────────────────────────
-pages.users = async () => {
-  const [users, clients] = await Promise.all([
-    api('GET', '/users'),
-    api('GET', '/clients')
-  ]);
+let _usersSortCol = 'name', _usersSortAsc = true;
+
+function _sortUsers(users, col, asc) {
+  return [...users].sort((a, b) => {
+    let va = a[col] ?? '', vb = b[col] ?? '';
+    if (typeof va === 'number') return asc ? va - vb : vb - va;
+    return asc ? String(va).localeCompare(String(vb), 'pt-BR') : String(vb).localeCompare(String(va), 'pt-BR');
+  });
+}
+
+function _usersSetSort(col) {
+  if (_usersSortCol === col) _usersSortAsc = !_usersSortAsc;
+  else { _usersSortCol = col; _usersSortAsc = true; }
+  _renderUsersTable();
+}
+
+function _renderUsersTable() {
+  const { users, clients } = window._usersCache || { users:[], clients:[] };
   const roleLabel = { admin:'Administrador', operador:'Operador', loja:'Loja / PDV', cliente:'Cliente' };
   const roleBadge = r => {
     const colors = { admin:'#ef4444', operador:'#3b82f6', loja:'#f59e0b', cliente:'#10b981' };
     return `<span style="display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:10px;background:${colors[r]||'#6b7280'};color:#fff">${roleLabel[r]||r}</span>`;
   };
-  const rows = (users||[]).map(u => `
+  const sorted = _sortUsers(users||[], _usersSortCol, _usersSortAsc);
+  const arrow = col => _usersSortCol === col ? (_usersSortAsc ? ' ↑' : ' ↓') : '';
+  const th = (col, label) =>
+    `<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="_usersSetSort('${col}')">${label}${arrow(col)}</th>`;
+
+  const rows = sorted.map(u => `
     <tr style="${u.active===0?'opacity:.5':''}">
       <td><strong>${u.name}</strong></td>
       <td>${u.email}</td>
@@ -5845,12 +5899,24 @@ pages.users = async () => {
       <td>${u.client_name || '—'}</td>
       <td>${u.active ? '<span class="badge badge-success">Ativo</span>' : '<span class="badge badge-gray">Desativado</span>'}</td>
       <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="viewUserModal(${u.id})">👁 Ver</button>
         <button class="btn btn-ghost btn-sm" onclick="openUserModal(${u.id})">✎ Editar</button>
         <button class="btn btn-ghost btn-sm" onclick="resetUserPassword(${u.id}, '${u.email.replace(/'/g,"\\'")}')">🔑 Senha</button>
         ${u.id !== currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.name.replace(/'/g,"\\'")}')">✕</button>` : ''}
       </td>
     </tr>`).join('');
-  // Cache definido ANTES de setContent para estar disponível assim que os botões são renderizados
+
+  const tbody = document.getElementById('users-tbody');
+  const thead = document.getElementById('users-thead');
+  if (tbody) tbody.innerHTML = rows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Nenhum usuário cadastrado</td></tr>';
+  if (thead) thead.innerHTML = `<tr>${th('name','Nome')}${th('email','E-mail')}${th('role','Função')}${th('client_name','Cliente Vinculado')}${th('active','Status')}<th>Ações</th></tr>`;
+}
+
+pages.users = async () => {
+  const [users, clients] = await Promise.all([
+    api('GET', '/users'),
+    api('GET', '/clients')
+  ]);
   window._usersCache = { users, clients };
   setContent(`
   <div class="flex justify-between mb-2">
@@ -5862,11 +5928,51 @@ pages.users = async () => {
   </div>
   <div class="card">
     <div class="table-wrap"><table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Função</th><th>Cliente Vinculado</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Nenhum usuário cadastrado</td></tr>'}</tbody>
+      <thead id="users-thead"></thead>
+      <tbody id="users-tbody"></tbody>
     </table></div>
   </div>`);
+  _renderUsersTable();
 };
+
+function viewUserModal(id) {
+  const cache = window._usersCache || { users:[], clients:[] };
+  const u = (cache.users || []).find(x => Number(x.id) === Number(id));
+  if (!u) { toast('Usuário não encontrado', 'error'); return; }
+
+  const roleLabel = { admin:'Administrador', operador:'Operador', loja:'Loja / PDV', cliente:'Cliente' };
+  const roleColors = { admin:'#ef4444', operador:'#3b82f6', loja:'#f59e0b', cliente:'#10b981' };
+  const roleBadge = `<span style="display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 10px;border-radius:10px;background:${roleColors[u.role]||'#6b7280'};color:#fff">${roleLabel[u.role]||u.role}</span>`;
+  const statusBadge = u.active
+    ? `<span class="badge badge-success">✅ Ativo</span>`
+    : `<span class="badge badge-gray">⏸️ Desativado</span>`;
+
+  const row = (label, value) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <span style="min-width:130px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">${label}</span>
+      <span style="font-size:14px;color:var(--text1)">${value}</span>
+    </div>`;
+
+  const clientName = u.client_id
+    ? ((cache.clients||[]).find(c => Number(c.id)===Number(u.client_id))?.name || `ID ${u.client_id}`)
+    : null;
+
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="width:460px;max-width:95vw">
+    <div class="modal-title" style="margin-bottom:20px">👁 Detalhes do Usuário</div>
+    <div style="padding:0 4px">
+      ${row('Nome', `<strong>${u.name}</strong>`)}
+      ${row('E-mail', `<span style="font-family:monospace">${u.email}</span>`)}
+      ${row('Função', roleBadge)}
+      ${row('Status', statusBadge)}
+      ${clientName ? row('Cliente vinculado', clientName) : ''}
+      ${row('ID', `<span style="font-family:monospace;color:var(--text3)">#${u.id}</span>`)}
+    </div>
+    <div class="form-actions" style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">
+      <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
+      <button class="btn btn-primary" onclick="closeModal();openUserModal(${u.id})">✎ Editar</button>
+    </div>
+  </div>`);
+}
 
 function openUserModal(id) {
   const cache = window._usersCache || { users:[], clients:[] };
@@ -5903,8 +6009,13 @@ function openUserModal(id) {
         </div>
         <div class="form-group" style="margin:0">
           <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:block">${u ? 'Nova senha' : 'Senha *'}</label>
-          <input id="u-password" type="password" ${u?'':'required'} minlength="6"
-            placeholder="${u?'(deixe vazio para manter)':'mínimo 6 caracteres'}" style="width:100%;margin:0">
+          <div style="display:flex;gap:6px;align-items:center">
+            <input id="u-password" type="password" ${u?'':'required'} minlength="6"
+              placeholder="${u?'(deixe vazio para manter)':'mínimo 6 caracteres'}" style="flex:1;margin:0">
+            <button type="button" title="Mostrar/ocultar senha"
+              style="padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:15px;line-height:1"
+              onclick="(function(btn){const i=document.getElementById('u-password');const shown=i.type==='text';i.type=shown?'password':'text';btn.textContent=shown?'👁️':'🙈';})(this)">👁️</button>
+          </div>
         </div>
       </div>
 
@@ -6358,7 +6469,7 @@ async function renderSettings(tab) {
         </td>`).join('')}
       </tr>`).join('');
     const allKeys = ops.flatMap(op => sizes.map(sz => `avg_time_${op}_${sz}`));
-    allKeys.push('maneuver_time_min', 'ops_start_time', 'ops_end_time');
+    allKeys.push('maneuver_time_min', 'ops_start_time', 'ops_end_time', 'queue_reorder_notice_template');
     // Store in window so onclick can reference it without JSON-in-attribute encoding issues
     window._opsSettingsKeys = allKeys;
     const clParse = key => { try { return JSON.parse(s[key]||'[]'); } catch(e) { return []; } };
@@ -6406,6 +6517,17 @@ async function renderSettings(tab) {
       </div>
       <div class="form-actions" style="border-top:none;padding-top:0;margin-top:16px">
         <button class="btn btn-primary" onclick="saveSettings(window._opsSettingsKeys)">💾 Salvar Configurações de Tempo</button>
+      </div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-title">📢 Mensagem Padrão de Reordenação de Fila</div>
+      <div class="settings-info-box">Este texto é pré-carregado automaticamente como sugestão no campo <strong>Aviso aos Clientes</strong> sempre que um operador ou administrador reordenar a fila. O responsável pode editar antes de confirmar. Mensagem <strong>obrigatória</strong> ao reordenar.</div>
+      <div class="form-group">
+        <label>Mensagem padrão</label>
+        <textarea id="s-queue_reorder_notice_template" rows="4" style="width:100%" placeholder="Ex: Informamos que houve uma reordenação na fila de operações. Os horários previstos foram ajustados. Agradecemos a compreensão.">${s.queue_reorder_notice_template||'Informamos que houve uma reordenação na fila de operações. Os horários previstos foram ajustados. Agradecemos a compreensão.'}</textarea>
+      </div>
+      <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
+        <button class="btn btn-primary" onclick="saveSettings(['queue_reorder_notice_template'])">💾 Salvar Mensagem Padrão</button>
       </div>
     </div>
     <div class="settings-card">
@@ -6524,7 +6646,7 @@ async function renderSettings(tab) {
 // ════════════════════════════════════════════════════
 //  SUPER-ADMIN
 // ════════════════════════════════════════════════════
-window.saToken = localStorage.getItem('mo_sa_token') || '';
+window.saToken = sessionStorage.getItem('mo_sa_token') || '';
 window.saUser  = null;
 window._saMode = false;
 
@@ -6567,7 +6689,7 @@ function saShowPanel() {
 }
 
 function saLogout() {
-  localStorage.removeItem('mo_sa_token');
+  sessionStorage.removeItem('mo_sa_token');
   window.saToken = ''; window.saUser = null;
   location.reload();
 }
@@ -7186,12 +7308,12 @@ async function trySAAutoLogin() {
   if (!window.saToken) return false;
   try {
     const r = await fetch(API + '/superadmin/tenants', { headers:{'Authorization':'Bearer '+window.saToken} });
-    if (!r.ok) { localStorage.removeItem('mo_sa_token'); window.saToken = ''; return false; }
+    if (!r.ok) { sessionStorage.removeItem('mo_sa_token'); window.saToken = ''; return false; }
     const payload = JSON.parse(atob(window.saToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
     window.saUser = { name: payload.name, email: payload.email };
     saShowPanel();
     return true;
-  } catch { localStorage.removeItem('mo_sa_token'); window.saToken = ''; return false; }
+  } catch { sessionStorage.removeItem('mo_sa_token'); window.saToken = ''; return false; }
 }
 
 // ── INIT ──────────────────────────────────────────────

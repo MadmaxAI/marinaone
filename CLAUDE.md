@@ -1,16 +1,20 @@
 # Marina One — Guia para o Claude Code
 
+## Regra de comunicação — tratamento
+
+Sempre chamar o usuário de **CEO** (nunca "usuário", "você" genérico, etc.).
+
 ## Regra principal — NUNCA publicar em produção sem aprovação
 
 Após qualquer alteração de código, o Claude deve:
 1. Aplicar as mudanças nos arquivos
 2. Rodar `testar.bat` para atualizar o ambiente local
-3. Informar ao usuário: **"Alteração feita. Teste em http://localhost:3000 e me diga 'aprovado' para publicar."**
-4. **AGUARDAR** o usuário dizer "aprovado" (ou variações: "ok", "pode publicar", "publish", "deploy")
+3. Informar ao CEO: **"Alteração feita. Teste em http://localhost:3000 e me diga 'aprovado' para publicar."**
+4. **AGUARDAR** o CEO dizer "aprovado" (ou variações: "ok", "pode publicar", "publish", "deploy")
 5. Somente então rodar `publicar.bat "descrição"`
 
 ## NUNCA fazer isso sozinho
-- Nunca rodar `publicar.bat` sem aprovação explícita do usuário
+- Nunca rodar `publicar.bat` sem aprovação explícita do CEO
 - Nunca fazer `git push` diretamente
 - Nunca fazer `railway up` sem aprovação
 
@@ -23,7 +27,7 @@ Claude roda: testar.bat
         ↓
 Claude diz: "Teste em localhost:3000 (vX.Y.Z) e diga 'aprovado'"
         ↓         ↑ SEMPRE informar a versão atual do package.json
-Usuário testa e diz: "aprovado"
+CEO testa e diz: "aprovado"
         ↓
 Claude roda: publicar.bat "descrição da alteração"
         ↓
@@ -32,9 +36,13 @@ Deploy automático no Railway ✅
 
 ## Regra de comunicação — versão obrigatória
 
-Ao finalizar qualquer alteração e avisar o usuário para testar, SEMPRE informar:
-- A versão atual (ex: "v2.0.8") que está rodando no ambiente local
-- Exemplo: **"Alteração feita. Teste em http://localhost:3000 (v2.0.8) e me diga 'aprovado' para publicar."**
+SEMPRE informar a versão em dois momentos:
+
+1. **Ao avisar para testar localmente:**
+   - Exemplo: **"Alteração feita. Teste em http://localhost:3000 (v2.1.1) e me diga 'aprovado' para publicar."**
+
+2. **Ao confirmar publicação em produção:**
+   - Exemplo: **"Publicado v2.1.2 em produção! Disponível em https://marinaone.com.br"**
 
 ## ⚠️ REGRA CRÍTICA — Consistência Banco + Código (PRODUÇÃO NÃO PODE PARAR)
 
@@ -58,7 +66,7 @@ Toda alteração de schema (nova coluna, nova tabela, novo índice) DEVE ser aco
 - [ ] Boot percorre todos os tenants e aplica migrations pendentes
 - [ ] `testar.bat` rodado e logs mostram migration aplicada
 - [ ] Funcionalidade testada em localhost (salvar, editar, listar)
-- [ ] Usuário aprovou o teste
+- [ ] CEO aprovou o teste
 
 ### Padrão dos arquivos de migration
 ```
@@ -78,7 +86,7 @@ Cada arquivo deve ser **idempotente** — pode rodar N vezes sem erro (`IF NOT E
 | Comando | Quando usar |
 |---------|------------|
 | `testar.bat` | Após cada alteração — aplica no Docker local |
-| `publicar.bat "msg"` | Somente após aprovação do usuário |
+| `publicar.bat "msg"` | Somente após aprovação do CEO |
 | `publicar.bat "msg" minor` | Nova funcionalidade aprovada |
 | `publicar.bat "msg" major` | Mudança grande aprovada |
 
@@ -87,7 +95,7 @@ Cada arquivo deve ser **idempotente** — pode rodar N vezes sem erro (`IF NOT E
 | Ambiente | URL | Banco |
 |----------|-----|-------|
 | Local (Docker) | http://localhost:3000 | PostgreSQL local (marinaone_db) |
-| Produção (Railway) | https://marina-one-app.up.railway.app | PostgreSQL Railway |
+| Produção (Railway) | https://marinaone.com.br (demo: https://demo.marinaone.com.br) | PostgreSQL Railway |
 
 ## Tenant local
 O ambiente local usa `SINGLE_TENANT_SLUG=demo` — acesse direto sem `?tenant=`.

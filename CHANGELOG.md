@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.2.0] -- 2026-05-04
+- Avisos de reordenacao de fila: justificativa publica obrigatoria pre-preenchida com template configuravel; banner no calendario para clientes afetados; fix calendario travado; hardening de migrations com 3 camadas de protecao e alertas criticos no boot
+
 ## [2.1.1] -- 2026-05-01
 - Super Admin: troca de e-mail do administrador da marina
 
@@ -141,6 +144,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

@@ -281,27 +281,57 @@ async function enrichQueueRow(q, settings, dbGet) {
   const estimated_duration_min = getAvgDurationSync(settings, q.vessel_size, q.operation_type);
   return { ...q, vessel_status: vs, is_inconsistent: inconsistent, estimated_duration_min };
 }
-function applyEstimatedTimes(enriched, maneuver) {
+function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
   const now = new Date();
-  let cursor = new Date(now);
+
+  // Converte "HH:MM" para minutos desde meia-noite
+  const hhmm2min = s => { const [h, m] = (s || '00:00').split(':').map(Number); return h * 60 + m; };
+
+  // Garante que o cursor respeita o horário de início das operações
+  const clampToOpsStart = (date) => {
+    if (!opsStart) return date;
+    const startMin = hhmm2min(opsStart);
+    const dateMin  = date.getHours() * 60 + date.getMinutes();
+    if (dateMin < startMin) {
+      const clamped = new Date(date);
+      clamped.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
+      return clamped;
+    }
+    return date;
+  };
+
+  // Cursor inicial: agora + 1min (buffer mínimo) ou horário de início das operações (o que for maior)
+  const nowPlus1 = new Date(now.getTime() + 60000);
+  let cursor = clampToOpsStart(nowPlus1);
+
   const inProg = enriched.find(r => r.status === 'in_progress');
   if (inProg && inProg.started_at) {
-    const endTime = new Date(String(inProg.started_at).replace(' ', 'T'));
-    endTime.setMinutes(endTime.getMinutes() + inProg.estimated_duration_min);
-    if (isNaN(endTime) || endTime < now) endTime.setTime(now.getTime());
-    inProg.estimated_end_at = endTime.toISOString();
-    cursor = new Date(endTime);
+    // Se há op em andamento: cursor = fim dela + tempo de manobra
+    const startedAt = new Date(String(inProg.started_at).replace(' ', 'T'));
+    const endTime   = new Date(startedAt);
+    endTime.setMinutes(endTime.getMinutes() + (inProg.estimated_duration_min || 0));
+    const effectiveEnd = isNaN(endTime) || endTime < now ? new Date(now) : endTime;
+    inProg.estimated_end_at = effectiveEnd.toISOString();
+    cursor = new Date(effectiveEnd);
+    cursor.setMinutes(cursor.getMinutes() + maneuver); // manobra após op em andamento
+    cursor = clampToOpsStart(cursor);
+  } else {
+    // Sem op em andamento: acrescenta tempo de manobra antes da primeira op
+    // (trator precisa se posicionar antes de iniciar qualquer operação)
     cursor.setMinutes(cursor.getMinutes() + maneuver);
+    cursor = clampToOpsStart(cursor);
   }
+
   for (const row of enriched) {
     if (row.status === 'in_progress') continue;
     if (row.status === 'waiting') {
       row.estimated_start_at = cursor.toISOString();
       const end = new Date(cursor);
-      end.setMinutes(end.getMinutes() + row.estimated_duration_min);
+      end.setMinutes(end.getMinutes() + (row.estimated_duration_min || 0));
       row.estimated_end_at = end.toISOString();
       cursor = new Date(end);
-      cursor.setMinutes(cursor.getMinutes() + maneuver);
+      cursor.setMinutes(cursor.getMinutes() + maneuver); // manobra antes da próxima op
+      cursor = clampToOpsStart(cursor);
     }
   }
 }
@@ -1185,7 +1215,9 @@ addRoute('GET', '/api/queue/calendar', async (req, res, ctx) => {
     WHERE q.status NOT IN ('completed','cancelled') ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
   const activeEnriched = await Promise.all(active.map(q => enrichQueueRow(q, settings, tGet)));
   const doneEnriched   = await Promise.all(done.map(q => enrichQueueRow(q, settings, tGet)));
-  applyEstimatedTimes(activeEnriched, getManeuverTime(settings));
+  const opsStart = settings['ops_start_time'] || '07:00';
+  const opsEnd   = settings['ops_end_time']   || '18:00';
+  applyEstimatedTimes(activeEnriched, getManeuverTime(settings), opsStart, opsEnd);
   sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime(settings) });
 });
 
@@ -1207,7 +1239,9 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
   const settings = await getSettings(tAll);
   const rows     = await tAll(sql + ' ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC', a);
   const enriched = await Promise.all(rows.map(q => enrichQueueRow(q, settings, tGet)));
-  applyEstimatedTimes(enriched, getManeuverTime(settings));
+  const opsStart = settings['ops_start_time'] || '07:00';
+  const opsEnd   = settings['ops_end_time']   || '18:00';
+  applyEstimatedTimes(enriched, getManeuverTime(settings), opsStart, opsEnd);
   sendJson(res, enriched);
 });
 
@@ -1227,35 +1261,58 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
   const activeOp = await tGet(`SELECT id FROM queue_operations WHERE vessel_id=? AND status IN ('waiting','in_progress')`, [ctx.body.vessel_id]);
   if (activeOp) return sendJson(res, { error: 'Esta embarcação já possui operação ativa na fila.' }, 400);
 
-  const settings  = await getSettings(tAll);
-  const opsStart  = settings['ops_start_time']  || '07:00';
-  const opsEnd    = settings['ops_end_time']    || '18:00';
+  const settings    = await getSettings(tAll);
+  const opsStart    = settings['ops_start_time'] || '07:00';
+  const opsEnd      = settings['ops_end_time']   || '18:00';
   const maneuverMin = parseInt(settings['maneuver_time_min']) || 0;
-  const hhmm2min  = s => { const [h, m] = (s||'00:00').split(':').map(Number); return h*60+m; };
-  const fmtMin    = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
-  const now       = new Date();
-  const nowMin    = now.getHours()*60 + now.getMinutes();
-  const startMin  = hhmm2min(opsStart), endMin = hhmm2min(opsEnd);
-  let cursorMin   = Math.max(nowMin, startMin);
+  const hhmm2min    = s => { const [h, m] = (s||'00:00').split(':').map(Number); return h*60+m; };
+  const fmtMin      = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const now         = new Date();
+  const nowMin      = now.getHours()*60 + now.getMinutes();
+  const startMin    = hhmm2min(opsStart);
+  const endMin      = hhmm2min(opsEnd);
+
+  // Rejeita imediatamente se agora já passou do horário de encerramento
+  if (nowMin >= endMin)
+    return sendJson(res, { error: `Fora do horário de operações. Encerramento: ${opsEnd}.` }, 400);
+
+  // Cursor começa no maior entre: agora e horário de início das operações
+  let cursorMin = Math.max(nowMin, startMin);
+
+  // Percorre ops ativas para calcular quando o cursor estará livre
   const queuedActive = await tAll(`SELECT q.*, v.size as vessel_size FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id WHERE q.status NOT IN ('completed','cancelled') ORDER BY q.queue_order ASC, q.priority DESC, q.requested_at ASC`);
+  let hasInProgress = false;
   for (const op of queuedActive) {
     const dur = getAvgDurationSync(settings, op.vessel_size, op.operation_type);
     if (op.status === 'in_progress' && op.started_at) {
+      hasInProgress = true;
+      // Calcula quando termina a op em andamento
       const sa = new Date(String(op.started_at).replace(' ', 'T'));
-      const estimatedEnd = new Date(sa);
-      estimatedEnd.setMinutes(estimatedEnd.getMinutes() + dur);
+      const estimatedEnd = new Date(sa.getTime() + dur * 60000);
       if (!isNaN(estimatedEnd) && estimatedEnd > now) {
         const opEndMin = estimatedEnd.getHours()*60 + estimatedEnd.getMinutes();
         if (opEndMin > cursorMin) cursorMin = opEndMin;
       }
-    } else if (op.status === 'waiting') { cursorMin += dur; }
+    } else if (op.status === 'waiting') {
+      cursorMin += dur;
+    }
+    cursorMin += maneuverMin; // tempo de manobra após cada op (e antes da próxima)
+    if (cursorMin >= endMin) break;
+  }
+
+  // Se a fila estava vazia, acrescenta o tempo de manobra inicial
+  // (trator precisa se posicionar antes da primeira operação)
+  if (queuedActive.length === 0) {
     cursorMin += maneuverMin;
   }
+
   const newDur = getAvgDurationSync(settings, vessel.size, opType);
+  // A nova op precisa caber inteiramente antes do encerramento
   if (cursorMin + newDur > endMin)
-    return sendJson(res, { error: `Operação não pode ser incluída: previsão de término às ${fmtMin(cursorMin + newDur)}, após ${opsEnd}.` }, 400);
+    return sendJson(res, { error: `Operação não cabe no horário: início previsto ${fmtMin(cursorMin)}, término ${fmtMin(cursorMin + newDur)}, encerramento ${opsEnd}.` }, 400);
+
   let warning = null;
-  if (nowMin < startMin) warning = `Solicitação recebida antes do horário de início (${opsStart}).`;
+  if (nowMin < startMin) warning = `Solicitação recebida antes do horário de início (${opsStart}). Início previsto às ${opsStart}.`;
 
   const client    = await tGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
   const priority  = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
@@ -1267,7 +1324,7 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
 });
 
 addRoute('PUT', '/api/queue/:id/reorder', async (req, res, ctx) => {
-  const { direction, justification } = ctx.body || {};
+  const { direction, justification, public_justification } = ctx.body || {};
   if (!justification?.trim()) return sendJson(res, { error: 'Justificativa obrigatória.' }, 400);
   if (!['up','down'].includes(direction)) return sendJson(res, { error: 'Direção inválida.' }, 400);
   const { dbGet: tGet, dbAll: tAll, dbRun: tRun } = ctx.db;
@@ -1282,10 +1339,40 @@ addRoute('PUT', '/api/queue/:id/reorder', async (req, res, ctx) => {
   await tRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [other.queue_order, op.id]);
   await tRun(`UPDATE queue_operations SET queue_order=? WHERE id=?`, [op.queue_order, other.id]);
   const vessel = await tGet('SELECT name FROM vessels WHERE id=?', [op.vessel_id]);
+  // Log interno
   await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
     [ctx.user.user_id||null, ctx.user.name||'Sistema', 'queue_reorder',
-     JSON.stringify({ op_id: op.id, vessel: vessel?.name, direction, justification: justification.trim() })]);
+     JSON.stringify({ op_id: op.id, vessel: vessel?.name, direction, justification: justification.trim(), public_justification: public_justification?.trim()||null })]);
+  // Aviso público: registra se o operador informou justificativa pública
+  if (public_justification?.trim()) {
+    // max_op_id = maior ID de op ativa no momento do reorder (o aviso expira quando essas ops terminarem)
+    const maxOp = await tGet(`SELECT MAX(id) as mid FROM queue_operations WHERE status NOT IN ('completed','cancelled')`);
+    const maxId = Number(maxOp?.mid) || 0;
+    // Desativa avisos anteriores ainda ativos (substitui pelo mais recente)
+    await tRun(`UPDATE queue_notices SET active=0 WHERE active=1`, []);
+    await tRun(`INSERT INTO queue_notices(message, max_op_id, created_by, created_by_name) VALUES(?,?,?,?)`,
+      [public_justification.trim(), maxId, ctx.user.user_id||null, ctx.user.name||'Sistema']);
+  }
   sendJson(res, { ok: true });
+});
+
+addRoute('GET', '/api/queue/notices', async (req, res, ctx) => {
+  const { dbAll: tAll, dbRun: tRun } = ctx.db;
+  // Auto-dismiss: aviso expira quando todas as ops registradas até o reorder forem concluídas
+  const active = await tAll(`SELECT * FROM queue_notices WHERE active=1 ORDER BY created_at DESC`);
+  for (const n of active) {
+    const pending = await tAll(
+      `SELECT id FROM queue_operations WHERE id <= ? AND status NOT IN ('completed','cancelled')`,
+      [n.max_op_id]
+    );
+    if (pending.length === 0) {
+      await tRun(`UPDATE queue_notices SET active=0 WHERE id=?`, [n.id]);
+      n.active = 0;
+    }
+  }
+  const notices = await tAll(`SELECT * FROM queue_notices WHERE active=1 ORDER BY created_at ASC`);
+  // Para role cliente: retorna também o max_op_id para o frontend filtrar
+  sendJson(res, notices);
 });
 
 addRoute('PUT', '/api/queue/:id', async (req, res, ctx) => {
@@ -2102,9 +2189,32 @@ async function boot() {
         console.error(`[boot] Erro ao migrar tenant ${slug}:`, e.message);
       }
     }
-    if (tenants.length > 0) console.log(`[boot] Migrations aplicadas em ${tenants.length} tenant(s).`);
+    if (tenants.length > 0) console.log(`[boot] Migrations verificadas em ${tenants.length} tenant(s).`);
   } catch (e) {
     console.error('[boot] Erro ao listar tenants para migração:', e.message);
+  }
+
+  // Verificação de integridade: todos os arquivos de migration devem estar em _migrations
+  try {
+    const migDir  = require('path').join(__dirname, 'src/db/migrations');
+    const migFiles = require('fs').readdirSync(migDir).filter(f => f.endsWith('.sql')).sort();
+    const { getGlobalPool } = require('./src/db/pool');
+    const allTenants = await getGlobalPool().unsafe(`SELECT slug FROM saas.tenants`);
+    for (const { slug } of allTenants) {
+      try {
+        const pool = require('./src/db/pool').getTenantPool(slug);
+        const registered = await pool.unsafe(`SELECT filename FROM _migrations`);
+        const regSet = new Set(registered.map(r => r.filename));
+        const missing = migFiles.filter(f => !regSet.has(f));
+        if (missing.length > 0) {
+          console.error(`[boot] ⚠️  CRÍTICO — tenant "${slug}" tem ${missing.length} migration(s) não aplicada(s): ${missing.join(', ')}`);
+        }
+      } catch (e) {
+        console.error(`[boot] ⚠️  Não foi possível verificar migrations do tenant "${slug}": ${e.message}`);
+      }
+    }
+  } catch (e) {
+    console.error('[boot] Erro na verificação de integridade de migrations:', e.message);
   }
 
   server.listen(PORT, () => {

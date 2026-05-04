@@ -37,6 +37,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      TZ:                    America/Sao_Paulo
       NODE_ENV:              production
       PORT:                  3000
       DATABASE_URL:          postgres://marinaone:marina_dev_2025@db:5432/marinaone
