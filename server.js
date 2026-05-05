@@ -319,20 +319,29 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
   const nowPlus1 = new Date(now.getTime() + 60000);
   let cursor = clampToOpsStart(nowPlus1);
 
+  const endMin  = hhmm2min(opsEnd);
+
+  // Garante que o cursor não passa do horário de encerramento
+  const clampToOpsEnd = (date) => {
+    if (!opsEnd) return date;
+    const dateMin = brtMinOfDay(date);
+    if (dateMin > endMin) return setBrtHhmm(date, endMin);
+    return date;
+  };
+
   const inProg = enriched.find(r => r.status === 'in_progress');
   if (inProg && inProg.started_at) {
-    // Se há op em andamento: cursor = fim dela + tempo de manobra
-    const startedAt = new Date(String(inProg.started_at).replace(' ', 'T') + '-03:00');
-    const endTime   = new Date(startedAt);
-    endTime.setMinutes(endTime.getMinutes() + (inProg.estimated_duration_min || 0));
+    // started_at é Date object do postgres.js — usar direto, sem conversão de string
+    const startedAt = inProg.started_at instanceof Date
+      ? inProg.started_at
+      : new Date(String(inProg.started_at).replace(' ', 'T') + '-03:00');
+    const endTime = new Date(startedAt.getTime() + (inProg.estimated_duration_min || 0) * 60000);
     const effectiveEnd = isNaN(endTime) || endTime < now ? new Date(now) : endTime;
-    inProg.estimated_end_at = effectiveEnd.toISOString();
+    inProg.estimated_end_at = clampToOpsEnd(effectiveEnd).toISOString();
     cursor = new Date(effectiveEnd);
-    cursor.setMinutes(cursor.getMinutes() + maneuver); // manobra após op em andamento
-    cursor = clampToOpsStart(cursor);
+    cursor.setMinutes(cursor.getMinutes() + maneuver);
+    cursor = clampToOpsStart(clampToOpsEnd(cursor));
   } else {
-    // Sem op em andamento: acrescenta tempo de manobra antes da primeira op
-    // (trator precisa se posicionar antes de iniciar qualquer operação)
     cursor.setMinutes(cursor.getMinutes() + maneuver);
     cursor = clampToOpsStart(cursor);
   }
@@ -340,16 +349,35 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
   for (const row of enriched) {
     if (row.status === 'in_progress') continue;
     if (row.status === 'waiting') {
+      if (brtMinOfDay(cursor) >= endMin) break; // sem espaço após horário limite
       row.estimated_start_at = cursor.toISOString();
       const end = new Date(cursor);
       end.setMinutes(end.getMinutes() + (row.estimated_duration_min || 0));
-      row.estimated_end_at = end.toISOString();
+      row.estimated_end_at = clampToOpsEnd(end).toISOString();
       cursor = new Date(end);
-      cursor.setMinutes(cursor.getMinutes() + maneuver); // manobra antes da próxima op
-      cursor = clampToOpsStart(cursor);
+      cursor.setMinutes(cursor.getMinutes() + maneuver);
+      cursor = clampToOpsStart(clampToOpsEnd(cursor));
     }
   }
 }
+// Auto-conclui ops in_progress de dias anteriores para evitar "preso no calendário"
+async function cleanupStaleQueueOps(tAll, tRun) {
+  try {
+    const stale = await tAll(
+      `SELECT id FROM queue_operations WHERE status='in_progress' AND started_at IS NOT NULL AND DATE(started_at) < CURRENT_DATE`
+    );
+    for (const op of stale) {
+      await tRun(
+        `UPDATE queue_operations SET status='completed', completed_at=?, notes=COALESCE(notes,'') || ' [Auto-concluído: operação não finalizada no dia]' WHERE id=?`,
+        [nowStr(), op.id]
+      );
+      console.log(`[queue] Auto-concluída op stale id=${op.id} (in_progress de dia anterior)`);
+    }
+  } catch (e) {
+    console.error('[queue] cleanupStaleQueueOps:', e.message);
+  }
+}
+
 async function getSettings(dbAll) {
   const rows = await dbAll('SELECT key, value FROM settings');
   const obj  = {};
@@ -1219,7 +1247,8 @@ addRoute('GET', '/api/queue/history', async (req, res, ctx) => {
 });
 
 addRoute('GET', '/api/queue/calendar', async (req, res, ctx) => {
-  const { dbAll: tAll, dbGet: tGet } = ctx.db;
+  const { dbAll: tAll, dbGet: tGet, dbRun: tRun } = ctx.db;
+  await cleanupStaleQueueOps(tAll, tRun);
   const today    = todayStr();
   const settings = await getSettings(tAll);
   const done     = await tAll(`SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, c.name as client_name, c.tier as client_tier
@@ -1238,7 +1267,8 @@ addRoute('GET', '/api/queue/calendar', async (req, res, ctx) => {
 
 addRoute('GET', '/api/queue', async (req, res, ctx) => {
   const { status = '' } = ctx.qs;
-  const { dbAll: tAll, dbGet: tGet } = ctx.db;
+  const { dbAll: tAll, dbGet: tGet, dbRun: tRun } = ctx.db;
+  if (!status) await cleanupStaleQueueOps(tAll, tRun); // só limpa quando carrega a fila ativa completa
   let sql = `SELECT q.*, v.name as vessel_name, v.type as vessel_type, v.size as vessel_size, v.length as vessel_length, c.name as client_name, c.tier as client_tier
     FROM queue_operations q JOIN vessels v ON q.vessel_id=v.id JOIN clients c ON q.client_id=c.id WHERE 1=1`;
   const a = [];
@@ -1301,8 +1331,10 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
     const dur = getAvgDurationSync(settings, op.vessel_size, op.operation_type);
     if (op.status === 'in_progress' && op.started_at) {
       hasInProgress = true;
-      // Calcula quando termina a op em andamento
-      const sa = new Date(String(op.started_at).replace(' ', 'T') + '-03:00');
+      // started_at é Date object do postgres.js — usar direto
+      const sa = op.started_at instanceof Date
+        ? op.started_at
+        : new Date(String(op.started_at).replace(' ', 'T') + '-03:00');
       const estimatedEnd = new Date(sa.getTime() + dur * 60000);
       if (!isNaN(estimatedEnd) && estimatedEnd > now) {
         const opEndMin = _brt(estimatedEnd).getUTCHours()*60 + _brt(estimatedEnd).getUTCMinutes();

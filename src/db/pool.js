@@ -45,6 +45,7 @@ function getTenantPool(tenantSlug) {
       ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
       connection: {
         search_path: `${schemaName},public`,
+        timezone: 'America/Sao_Paulo',
       },
     });
     _tenantPools.set(tenantSlug, pool);

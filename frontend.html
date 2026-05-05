@@ -104,6 +104,7 @@ textarea{resize:vertical;min-height:72px}
 .queue-card.overdue{background:rgba(239,68,68,.08);border-color:var(--danger)}
 .queue-card.overdue:hover{background:rgba(239,68,68,.13)}
 @keyframes overdue-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{box-shadow:0 0 0 5px rgba(239,68,68,0)}}
+@keyframes boat-bob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-4px)}}
 .queue-card.overdue{animation:overdue-pulse 2s ease-in-out infinite}
 .badge-overdue{display:inline-flex;align-items:center;gap:4px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px;animation:overdue-pulse 1.5s ease-in-out infinite}
 .queue-priority{width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -1623,8 +1624,8 @@ async function renderQueueCalendar() {
     return;
   }
 
-  // Determine timeline bounds
-  const tStart = allOps[0]._start;
+  // Determine timeline bounds — sempre inclui o horário atual (barquinho visível)
+  const tStart = new Date(Math.min(allOps[0]._start.getTime(), now.getTime() - 5*60000));
   const tEnd   = allOps[allOps.length-1]._end;
   const tRange = Math.max((tEnd - tStart)/60000, 60); // at least 60 min span
 
@@ -1677,8 +1678,12 @@ async function renderQueueCalendar() {
   const nowOffsetMin = (now - tStart)/60000;
   const nowPct = Math.max(0, Math.min(100, (nowOffsetMin/tRange)*100));
   const nowLine = nowOffsetMin >= 0 && nowOffsetMin <= tRange
-    ? `<div style="position:absolute;left:${nowPct.toFixed(2)}%;top:0;bottom:0;width:2px;background:var(--danger);z-index:10">
-         <div style="position:absolute;top:-20px;left:-16px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap">${fmtTime(now.toISOString())}</div>
+    ? `<div style="position:absolute;left:${nowPct.toFixed(2)}%;top:0;bottom:0;z-index:10;transform:translateX(-50%);pointer-events:none">
+         <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--danger);transform:translateX(-50%)"></div>
+         <div style="position:absolute;top:-46px;left:50%;transform:translateX(-50%);text-align:center;white-space:nowrap">
+           <div style="font-size:22px;line-height:1;animation:boat-bob 2s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">⛵</div>
+           <div style="background:var(--danger);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;margin-top:2px;white-space:nowrap">${fmtTime(now.toISOString())}</div>
+         </div>
        </div>` : '';
 
   // Hour tick marks
@@ -1735,7 +1740,7 @@ async function renderQueueCalendar() {
         ${[['descida','#3b82f6','Descida'],['subida','#f59e0b','Subida'],['atracacao','#8b5cf6','Atracação']].map(([,c,l])=>
           `<span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>${l}</span>`
         ).join('')}
-        <span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:2px;height:14px;background:var(--danger);display:inline-block"></span>Agora</span>
+        <span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="font-size:15px;line-height:1">⛵</span>Agora</span>
       </div>
     </div>
     <div style="position:relative;height:80px;margin:24px 0 8px">
