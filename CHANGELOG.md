@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.2.4] -- 2026-05-05
+- corrige bug +3h definitivo: compat.js preserva sufixo Z nos timestamps, pool usa TZ BRT, parse correto de started_at
+
 ## [2.2.3] -- 2026-05-05
 - corrige bug +3h no calendario: timezone BRT na sessao PostgreSQL, parse correto de started_at como Date object e clamp ao horario limite de operacoes
 
@@ -150,6 +153,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

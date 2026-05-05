@@ -74,11 +74,13 @@ function sanitizeParams(params) {
  */
 function normalizeValue(v) {
   if (v instanceof Date) {
-    // Se não tem componente de hora significativa → só a data
+    // Datas sem componente de hora → "YYYY-MM-DD"
     if (v.getUTCHours() === 0 && v.getUTCMinutes() === 0 && v.getUTCSeconds() === 0 && v.getUTCMilliseconds() === 0) {
       return v.toISOString().slice(0, 10);
     }
-    return v.toISOString().replace('T', ' ').slice(0, 19);
+    // Timestamps: preserva sufixo Z para que o frontend interprete como UTC corretamente
+    // NUNCA remover o Z — sem ele o JS trata a string como horário local (causa bug +3h)
+    return v.toISOString();
   }
   if (typeof v === 'bigint') return Number(v);
   return v;

@@ -331,10 +331,11 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
 
   const inProg = enriched.find(r => r.status === 'in_progress');
   if (inProg && inProg.started_at) {
-    // started_at é Date object do postgres.js — usar direto, sem conversão de string
+    // started_at vem como ISO Z string do compat.js (ex: "2026-05-05T12:30:00.000Z")
+    // new Date() de string ISO com Z é sempre UTC — correto
     const startedAt = inProg.started_at instanceof Date
       ? inProg.started_at
-      : new Date(String(inProg.started_at).replace(' ', 'T') + '-03:00');
+      : new Date(inProg.started_at);
     const endTime = new Date(startedAt.getTime() + (inProg.estimated_duration_min || 0) * 60000);
     const effectiveEnd = isNaN(endTime) || endTime < now ? new Date(now) : endTime;
     inProg.estimated_end_at = clampToOpsEnd(effectiveEnd).toISOString();
@@ -1331,10 +1332,10 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
     const dur = getAvgDurationSync(settings, op.vessel_size, op.operation_type);
     if (op.status === 'in_progress' && op.started_at) {
       hasInProgress = true;
-      // started_at é Date object do postgres.js — usar direto
+      // started_at vem como ISO Z string do compat.js — new Date() interpreta UTC corretamente
       const sa = op.started_at instanceof Date
         ? op.started_at
-        : new Date(String(op.started_at).replace(' ', 'T') + '-03:00');
+        : new Date(op.started_at);
       const estimatedEnd = new Date(sa.getTime() + dur * 60000);
       if (!isNaN(estimatedEnd) && estimatedEnd > now) {
         const opEndMin = _brt(estimatedEnd).getUTCHours()*60 + _brt(estimatedEnd).getUTCMinutes();
