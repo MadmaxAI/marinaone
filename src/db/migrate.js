@@ -213,11 +213,47 @@ async function seedDefaultPermissions(pool) {
   for (const [role, modules] of Object.entries(perms)) {
     for (const [mod, [v, c, e, d]] of Object.entries(modules)) {
       await pool.unsafe(
-        `INSERT INTO role_permissions(role, module, can_view, can_create, can_edit, can_delete)
-         VALUES($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (role, module) DO NOTHING`,
+        `INSERT INTO role_permissions(role, module, submodule, can_view, can_create, can_edit, can_delete)
+         VALUES($1, $2, '', $3, $4, $5, $6)
+         ON CONFLICT (role, module, submodule) DO NOTHING`,
         [role, mod, v, c, e, d]
       );
+    }
+  }
+
+  // Permissões por sub-módulo (abas internas)
+  // [can_view, can_create, can_edit, can_delete]
+  const subPerms = {
+    operador: {
+      queue:     { ativa:[1,1,1,1], calendario:[1,0,0,0], historico:[1,0,0,0] },
+      store:     { dashboard:[1,0,0,0], pdv:[1,1,0,0], orders:[1,0,1,0], contas:[1,1,1,0], estoque:[1,0,0,0], gestao:[0,0,0,0] },
+      analytics: { visao:[0,0,0,0], financeiro:[0,0,0,0], previsao:[0,0,0,0], ocupacao:[0,0,0,0], operacoes:[0,0,0,0], clientes:[0,0,0,0] },
+      settings:  { marina:[0,0,0,0], financeiro:[0,0,0,0], notificacoes:[0,0,0,0], operacoes:[0,0,0,0], logs:[0,0,0,0], licenca:[0,0,0,0] },
+    },
+    loja: {
+      queue:     { ativa:[0,0,0,0], calendario:[0,0,0,0], historico:[0,0,0,0] },
+      store:     { dashboard:[1,0,0,0], pdv:[1,1,0,0], orders:[1,0,1,0], contas:[1,1,1,0], estoque:[1,0,0,0], gestao:[0,0,0,0] },
+      analytics: { visao:[0,0,0,0], financeiro:[0,0,0,0], previsao:[0,0,0,0], ocupacao:[0,0,0,0], operacoes:[0,0,0,0], clientes:[0,0,0,0] },
+      settings:  { marina:[0,0,0,0], financeiro:[0,0,0,0], notificacoes:[0,0,0,0], operacoes:[0,0,0,0], logs:[0,0,0,0], licenca:[0,0,0,0] },
+    },
+    cliente: {
+      queue:     { ativa:[1,0,0,0], calendario:[1,0,0,0], historico:[0,0,0,0] },
+      store:     { dashboard:[1,0,0,0], pdv:[1,1,0,0], orders:[1,0,0,0], contas:[0,0,0,0], estoque:[0,0,0,0], gestao:[0,0,0,0] },
+      analytics: { visao:[0,0,0,0], financeiro:[0,0,0,0], previsao:[0,0,0,0], ocupacao:[0,0,0,0], operacoes:[0,0,0,0], clientes:[0,0,0,0] },
+      settings:  { marina:[0,0,0,0], financeiro:[0,0,0,0], notificacoes:[0,0,0,0], operacoes:[0,0,0,0], logs:[0,0,0,0], licenca:[0,0,0,0] },
+    },
+  };
+
+  for (const [role, mods] of Object.entries(subPerms)) {
+    for (const [mod, subs] of Object.entries(mods)) {
+      for (const [sub, [v, c, e, d]] of Object.entries(subs)) {
+        await pool.unsafe(
+          `INSERT INTO role_permissions(role, module, submodule, can_view, can_create, can_edit, can_delete)
+           VALUES($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (role, module, submodule) DO NOTHING`,
+          [role, mod, sub, v, c, e, d]
+        );
+      }
     }
   }
 }

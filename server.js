@@ -46,6 +46,44 @@ const MODULES = [
 const MODULE_KEYS  = MODULES.map(m => m.key);
 const VALID_ROLES  = ['admin', 'operador', 'loja', 'cliente'];
 
+// Sub-módulos por módulo (abas internas com controle granular)
+const SUBMODULES = {
+  queue: [
+    { key: 'ativa',        label: 'Fila Ativa',       actions: ['view','create','edit','delete'] },
+    { key: 'calendario',   label: 'Calendário',        actions: ['view'] },
+    { key: 'historico',    label: 'Histórico',         actions: ['view'] },
+  ],
+  store: [
+    { key: 'dashboard',    label: 'Dashboard',         actions: ['view'] },
+    { key: 'pdv',          label: 'PDV',               actions: ['view','create'] },
+    { key: 'orders',       label: 'Pedidos',           actions: ['view','edit'] },
+    { key: 'contas',       label: 'Contas / Fiados',   actions: ['view','create','edit'] },
+    { key: 'estoque',      label: 'Estoque',           actions: ['view','create','edit','delete'] },
+    { key: 'gestao',       label: 'Gestão',            actions: ['view','create','edit','delete'] },
+  ],
+  analytics: [
+    { key: 'visao',        label: 'Visão Geral',       actions: ['view'] },
+    { key: 'financeiro',   label: 'Financeiro',        actions: ['view'] },
+    { key: 'previsao',     label: 'Previsão',          actions: ['view'] },
+    { key: 'ocupacao',     label: 'Ocupação',          actions: ['view'] },
+    { key: 'operacoes',    label: 'Operações',         actions: ['view'] },
+    { key: 'clientes',     label: 'Clientes',          actions: ['view'] },
+  ],
+  settings: [
+    { key: 'marina',       label: 'Marina',            actions: ['view','edit'] },
+    { key: 'financeiro',   label: 'Financeiro',        actions: ['view','edit'] },
+    { key: 'notificacoes', label: 'Notificações',      actions: ['view','edit'] },
+    { key: 'operacoes',    label: 'Operações',         actions: ['view','edit'] },
+    { key: 'logs',         label: 'Logs do Sistema',   actions: ['view'] },
+    { key: 'licenca',      label: 'Licença',           actions: ['view'] },
+  ],
+};
+// Mapa invertido sub-key → module (para validação)
+const SUBMODULE_KEYS = {};
+for (const [mod, subs] of Object.entries(SUBMODULES)) {
+  for (const s of subs) SUBMODULE_KEYS[`${mod}.${s.key}`] = true;
+}
+
 // ── HTTP helpers ─────────────────────────────────────────────────────
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -137,7 +175,7 @@ function matchRoute(method, urlpath) {
 async function can(user, module, action = 'view', dbGet) {
   if (!user) return false;
   if (user.role === 'admin') return true;
-  const row = await dbGet('SELECT * FROM role_permissions WHERE role=? AND module=?', [user.role, module]);
+  const row = await dbGet("SELECT * FROM role_permissions WHERE role=? AND module=? AND submodule=''", [user.role, module]);
   if (!row) return false;
   return row[`can_${action}`] === 1;
 }
@@ -186,19 +224,38 @@ async function loadPermissions(role, dbGet) {
 async function loadPermissionsAll(role, dbAll) {
   if (role === 'admin') {
     const out = {};
-    for (const m of MODULE_KEYS) out[m] = { view: true, create: true, edit: true, delete: true };
+    for (const m of MODULE_KEYS) {
+      out[m] = { view: true, create: true, edit: true, delete: true, subs: {} };
+      if (SUBMODULES[m]) for (const s of SUBMODULES[m]) out[m].subs[s.key] = { view: true, create: true, edit: true, delete: true };
+    }
     return out;
   }
   const rows = await dbAll('SELECT * FROM role_permissions WHERE role=?', [role]);
-  const out  = {};
-  for (const m of MODULE_KEYS) out[m] = { view: false, create: false, edit: false, delete: false };
+  const out = {};
+  for (const m of MODULE_KEYS) {
+    out[m] = { view: false, create: false, edit: false, delete: false, subs: {} };
+    if (SUBMODULES[m]) for (const s of SUBMODULES[m]) out[m].subs[s.key] = null; // null = não seeded
+  }
+  const hasSubs = {};
   for (const r of rows) {
-    out[r.module] = {
-      view:   r.can_view   === 1,
-      create: r.can_create === 1,
-      edit:   r.can_edit   === 1,
-      delete: r.can_delete === 1,
-    };
+    const entry = { view: r.can_view === 1, create: r.can_create === 1, edit: r.can_edit === 1, delete: r.can_delete === 1 };
+    if (!r.submodule) {
+      if (out[r.module] !== undefined) out[r.module] = { ...out[r.module], ...entry };
+    } else {
+      if (out[r.module]) { out[r.module].subs[r.submodule] = entry; hasSubs[r.module] = true; }
+    }
+  }
+  // Fallback: sem linhas de sub-módulo → herda permissão do módulo
+  for (const m of MODULE_KEYS) {
+    if (!SUBMODULES[m]) continue;
+    const modPerm = out[m];
+    for (const s of SUBMODULES[m]) {
+      if (out[m].subs[s.key] === null) {
+        out[m].subs[s.key] = hasSubs[m]
+          ? { view: false, create: false, edit: false, delete: false }
+          : { view: modPerm.view, create: modPerm.create, edit: modPerm.edit, delete: modPerm.delete };
+      }
+    }
   }
   return out;
 }
@@ -696,27 +753,29 @@ addRoute('GET', '/api/access/permissions', async (req, res, ctx) => {
   const { dbAll: tAll } = ctx.db;
   const out = {};
   for (const role of VALID_ROLES) out[role] = await loadPermissionsAll(role, tAll);
-  sendJson(res, { roles: VALID_ROLES, modules: MODULES, permissions: out });
+  sendJson(res, { roles: VALID_ROLES, modules: MODULES, submodules: SUBMODULES, permissions: out });
 });
 
 addRoute('PUT', '/api/access/permissions', async (req, res, ctx) => {
   if (!requireRole(ctx, res, 'admin')) return;
-  const { role, module, can_view, can_create, can_edit, can_delete } = ctx.body || {};
-  if (!VALID_ROLES.includes(role))    return sendJson(res, { error: 'Role inválido' }, 400);
-  if (role === 'admin')               return sendJson(res, { error: 'Não é permitido alterar permissões do admin' }, 400);
-  if (!MODULE_KEYS.includes(module))  return sendJson(res, { error: 'Módulo inválido' }, 400);
+  const { role, module, submodule = '', can_view, can_create, can_edit, can_delete } = ctx.body || {};
+  if (!VALID_ROLES.includes(role))   return sendJson(res, { error: 'Role inválido' }, 400);
+  if (role === 'admin')              return sendJson(res, { error: 'Não é permitido alterar permissões do admin' }, 400);
+  if (!MODULE_KEYS.includes(module)) return sendJson(res, { error: 'Módulo inválido' }, 400);
+  if (submodule && !SUBMODULE_KEYS[`${module}.${submodule}`]) return sendJson(res, { error: 'Sub-módulo inválido' }, 400);
   const { dbGet: tGet, dbRun: tRun } = ctx.db;
   const v = can_view?1:0, cr = can_create?1:0, e = can_edit?1:0, d = can_delete?1:0;
-  const exists = await tGet('SELECT 1 FROM role_permissions WHERE role=? AND module=?', [role, module]);
+  const exists = await tGet('SELECT 1 FROM role_permissions WHERE role=? AND module=? AND submodule=?', [role, module, submodule]);
   if (exists) {
-    await tRun('UPDATE role_permissions SET can_view=?,can_create=?,can_edit=?,can_delete=? WHERE role=? AND module=?',
-               [v, cr, e, d, role, module]);
+    await tRun('UPDATE role_permissions SET can_view=?,can_create=?,can_edit=?,can_delete=? WHERE role=? AND module=? AND submodule=?',
+               [v, cr, e, d, role, module, submodule]);
   } else {
-    await tRun('INSERT INTO role_permissions(role,module,can_view,can_create,can_edit,can_delete) VALUES(?,?,?,?,?,?)',
-               [role, module, v, cr, e, d]);
+    await tRun('INSERT INTO role_permissions(role,module,submodule,can_view,can_create,can_edit,can_delete) VALUES(?,?,?,?,?,?,?)',
+               [role, module, submodule, v, cr, e, d]);
   }
+  const loc = submodule ? `${role}/${module}/${submodule}` : `${role}/${module}`;
   await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
-             [ctx.user.user_id, ctx.user.name, 'update_permissions', `${role}/${module}: v=${v} c=${cr} e=${e} d=${d}`]);
+             [ctx.user.user_id, ctx.user.name, 'update_permissions', `${loc}: v=${v} c=${cr} e=${e} d=${d}`]);
   sendJson(res, { ok: true });
 });
 

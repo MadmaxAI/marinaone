@@ -775,6 +775,21 @@ function can(module, action = 'view') {
   const p = (currentUser.permissions || {})[module];
   return !!(p && p[action]);
 }
+// Verifica permissão de sub-módulo (aba interna).
+// Fallback: se não há entrada de sub-módulo, usa permissão do módulo pai.
+function canSub(module, sub, action = 'view') {
+  if (!currentUser) return false;
+  if (currentUser.role === 'admin') return true;
+  const p = (currentUser.permissions || {})[module];
+  if (!p) return false;
+  const s = p.subs && p.subs[sub];
+  if (!s) return !!(p[action]); // fallback para módulo
+  return !!(s[action]);
+}
+// Retorna a primeira sub-aba acessível de um módulo (ou null se nenhuma)
+function firstCanSub(module, subs) {
+  return subs.find(s => canSub(module, s)) || null;
+}
 function isAdmin()    { return currentUser && currentUser.role === 'admin'; }
 function isOperador() { return currentUser && currentUser.role === 'operador'; }
 function isLoja()     { return currentUser && currentUser.role === 'loja'; }
@@ -1196,17 +1211,22 @@ function _stopQueueRefresh() {
 }
 
 pages.queue = async () => {
+  // Garante que a aba atual é acessível; caso contrário, usa a primeira disponível
+  const _qSubMap = { active:'ativa', calendar:'calendario', history:'historico' };
+  if (!canSub('queue', _qSubMap[_queueTab] || 'ativa')) {
+    _queueTab = Object.keys(_qSubMap).find(t => canSub('queue', _qSubMap[t])) || 'active';
+  }
   if (_queueTab === 'calendar') { _stopQueueRefresh(); await renderQueueCalendar(); return; }
   if (_queueTab === 'history')  { _stopQueueRefresh(); await renderQueueHistory();  return; }
   const queue = await api('GET', '/queue');
   setContent(`
   <div class="flex justify-between mb-2">
     <div class="tabs">
-      <div class="tab ${_queueTab==='active'?'active':''}"   onclick="switchQueueTab('active',this)">Fila Ativa</div>
-      <div class="tab ${_queueTab==='calendar'?'active':''}" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>
-      <div class="tab ${_queueTab==='history'?'active':''}"  onclick="switchQueueTab('history',this)">Histórico</div>
+      ${canSub('queue','ativa')      ? `<div class="tab ${_queueTab==='active'?'active':''}"   onclick="switchQueueTab('active',this)">Fila Ativa</div>` : ''}
+      ${canSub('queue','calendario') ? `<div class="tab ${_queueTab==='calendar'?'active':''}" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>` : ''}
+      ${canSub('queue','historico')  ? `<div class="tab ${_queueTab==='history'?'active':''}"  onclick="switchQueueTab('history',this)">Histórico</div>` : ''}
     </div>
-    <button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>
+    ${can('queue','create') ? `<button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>` : ''}
   </div>
   <div id="queue-list">${renderQueue(queue||[])}</div>`);
   _startQueueRefresh();
@@ -1228,11 +1248,11 @@ async function renderQueueHistory() {
   setContent(`
   <div class="flex justify-between mb-2">
     <div class="tabs">
-      <div class="tab" onclick="switchQueueTab('active',this)">Fila Ativa</div>
-      <div class="tab" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>
-      <div class="tab active" onclick="switchQueueTab('history',this)">Histórico</div>
+      ${canSub('queue','ativa')      ? `<div class="tab" onclick="switchQueueTab('active',this)">Fila Ativa</div>` : ''}
+      ${canSub('queue','calendario') ? `<div class="tab" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>` : ''}
+      ${canSub('queue','historico')  ? `<div class="tab active" onclick="switchQueueTab('history',this)">Histórico</div>` : ''}
     </div>
-    <button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>
+    ${can('queue','create') ? `<button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>` : ''}
   </div>
   <div id="queue-list"><div class="empty-state"><div class="icon">⏳</div><p>Carregando...</p></div></div>`);
   const data = await api('GET','/queue/history');
@@ -1567,11 +1587,11 @@ async function renderQueueCalendar() {
   setContent(`
   <div class="flex justify-between mb-2">
     <div class="tabs">
-      <div class="tab" onclick="switchQueueTab('active',this)">Fila Ativa</div>
-      <div class="tab active" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>
-      <div class="tab" onclick="switchQueueTab('history',this)">Histórico</div>
+      ${canSub('queue','ativa')      ? `<div class="tab" onclick="switchQueueTab('active',this)">Fila Ativa</div>` : ''}
+      ${canSub('queue','calendario') ? `<div class="tab active" onclick="switchQueueTab('calendar',this)">📅 Calendário</div>` : ''}
+      ${canSub('queue','historico')  ? `<div class="tab" onclick="switchQueueTab('history',this)">Histórico</div>` : ''}
     </div>
-    <button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>
+    ${can('queue','create') ? `<button class="btn btn-primary" onclick="openQueueModal()">+ Nova Operação</button>` : ''}
   </div>
   <div id="cal-container"><div class="empty-state"><div class="icon">📅</div><p>Carregando calendário...</p></div></div>`);
   const cal = await api('GET','/queue/calendar');
@@ -3789,14 +3809,19 @@ function _onSort(key, col) {
 }
 pages.store = async () => {
   cart = [];
+  // Mapeia tab-key UI → sub-módulo de permissão
+  const _sSubMap = { dashboard:'dashboard', pdv:'pdv', orders:'orders', contas:'contas', items:'estoque', gestao:'gestao' };
+  if (!canSub('store', _sSubMap[_storeTab] || 'dashboard')) {
+    _storeTab = Object.keys(_sSubMap).find(t => canSub('store', _sSubMap[t])) || 'dashboard';
+  }
   setContent(`
   <div class="tabs" id="store-tabs">
-    <div class="tab${_storeTab==='dashboard'?' active':''}" onclick="showStoreTab('dashboard',this)">📊 Dashboard</div>
-    <div class="tab${_storeTab==='pdv'?' active':''}" onclick="showStoreTab('pdv',this)">🛒 PDV</div>
-    <div class="tab${_storeTab==='orders'?' active':''}" onclick="showStoreTab('orders',this)">📋 Pedidos</div>
-    <div class="tab${_storeTab==='contas'?' active':''}" onclick="showStoreTab('contas',this)">📒 Contas</div>
-    <div class="tab${_storeTab==='items'?' active':''}" onclick="showStoreTab('items',this)">📦 Estoque</div>
-    <div class="tab${_storeTab==='gestao'?' active':''}" onclick="showStoreTab('gestao',this)">⚙️ Gestão</div>
+    ${canSub('store','dashboard') ? `<div class="tab${_storeTab==='dashboard'?' active':''}" onclick="showStoreTab('dashboard',this)">📊 Dashboard</div>` : ''}
+    ${canSub('store','pdv')       ? `<div class="tab${_storeTab==='pdv'?' active':''}"       onclick="showStoreTab('pdv',this)">🛒 PDV</div>` : ''}
+    ${canSub('store','orders')    ? `<div class="tab${_storeTab==='orders'?' active':''}"    onclick="showStoreTab('orders',this)">📋 Pedidos</div>` : ''}
+    ${canSub('store','contas')    ? `<div class="tab${_storeTab==='contas'?' active':''}"    onclick="showStoreTab('contas',this)">📒 Contas</div>` : ''}
+    ${canSub('store','estoque')   ? `<div class="tab${_storeTab==='items'?' active':''}"     onclick="showStoreTab('items',this)">📦 Estoque</div>` : ''}
+    ${canSub('store','gestao')    ? `<div class="tab${_storeTab==='gestao'?' active':''}"    onclick="showStoreTab('gestao',this)">⚙️ Gestão</div>` : ''}
   </div>
   <div id="store-content"></div>`);
   const activeEl = document.querySelector('#store-tabs .tab.active') || document.querySelector('#store-tabs .tab');
@@ -5317,6 +5342,9 @@ async function saveMaintenance(id) {
 // ── PAGE: ANALYTICS ───────────────────────────────────
 pages.analytics = async () => {
   Object.values(pageCharts).forEach(c=>c&&c.destroy&&c.destroy()); pageCharts={};
+  // Primeira aba acessível
+  const _anSubs = ['visao','financeiro','previsao','ocupacao','operacoes','clientes'];
+  const _anFirst = _anSubs.find(t => canSub('analytics', t)) || 'visao';
   const [kpis, ext] = await Promise.all([
     api('GET','/analytics/kpis'),
     api('GET','/analytics/extended')
@@ -5325,12 +5353,12 @@ pages.analytics = async () => {
   const sectionLabel = txt => `<div style="grid-column:1/-1;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-top:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">${txt}</div>`;
   setContent(`
   <div class="tabs" id="an-tabs">
-    <button class="tab active" onclick="anTab('visao',this)">Visão Geral</button>
-    <button class="tab" onclick="anTab('financeiro',this)">💰 Financeiro</button>
-    <button class="tab" onclick="anTab('previsao',this)">📈 Previsão</button>
-    <button class="tab" onclick="anTab('ocupacao',this)">🏢 Ocupação</button>
-    <button class="tab" onclick="anTab('operacoes',this)">⚙️ Operações</button>
-    <button class="tab" onclick="anTab('clientes',this)">👥 Clientes</button>
+    ${canSub('analytics','visao')      ? `<button class="tab${_anFirst==='visao'?' active':''}"      onclick="anTab('visao',this)">Visão Geral</button>` : ''}
+    ${canSub('analytics','financeiro') ? `<button class="tab${_anFirst==='financeiro'?' active':''}" onclick="anTab('financeiro',this)">💰 Financeiro</button>` : ''}
+    ${canSub('analytics','previsao')   ? `<button class="tab${_anFirst==='previsao'?' active':''}"   onclick="anTab('previsao',this)">📈 Previsão</button>` : ''}
+    ${canSub('analytics','ocupacao')   ? `<button class="tab${_anFirst==='ocupacao'?' active':''}"   onclick="anTab('ocupacao',this)">🏢 Ocupação</button>` : ''}
+    ${canSub('analytics','operacoes')  ? `<button class="tab${_anFirst==='operacoes'?' active':''}"  onclick="anTab('operacoes',this)">⚙️ Operações</button>` : ''}
+    ${canSub('analytics','clientes')   ? `<button class="tab${_anFirst==='clientes'?' active':''}"   onclick="anTab('clientes',this)">👥 Clientes</button>` : ''}
   </div>
   <div id="an-content"></div>`);
 
@@ -5576,7 +5604,7 @@ pages.analytics = async () => {
     }
   };
 
-  anTab('visao', document.querySelector('#an-tabs .tab.active'));
+  anTab(_anFirst, document.querySelector('#an-tabs .tab.active'));
 };
 
 // ── ANALYTICS: PREVISÃO DE FATURAMENTO ───────────────
@@ -6185,13 +6213,33 @@ function _renderAccessPage() {
 
   const isAdmin = role === 'admin';
   const roleMeta = ROLE_META[role] || { icon:'👤', label:role, color:'#6b7280', desc:'' };
+  const submodules = window._accessData.submodules || {};
 
-  // Conta permissões ativas para o role atual
-  const permCount = isAdmin ? modules.length * 4 : modules.reduce((acc, m) => {
-    const p = (permissions[role] && permissions[role][m.key]) || {};
-    return acc + ACTIONS.filter(a => p[a.key]).length;
-  }, 0);
-  const permTotal = modules.length * 4;
+  // helper: chip HTML
+  function _chip(role, mod, sub, aKey, aColor, aLabel, isOn) {
+    return `<button onclick="toggleAccessChip(this,'${role}','${mod}','${sub}','${aKey}')"
+      data-on="${isOn}" data-mod="${mod}" data-sub="${sub}"
+      style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid;transition:all .15s;
+             ${isOn ? `background:${aColor}18;border-color:${aColor};color:${aColor}` : 'background:transparent;border-color:var(--border);color:var(--text3)'}">
+      ${aLabel}
+    </button>`;
+  }
+
+  // Conta permissões ativas (módulo + sub-módulos)
+  let permCount = 0, permTotal = 0;
+  if (!isAdmin) {
+    for (const m of modules) {
+      const p = (permissions[role] && permissions[role][m.key]) || {};
+      permCount += ACTIONS.filter(a => p[a.key]).length;
+      permTotal += 4;
+      const subs = submodules[m.key] || [];
+      for (const sub of subs) {
+        const sp = (p.subs && p.subs[sub.key]) || {};
+        permCount += sub.actions.filter(ak => sp[ak]).length;
+        permTotal += sub.actions.length;
+      }
+    }
+  }
 
   // Role tabs
   const roleTabs = roles.map(r => {
@@ -6224,32 +6272,49 @@ function _renderAccessPage() {
           ${mods.map(m => {
             const p = (permissions[role] && permissions[role][m.key]) || {};
             const anyActive = ACTIONS.some(a => p[a.key]);
-            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;
+            const modSubs = submodules[m.key] || [];
+
+            // Linha do módulo (controla visibilidade na barra lateral)
+            const modRow = `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;
                                 border-radius:8px;transition:background .1s;${anyActive?'':'opacity:.7'}"
                          onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
               <div style="display:flex;align-items:center;gap:10px">
                 <div style="width:3px;height:32px;border-radius:2px;background:${anyActive ? roleMeta.color : 'var(--border)'}"></div>
                 <div>
                   <div style="font-size:13px;font-weight:600;color:var(--text1)">${m.label}</div>
-                  <div style="font-size:11px;color:var(--text3)">${m.key}</div>
+                  <div style="font-size:11px;color:var(--text3)">${modSubs.length ? 'Acesso ao módulo (sidebar)' : m.key}</div>
                 </div>
               </div>
               <div style="display:flex;gap:6px">
-                ${ACTIONS.map(a => {
-                  const on = !!p[a.key];
-                  return `<button onclick="toggleAccessChip(this,'${role}','${m.key}','${a.key}')"
-                    data-on="${on}"
-                    style="padding:5px 11px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid;
-                           transition:all .15s;
-                           ${on
-                             ? `background:${a.color}18;border-color:${a.color};color:${a.color}`
-                             : 'background:transparent;border-color:var(--border);color:var(--text3)'}"
-                    title="${a.label}">
-                    ${a.label}
-                  </button>`;
-                }).join('')}
+                ${ACTIONS.map(a => _chip(role, m.key, '', a.key, a.color, a.label, !!p[a.key])).join('')}
               </div>
             </div>`;
+
+            // Linhas dos sub-módulos (abas internas), se existirem
+            const subRows = modSubs.map(sub => {
+              const sp = (p.subs && p.subs[sub.key]) || {};
+              const anySubOn = sub.actions.some(ak => sp[ak]);
+              return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 16px 7px 36px;
+                                  border-radius:8px;transition:background .1s;${anySubOn?'':'opacity:.6'}"
+                           onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="width:1px;height:24px;border-radius:1px;background:var(--border);margin-right:4px"></div>
+                  <div style="width:6px;height:6px;border-radius:50%;background:${anySubOn ? roleMeta.color : 'var(--border)'}"></div>
+                  <div>
+                    <div style="font-size:12px;font-weight:600;color:var(--text2)">${sub.label}</div>
+                    <div style="font-size:10px;color:var(--text3)">${m.key}.${sub.key}</div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:5px">
+                  ${ACTIONS.map(a => sub.actions.includes(a.key)
+                    ? _chip(role, m.key, sub.key, a.key, a.color, a.label, !!sp[a.key])
+                    : `<button style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;border:1.5px solid transparent;background:transparent;visibility:hidden;pointer-events:none">${a.label}</button>`
+                  ).join('')}
+                </div>
+              </div>`;
+            }).join('');
+
+            return modRow + subRows;
           }).join('')}
         </div>`).join('');
 
@@ -6294,71 +6359,78 @@ function _renderAccessPage() {
   `);
 }
 
-async function toggleAccessChip(btn, role, module, action) {
+async function toggleAccessChip(btn, role, module, submodule, action) {
   const wasOn = btn.dataset.on === 'true';
   const newVal = !wasOn;
-  // Optimistic UI update
+  const ACTION_COLORS = { view:'#3b82f6', create:'#10b981', edit:'#f59e0b', delete:'#ef4444' };
+  const color = ACTION_COLORS[action] || '#6b7280';
+
+  // Optimistic UI
   btn.dataset.on = String(newVal);
-  const ACTIONS = { view:'#3b82f6', create:'#10b981', edit:'#f59e0b', delete:'#ef4444' };
-  const color = ACTIONS[action] || '#6b7280';
   if (newVal) {
-    btn.style.background = color + '18';
-    btn.style.borderColor = color;
-    btn.style.color = color;
+    btn.style.background = color + '18'; btn.style.borderColor = color; btn.style.color = color;
   } else {
-    btn.style.background = 'transparent';
-    btn.style.borderColor = 'var(--border)';
-    btn.style.color = 'var(--text3)';
+    btn.style.background = 'transparent'; btn.style.borderColor = 'var(--border)'; btn.style.color = 'var(--text3)';
   }
-  // Update accent bar
+
+  // Update dot/bar indicator on the row
   const row = btn.closest('div[style*="display:flex;align-items:center;justify-content:space-between"]');
   if (row) {
-    const bar = row.querySelector('div[style*="width:3px"]');
     const ROLE_COLORS = { admin:'#ef4444', operador:'#3b82f6', loja:'#f59e0b', cliente:'#10b981' };
     const rc = ROLE_COLORS[role] || '#6b7280';
     const anyOn = [...row.querySelectorAll('button[data-on]')].some(b => b.dataset.on === 'true');
-    if (bar) { bar.style.background = anyOn ? rc : 'var(--border)'; }
-    row.style.opacity = anyOn ? '1' : '0.7';
+    const bar  = row.querySelector('div[style*="width:3px"]');
+    const dot  = row.querySelector('div[style*="border-radius:50%"]');
+    if (bar) bar.style.background = anyOn ? rc : 'var(--border)';
+    if (dot) dot.style.background = anyOn ? rc : 'var(--border)';
+    row.style.opacity = anyOn ? '1' : '0.6';
   }
-  // Update counter
-  const counterEl = document.querySelector('[data-perm-count]');
-  // Persist to server
-  const perms = window._accessData?.permissions?.[role]?.[module] || {};
-  perms[action] = newVal;
+
   // Update local cache
-  if (window._accessData?.permissions?.[role]) {
-    window._accessData.permissions[role][module] = { ...perms };
+  const modPerms = window._accessData?.permissions?.[role]?.[module];
+  if (modPerms) {
+    if (!submodule) {
+      modPerms[action] = newVal;
+    } else {
+      if (!modPerms.subs) modPerms.subs = {};
+      if (!modPerms.subs[submodule]) modPerms.subs[submodule] = {};
+      modPerms.subs[submodule][action] = newVal;
+    }
   }
-  // Recalc counter
-  const { modules } = window._accessData;
-  const ACTIONS_LIST = ['view','create','edit','delete'];
-  const newCount = modules.reduce((acc, m) => {
-    const p = (window._accessData.permissions[role] && window._accessData.permissions[role][m.key]) || {};
-    return acc + ACTIONS_LIST.filter(a => p[a]).length;
-  }, 0);
-  const countEl = document.querySelector('.access-perm-count');
-  if (countEl) countEl.textContent = newCount;
+
+  // Build full permissions object for the affected row (module or sub-module)
+  let perms;
+  if (!submodule) {
+    perms = modPerms || {};
+  } else {
+    perms = (modPerms?.subs?.[submodule]) || {};
+  }
 
   const body = {
-    role, module,
+    role, module, submodule: submodule || '',
     can_view: !!perms.view, can_create: !!perms.create, can_edit: !!perms.edit, can_delete: !!perms.delete,
   };
   const r = await api('PUT', '/access/permissions', body);
   if (!r || r.error) {
     toast((r && r.error) || 'Erro ao salvar permissão', 'error');
-    // Rollback
     btn.dataset.on = String(wasOn);
     _renderAccessPage();
   }
 }
 
-async function updatePermission(role, module, action, value) {
+async function updatePermission(role, module, action, value, submodule = '') {
   const data = await api('GET', '/access/permissions');
   if (!data) return;
-  const p = (data.permissions[role] && data.permissions[role][module]) || { view:false,create:false,edit:false,delete:false };
+  const modP = (data.permissions[role] && data.permissions[role][module]) || {};
+  let p;
+  if (!submodule) {
+    p = { view: !!modP.view, create: !!modP.create, edit: !!modP.edit, delete: !!modP.delete };
+  } else {
+    p = { ...(modP.subs?.[submodule] || { view:false, create:false, edit:false, delete:false }) };
+  }
   p[action] = value;
   const body = {
-    role, module,
+    role, module, submodule,
     can_view: p.view, can_create: p.create, can_edit: p.edit, can_delete: p.delete,
   };
   const r = await api('PUT', '/access/permissions', body);
@@ -6384,13 +6456,13 @@ async function renderSettings(tab) {
   const s = await api('GET','/settings') || {};
 
   const tabs = [
-    ['marina',     '🏢 Marina'],
-    ['financeiro', '💰 Financeiro'],
-    ['notificacoes','📲 Notificações'],
-    ['operacoes',  '⏱ Operações'],
-    ['logs',       '📋 Logs do Sistema'],
-    ['licenca',    '🔑 Licença'],
-  ];
+    ['marina',       '🏢 Marina'],
+    ['financeiro',   '💰 Financeiro'],
+    ['notificacoes', '📲 Notificações'],
+    ['operacoes',    '⏱ Operações'],
+    ['logs',         '📋 Logs do Sistema'],
+    ['licenca',      '🔑 Licença'],
+  ].filter(([t]) => isAdmin() || canSub('settings', t));
   const tabBar = tabs.map(([t,l])=>`<button class="settings-tab${_settingsTab===t?' active':''}" onclick="renderSettings('${t}')">${l}</button>`).join('');
 
   let content = '';

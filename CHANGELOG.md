@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.0] -- 2026-05-05
+- Controle de acesso granular por sub-modulo com alinhamento de permissoes
+
 ## [2.2.6] -- 2026-05-05
 - centraliza tratorzinho na linha vertical do calendario: remove wrapper inline-block
 
@@ -159,6 +162,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
