@@ -1678,14 +1678,12 @@ async function renderQueueCalendar() {
   const nowOffsetMin = (now - tStart)/60000;
   const nowPct = Math.max(0, Math.min(100, (nowOffsetMin/tRange)*100));
   const nowLine = nowOffsetMin >= 0 && nowOffsetMin <= tRange
-    ? `<div style="position:absolute;left:${nowPct.toFixed(2)}%;top:0;bottom:0;z-index:10;transform:translateX(-50%);pointer-events:none">
-         <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--danger);transform:translateX(-50%)"></div>
-         <div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);text-align:center;white-space:nowrap">
+    ? `<div style="position:absolute;left:${nowPct.toFixed(2)}%;top:0;bottom:0;z-index:10;pointer-events:none">
+         <div style="position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--danger);transform:translateX(-50%)"></div>
+         <div style="position:absolute;top:-18px;left:0;transform:translateX(-50%);white-space:nowrap">
            <div style="background:var(--danger);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap">${fmtTime(now.toISOString())}</div>
          </div>
-         <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);text-align:center;white-space:nowrap">
-           <div style="font-size:22px;line-height:1;animation:tractor-roll 1.5s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">🚜</div>
-         </div>
+         <div style="position:absolute;bottom:-28px;left:0;transform:translateX(-50%);font-size:22px;line-height:1;animation:tractor-roll 1.5s ease-in-out infinite;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">🚜</div>
        </div>` : '';
 
   // Hour tick marks

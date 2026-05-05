@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.2.6] -- 2026-05-05
+- centraliza tratorzinho na linha vertical do calendario: remove wrapper inline-block
+
 ## [2.2.5] -- 2026-05-05
 - ajusta posicao do tratorzinho no calendario: alinhado com a base da barra
 
@@ -156,6 +159,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
