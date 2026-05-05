@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.2.5] -- 2026-05-05
+- ajusta posicao do tratorzinho no calendario: alinhado com a base da barra
+
 ## [2.2.4] -- 2026-05-05
 - corrige bug +3h definitivo: compat.js preserva sufixo Z nos timestamps, pool usa TZ BRT, parse correto de started_at
 
@@ -153,6 +156,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
