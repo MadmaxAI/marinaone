@@ -1334,7 +1334,7 @@ addRoute('GET', '/api/queue/calendar', async (req, res, ctx) => {
   applyEstimatedTimes(activeEnriched, getManeuverTime(settings), opsStart, opsEnd);
   const mtRow = await tGet(`SELECT MAX(COALESCE(completed_at, started_at, requested_at)) as mt FROM queue_operations WHERE DATE(requested_at)=? OR status NOT IN ('completed','cancelled')`, [today]);
   const mtime = mtRow?.mt || today;
-  sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime(settings), mtime });
+  sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime(settings), ops_start_time: opsStart, ops_end_time: opsEnd, mtime });
 });
 
 addRoute('GET', '/api/queue/calendar/mtime', async (req, res, ctx) => {

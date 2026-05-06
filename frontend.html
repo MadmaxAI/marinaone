@@ -104,7 +104,7 @@ textarea{resize:vertical;min-height:72px}
 .queue-card.overdue{background:rgba(239,68,68,.08);border-color:var(--danger)}
 .queue-card.overdue:hover{background:rgba(239,68,68,.13)}
 @keyframes overdue-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{box-shadow:0 0 0 5px rgba(239,68,68,0)}}
-@keyframes tractor-roll{0%,100%{transform:translateX(-50%) translateY(0) rotate(-2deg)}50%{transform:translateX(-50%) translateY(-3px) rotate(2deg)}}
+@keyframes tractor-roll{0%,100%{transform:translateX(-50%) scaleX(-1) translateY(0) rotate(-2deg)}50%{transform:translateX(-50%) scaleX(-1) translateY(-3px) rotate(2deg)}}
 .queue-card.overdue{animation:overdue-pulse 2s ease-in-out infinite}
 .badge-overdue{display:inline-flex;align-items:center;gap:4px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px;animation:overdue-pulse 1.5s ease-in-out infinite}
 .queue-priority{width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -1740,10 +1740,14 @@ function _renderCalContent(container, cal, noticesRaw) {
     return;
   }
 
-  // Determine timeline bounds — sempre inclui o horário atual (barquinho visível)
-  const tStart = new Date(Math.min(allOps[0]._start.getTime(), now.getTime() - 5*60000));
-  const tEnd   = allOps[allOps.length-1]._end;
-  const tRange = Math.max((tEnd - tStart)/60000, 60); // at least 60 min span
+  // Determine timeline bounds — fixos no horário de operação da marina (ops_start_time → ops_end_time)
+  const _hhmm2date = hhmm => {
+    const [h, m] = (hhmm || '07:00').split(':').map(Number);
+    const d = new Date(now); d.setHours(h, m, 0, 0); return d;
+  };
+  const tStart = _hhmm2date(cal.ops_start_time || '07:00');
+  const tEnd   = _hhmm2date(cal.ops_end_time   || '18:00');
+  const tRange = Math.max((tEnd - tStart) / 60000, 60);
   _calTStart = tStart; _calTRange = tRange;
 
   // Build timeline bars
@@ -1800,7 +1804,7 @@ function _renderCalContent(container, cal, noticesRaw) {
          <div style="position:absolute;top:-18px;left:0;transform:translateX(-50%);white-space:nowrap">
            <div class="cal-now-label" style="background:var(--danger);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap">${fmtTime(now.toISOString())}</div>
          </div>
-         <div style="position:absolute;bottom:-28px;left:0;transform:translateX(-50%);font-size:22px;line-height:1;animation:tractor-roll 1.5s ease-in-out infinite;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">🚜</div>
+         <div style="position:absolute;bottom:-28px;left:0;transform:translateX(-50%) scaleX(-1);font-size:22px;line-height:1;animation:tractor-roll 1.5s ease-in-out infinite;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">🚜</div>
        </div>` : '';
 
   // Hour tick marks
@@ -1809,8 +1813,9 @@ function _renderCalContent(container, cal, noticesRaw) {
   for (let t = new Date(tickStart); t <= tEnd; t.setMinutes(t.getMinutes()+30)) {
     const pct = ((t - tStart)/60000/tRange)*100;
     if (pct < 0 || pct > 100) continue;
+    const labelAnchor = pct > 93 ? 'left:0;transform:translateX(calc(-100% - 2px))' : 'left:2px';
     ticks += `<div style="position:absolute;left:${pct.toFixed(2)}%;top:0;bottom:0;border-left:1px dashed var(--border);z-index:0">
-      <div style="position:absolute;top:-18px;left:2px;font-size:10px;color:var(--text3);white-space:nowrap">${fmtTime(t.toISOString())}</div>
+      <div style="position:absolute;top:-18px;${labelAnchor};font-size:10px;color:var(--text3);white-space:nowrap">${fmtTime(t.toISOString())}</div>
     </div>`;
   }
 

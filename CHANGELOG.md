@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.18] -- 2026-05-06
+- Cronograma: limites fixos por horario de operacao, labels sem overflow na borda final, trator virado para a direita
+
 ## [2.3.14] -- 2026-05-06
 - docs: enxugar CLAUDE.md - remover secoes universais agora no global
 
@@ -189,6 +192,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
