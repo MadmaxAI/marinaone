@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.8] -- 2026-05-06
+- migration 012 sincroniza spot_id nos contratos de producao
+
 ## [2.3.7] -- 2026-05-06
 - coluna contrato em embarcacoes e correcao de consistencia contratos x vagas
 
@@ -177,6 +180,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
