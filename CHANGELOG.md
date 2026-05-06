@@ -1,6 +1,9 @@
 ﻿# Changelog â€” Marina One
 
 ## [2.3.14] -- 2026-05-06
+- docs: enxugar CLAUDE.md - remover secoes universais agora no global
+
+## [2.3.14] -- 2026-05-06
 - segurança: bcrypt para senhas, JWT_SECRET obrigatório, rate limit no login
 
 ## [2.3.12] -- 2026-05-06
@@ -186,6 +189,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
