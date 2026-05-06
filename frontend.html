@@ -2216,11 +2216,11 @@ function _vesselsTheadCells() {
   const TK = 'vessels';
   return '<th style="width:56px"></th>' +
     _th(TK,'name','Embarcação') + _th(TK,'type','Tipo') + _th(TK,'client_name','Cliente') +
-    '<th>Vaga</th>' + _th(TK,'vessel_status','Status') +
+    '<th>Vaga</th>' + _th(TK,'vessel_status','Status') + '<th>Contrato</th>' +
     '<th title="Disponível para locação">Locação</th>' + '<th>Ações</th>';
 }
 function _renderVesselsTbody(vessels) {
-  if (!vessels.length) return '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
+  if (!vessels.length) return '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
   return vessels.map(v => {
     const photoHtml = v.photo
       ? `<img src="${v.photo}" alt="${v.name}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block">`
@@ -2235,6 +2235,7 @@ function _renderVesselsTbody(vessels) {
       <td>${v.client_name} ${tierBadge(v.client_tier)}</td>
       <td>${v.spot_number?`<span class="badge badge-success">${v.spot_number}</span>`:'<span class="badge badge-gray">—</span>'}</td>
       <td>${VESSEL_STATUS_BADGE(v.vessel_status)}</td>
+      <td>${v.contract_id ? (v.spot_type==='seca' ? '<span class="badge badge-success">🏗️ Seca</span>' : v.spot_type==='molhada' ? '<span class="badge badge-info">⚓ Molhada</span>' : '<span class="badge badge-warning">📋 Ativo</span>') : '<span class="badge badge-gray">—</span>'}</td>
       <td>${rentalHtml}</td>
       <td onclick="event.stopPropagation()"><div class="flex gap-2">
         <button class="btn btn-ghost btn-sm" onclick="viewVessel(${v.id})" title="Ver detalhes da embarcação">👁</button>

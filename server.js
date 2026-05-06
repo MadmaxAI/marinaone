@@ -934,7 +934,7 @@ addRoute('DELETE', '/api/clients/:id', async (req, res, ctx) => {
 addRoute('GET', '/api/vessels', async (req, res, ctx) => {
   const { search = '', client_id = '', eligible_for = '' } = ctx.qs;
   const { dbAll: tAll, dbGet: tGet } = ctx.db;
-  let sql = `SELECT v.*, c.name as client_name, c.tier as client_tier, s.number as spot_number, s.type as spot_type
+  let sql = `SELECT v.*, c.name as client_name, c.tier as client_tier, s.number as spot_number, s.type as spot_type, ct.id as contract_id
     FROM vessels v JOIN clients c ON v.client_id=c.id
     LEFT JOIN contracts ct ON ct.vessel_id=v.id AND ct.status='active'
     LEFT JOIN spots s ON ct.spot_id=s.id WHERE v.active=1`;
@@ -1145,12 +1145,11 @@ addRoute('GET', '/api/contracts', async (req, res, ctx) => {
   const { dbAll: tAll } = ctx.db;
   let sql = `SELECT ct.*, c.name as client_name, c.tier as client_tier,
     v.name as vessel_name,
-    COALESCE(s.number, ds.number) as spot_number,
-    COALESCE(s.type,   ds.type)   as spot_type
+    s.number as spot_number,
+    s.type   as spot_type
     FROM contracts ct JOIN clients c ON ct.client_id=c.id
     JOIN vessels v ON ct.vessel_id=v.id
-    LEFT JOIN spots s  ON s.id = ct.spot_id
-    LEFT JOIN spots ds ON ds.vessel_id = ct.vessel_id
+    LEFT JOIN spots s ON s.id = ct.spot_id
     WHERE 1=1`;
   const a = [];
   const scope = clientScope(ctx.user);
@@ -1163,12 +1162,11 @@ addRoute('GET', '/api/contracts/:id', async (req, res, ctx) => {
   const { dbGet: tGet } = ctx.db;
   const ct = await tGet(`SELECT ct.*, c.name as client_name, c.tier as client_tier,
     v.name as vessel_name,
-    COALESCE(s.number, ds.number) as spot_number,
-    COALESCE(s.type,   ds.type)   as spot_type
+    s.number as spot_number,
+    s.type   as spot_type
     FROM contracts ct JOIN clients c ON ct.client_id=c.id
     JOIN vessels v ON ct.vessel_id=v.id
-    LEFT JOIN spots s  ON s.id = ct.spot_id
-    LEFT JOIN spots ds ON ds.vessel_id = ct.vessel_id
+    LEFT JOIN spots s ON s.id = ct.spot_id
     WHERE ct.id=?`, [ctx.params.id]);
   if (!ct) return sendJson(res, { error: 'Não encontrado' }, 404);
   sendJson(res, ct);

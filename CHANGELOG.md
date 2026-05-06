@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.7] -- 2026-05-06
+- coluna contrato em embarcacoes e correcao de consistencia contratos x vagas
+
 ## [2.3.5] -- 2026-05-06
 - banner aviso fila por cliente e correcao de ordenacao da fila ativa
 
@@ -174,6 +177,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
