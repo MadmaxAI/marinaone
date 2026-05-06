@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.14] -- 2026-05-06
+- segurança: bcrypt para senhas, JWT_SECRET obrigatório, rate limit no login
+
 ## [2.3.12] -- 2026-05-06
 - fotos de produtos visíveis em conveniência e totem; cache do catálogo invalidado ao salvar/remover itens
 
@@ -183,6 +186,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

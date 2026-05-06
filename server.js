@@ -26,7 +26,7 @@ const { initSaasSchema, runMigrations, provisionTenant, seedDefaultPermissions }
 const { createDbHelpers, createSaasHelpers }  = require('./src/db/compat');
 const { getTenantPool, getGlobalPool }         = require('./src/db/pool');
 const { tenantMiddleware }                     = require('./src/middleware/tenant');
-const { jwtSign, sha256, verifyPassword, authMiddleware } = require('./src/middleware/auth');
+const { jwtSign, bcryptHash, verifyPassword, checkRateLimit, resetRateLimit, authMiddleware } = require('./src/middleware/auth');
 
 // ── Constantes ───────────────────────────────────────────────────────
 const MODULES = [
@@ -316,7 +316,7 @@ async function syncClientUser(clientId, b, opts = {}, db) {
     const cpfDigits    = String(b.cpf || '').replace(/\D/g, '');
     const initialPwd   = cpfDigits.length >= 6 ? cpfDigits : 'cliente@123';
     await dbRun('INSERT INTO users(email,password_hash,name,role,client_id,active) VALUES(?,?,?,?,?,1)',
-                [email, sha256(initialPwd), b.name, 'cliente', clientId]);
+                [email, await bcryptHash(initialPwd), b.name, 'cliente', clientId]);
     result.created = true;
     result.initialPassword = initialPwd;
   }
@@ -470,10 +470,15 @@ addRoute('GET', '/api/version', (req, res) => {
 const { saasAll, saasGet, saasRun } = createSaasHelpers();
 
 addRoute('POST', '/api/superadmin/auth/login', async (req, res, ctx) => {
+  if (!checkRateLimit(req)) return sendJson(res, { error: 'Muitas tentativas. Aguarde 15 minutos.' }, 429);
   const { email = '', password = '' } = ctx.body;
   const admin = await saasGet('SELECT * FROM saas.super_admins WHERE email=$1', [email.toLowerCase()]);
-  if (!admin || !verifyPassword(password, admin.password_hash))
-    return sendJson(res, { error: 'Credenciais inválidas' }, 401);
+  const { ok, needsRehash } = await verifyPassword(password, admin?.password_hash || '');
+  if (!admin || !ok) return sendJson(res, { error: 'Credenciais inválidas' }, 401);
+  resetRateLimit(req);
+  if (needsRehash) {
+    await saasRun('UPDATE saas.super_admins SET password_hash=$1 WHERE id=$2', [await bcryptHash(password), admin.id]);
+  }
   const token = jwtSign({ super_admin_id: admin.id, email: admin.email, name: admin.name, role: 'superadmin' }, 86400);
   sendJson(res, { token, admin: { id: admin.id, name: admin.name, email: admin.email } });
 });
@@ -582,7 +587,7 @@ addRoute('POST', '/api/superadmin/tenants/:slug/reset-admin-password', async (re
       : await tGet("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1", []);
     if (!user) return sendJson(res, { error: 'Admin não encontrado' }, 404);
     await tRun('UPDATE users SET password_hash=?, must_change_password=1 WHERE id=?',
-               [sha256(new_password), user.id]);
+               [await bcryptHash(new_password), user.id]);
     // Persiste nova senha no registro saas
     await saasRun(
       'UPDATE saas.tenants SET admin_password_plain=$1 WHERE slug=$2',
@@ -683,12 +688,17 @@ addRoute('GET', '/api/superadmin/tenants/:slug/stats', async (req, res, ctx) => 
 //  ROTAS — AUTH (por tenant)
 // ═════════════════════════════════════════════════════════════════════
 addRoute('POST', '/api/auth/login', async (req, res, ctx) => {
+  if (!checkRateLimit(req)) return sendJson(res, { error: 'Muitas tentativas. Aguarde 15 minutos.' }, 429);
   const { email = '', password = '' } = ctx.body;
-  const { dbGet: tGet, dbAll: tAll } = ctx.db;
+  const { dbGet: tGet, dbAll: tAll, dbRun: tRun } = ctx.db;
   const user = await tGet('SELECT * FROM users WHERE email=?', [email.toLowerCase()]);
-  if (!user || !verifyPassword(password, user.password_hash))
-    return sendJson(res, { error: 'Credenciais inválidas' }, 401);
+  const { ok, needsRehash } = await verifyPassword(password, user?.password_hash || '');
+  if (!user || !ok) return sendJson(res, { error: 'Credenciais inválidas' }, 401);
   if (user.active === 0) return sendJson(res, { error: 'Usuário desativado' }, 403);
+  resetRateLimit(req);
+  if (needsRehash) {
+    await tRun('UPDATE users SET password_hash=? WHERE id=?', [await bcryptHash(password), user.id]);
+  }
   const permissions = await loadPermissionsAll(user.role, tAll);
   const mustChange = user.must_change_password === 1 || user.must_change_password === true;
   const token = jwtSign({
@@ -718,7 +728,7 @@ addRoute('POST', '/api/auth/forgot-password', async (req, res, ctx) => {
   // Salva o CPF no usuário (se ainda não tiver) e reseta a senha
   await tRun(
     'UPDATE users SET password_hash=?, must_change_password=1, cpf=COALESCE(NULLIF(cpf,\'\'), ?) WHERE id=?',
-    [sha256(cleanCpf), cleanCpf, user.id]
+    [await bcryptHash(cleanCpf), cleanCpf, user.id]
   );
   sendJson(res, { ok: true, message: 'Senha redefinida para o seu CPF (somente números). Troque após o login.' });
 });
@@ -731,7 +741,7 @@ addRoute('POST', '/api/auth/change-password', async (req, res, ctx) => {
   const { dbRun: tRun } = ctx.db;
   await tRun(
     'UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?',
-    [sha256(new_password), ctx.user.user_id]
+    [await bcryptHash(new_password), ctx.user.user_id]
   );
   sendJson(res, { ok: true });
 });
@@ -811,7 +821,7 @@ addRoute('POST', '/api/users', async (req, res, ctx) => {
   const { dbRun: tRun } = ctx.db;
   try {
     const r = await tRun('INSERT INTO users(email,password_hash,name,role,client_id,active) VALUES(?,?,?,?,?,1)',
-      [String(b.email).toLowerCase(), sha256(b.password), b.name, b.role, b.role==='cliente' ? b.client_id : null]);
+      [String(b.email).toLowerCase(), await bcryptHash(b.password), b.name, b.role, b.role==='cliente' ? b.client_id : null]);
     await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
                [ctx.user.user_id, ctx.user.name, 'create_user', `${b.email} (${b.role})`]);
     sendJson(res, { id: r.lastInsertRowid }, 201);
@@ -836,7 +846,7 @@ addRoute('PUT', '/api/users/:id', async (req, res, ctx) => {
   const act  = b.active === undefined ? u.active : (b.active ? 1 : 0);
   await tRun('UPDATE users SET name=?,email=?,role=?,client_id=?,active=? WHERE id=?',
              [b.name || u.name, (b.email || u.email).toLowerCase(), role, cid, act, id]);
-  if (b.password) await tRun('UPDATE users SET password_hash=? WHERE id=?', [sha256(b.password), id]);
+  if (b.password) await tRun('UPDATE users SET password_hash=? WHERE id=?', [await bcryptHash(b.password), id]);
   await tRun(`INSERT INTO system_logs(user_id,user_name,action,details) VALUES(?,?,?,?)`,
              [ctx.user.user_id, ctx.user.name, 'update_user', `#${id}`]);
   sendJson(res, { ok: true });
