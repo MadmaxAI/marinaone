@@ -8,10 +8,10 @@ Sempre chamar o usuário de **CEO** (nunca "usuário", "você" genérico, etc.).
 
 Após qualquer alteração de código, o Claude deve:
 1. Aplicar as mudanças nos arquivos
-2. Rodar `testar.bat` para atualizar o ambiente local
-3. Informar ao CEO: **"Alteração feita. Teste em http://localhost:3000 e me diga 'aprovado' para publicar."**
+2. Rodar `testar.bat` — já faz o bump de versão (patch por padrão) e reconstrói o Docker
+3. Informar ao CEO: **"Alteração feita. Teste em http://localhost:3000 (vX.Y.Z) e me diga 'aprovado' para publicar."**
 4. **AGUARDAR** o CEO dizer "aprovado" (ou variações: "ok", "pode publicar", "publish", "deploy")
-5. Somente então rodar `publicar.bat "descrição"`
+5. Somente então rodar `publicar.bat "descrição"` — commita e pusha a versão já bumpad
 
 ## NUNCA fazer isso sozinho
 - Nunca rodar `publicar.bat` sem aprovação explícita do CEO
@@ -23,15 +23,16 @@ Após qualquer alteração de código, o Claude deve:
 ```
 Claude altera código
         ↓
-Claude roda: testar.bat
+Claude roda: testar.bat          ← bumpa versão + reconstrói Docker
         ↓
 Claude diz: "Teste em localhost:3000 (vX.Y.Z) e diga 'aprovado'"
-        ↓         ↑ SEMPRE informar a versão atual do package.json
+        ↓
 CEO testa e diz: "aprovado"
         ↓
-Claude roda: publicar.bat "descrição da alteração"
+Claude roda: publicar.bat "descrição"   ← commita e pusha (sem novo bump)
         ↓
 Deploy automático no Railway ✅
+Localhost e produção ambos em vX.Y.Z ✅
 ```
 
 ## Regra de comunicação — versão obrigatória
@@ -39,10 +40,10 @@ Deploy automático no Railway ✅
 SEMPRE informar a versão em dois momentos:
 
 1. **Ao avisar para testar localmente:**
-   - Exemplo: **"Alteração feita. Teste em http://localhost:3000 (v2.1.1) e me diga 'aprovado' para publicar."**
+   - Exemplo: **"Alteração feita. Teste em http://localhost:3000 (v2.3.3) e me diga 'aprovado' para publicar."**
 
 2. **Ao confirmar publicação em produção:**
-   - Exemplo: **"Publicado v2.1.2 em produção! Disponível em https://marinaone.com.br"**
+   - Exemplo: **"Publicado v2.3.3 — localhost e produção ambos em v2.3.3."**
 
 ## ⚠️ REGRA CRÍTICA — Consistência Banco + Código (PRODUÇÃO NÃO PODE PARAR)
 

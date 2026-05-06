@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.3] -- 2026-05-06
+- Novo fluxo de versao: testar.bat bumpa versao antes do build
+
 ## [2.3.2] -- 2026-05-06
 - Role totem dedicada com pagina e layout kiosk touch-first para tablet
 
@@ -168,6 +171,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
