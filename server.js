@@ -1137,6 +1137,23 @@ addRoute('PUT', '/api/spots/:id', async (req, res, ctx) => {
   sendJson(res, { ok: true });
 });
 
+addRoute('POST', '/api/spots/resequence', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const { type, prefix = '', start = 1, padding = 3, dry_run = true } = ctx.body;
+  if (!['seca', 'molhada'].includes(type)) return sendJson(res, { error: 'Tipo inválido' }, 400);
+  const { dbAll: tAll, dbRun: tRun } = ctx.db;
+  const spots = await tAll('SELECT id, number FROM spots WHERE type=? ORDER BY id ASC', [type]);
+  if (!spots.length) return sendJson(res, { error: 'Nenhuma vaga encontrada para este tipo' }, 404);
+  const preview = spots.map((s, i) => ({
+    id: s.id,
+    old_number: s.number,
+    new_number: prefix + String(parseInt(start) + i).padStart(parseInt(padding), '0')
+  }));
+  if (dry_run) return sendJson(res, { preview });
+  for (const p of preview) await tRun('UPDATE spots SET number=? WHERE id=?', [p.new_number, p.id]);
+  sendJson(res, { ok: true, updated: preview.length });
+});
+
 addRoute('DELETE', '/api/spots/:id', async (req, res, ctx) => {
   const { dbGet: tGet, dbRun: tRun } = ctx.db;
   const spot = await tGet('SELECT * FROM spots WHERE id=?', [ctx.params.id]);

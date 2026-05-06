@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.28] -- 2026-05-06
+- Vagas: funcao Resequenciar com preview e confirmacao - renumera spots sem afetar vinculos
+
 ## [2.3.27] -- 2026-05-06
 - Cronograma: ajustes finais de layout - barras top:10px height:90px, container 120px, linha vermelha 20px abaixo das barras, trator virado para direita na timeline e legenda
 
@@ -195,6 +198,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

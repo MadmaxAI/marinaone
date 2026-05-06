@@ -2834,6 +2834,7 @@ pages.spots = async () => {
   <div class="flex justify-between mb-2">
     <div class="flex gap-2">
       <button class="btn btn-primary" onclick="openNewSpotModal()">+ Nova Vaga</button>
+      <button class="btn btn-ghost" onclick="openResequenciarModal()">🔢 Resequenciar</button>
     </div>
     <button class="btn-export" onclick="exportVagas()">📥 Excel</button>
   </div>
@@ -3030,6 +3031,91 @@ async function saveNewSpotBatch() {
     pages.spots();
   } else {
     toast(r?.error || 'Erro ao criar vagas em lote', 'error');
+  }
+}
+
+function openResequenciarModal() {
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="min-width:520px;max-width:640px">
+    <div class="modal-title">🔢 Resequenciar Vagas</div>
+    <div class="form-row cols2" style="margin-bottom:16px">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="rs-type"><option value="seca">🏗️ Seca</option><option value="molhada">🌊 Molhada</option></select>
+      </div>
+      <div class="form-group">
+        <label>Prefixo</label>
+        <input id="rs-prefix" type="text" placeholder="ex: S-, VS-, M-" value="S-">
+      </div>
+    </div>
+    <div class="form-row cols2" style="margin-bottom:20px">
+      <div class="form-group">
+        <label>Número inicial</label>
+        <input id="rs-start" type="number" min="1" value="1">
+      </div>
+      <div class="form-group">
+        <label>Dígitos (padding)</label>
+        <select id="rs-padding">
+          <option value="1">1 → S-1, S-2</option>
+          <option value="2">2 → S-01, S-02</option>
+          <option value="3" selected>3 → S-001, S-002</option>
+          <option value="4">4 → S-0001, S-0002</option>
+        </select>
+      </div>
+    </div>
+    <div id="rs-preview-area" style="display:none;margin-bottom:20px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Prévia da renumeração</div>
+      <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--surface2)">
+            <th style="padding:8px 12px;text-align:left;color:var(--text3)">Número atual</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--text3)">Novo número</th>
+          </tr></thead>
+          <tbody id="rs-preview-body"></tbody>
+        </table>
+      </div>
+      <div id="rs-preview-count" style="font-size:11px;color:var(--text3);margin-top:6px"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-ghost" onclick="previewResequencia()">🔍 Pré-visualizar</button>
+      <button id="rs-confirm-btn" class="btn btn-primary" style="display:none" onclick="confirmarResequencia()">✅ Confirmar Renumeração</button>
+    </div>
+  </div>`);
+}
+
+async function previewResequencia() {
+  const type    = document.getElementById('rs-type').value;
+  const prefix  = document.getElementById('rs-prefix').value;
+  const start   = parseInt(document.getElementById('rs-start').value) || 1;
+  const padding = parseInt(document.getElementById('rs-padding').value) || 3;
+  const r = await api('POST', '/spots/resequence', { type, prefix, start, padding, dry_run: true });
+  if (!r || !r.preview) { toast(r?.error || 'Erro ao gerar prévia', 'error'); return; }
+  const tbody = document.getElementById('rs-preview-body');
+  tbody.innerHTML = r.preview.map(p => `
+    <tr style="border-top:1px solid var(--border)">
+      <td style="padding:7px 12px;color:var(--text2)">${p.old_number}</td>
+      <td style="padding:7px 12px;font-weight:600;color:var(--success)">${p.new_number}</td>
+    </tr>`).join('');
+  document.getElementById('rs-preview-count').textContent = `${r.preview.length} vaga(s) serão renumeradas`;
+  document.getElementById('rs-preview-area').style.display = 'block';
+  document.getElementById('rs-confirm-btn').style.display = 'inline-flex';
+}
+
+async function confirmarResequencia() {
+  const type    = document.getElementById('rs-type').value;
+  const prefix  = document.getElementById('rs-prefix').value;
+  const start   = parseInt(document.getElementById('rs-start').value) || 1;
+  const padding = parseInt(document.getElementById('rs-padding').value) || 3;
+  const btn = document.getElementById('rs-confirm-btn');
+  btn.disabled = true; btn.textContent = '⏳ Aplicando...';
+  const r = await api('POST', '/spots/resequence', { type, prefix, start, padding, dry_run: false });
+  if (r && r.ok) {
+    toast(`✅ ${r.updated} vaga(s) renumeradas com sucesso!`);
+    closeModalForce();
+    pages.spots();
+  } else {
+    toast(r?.error || 'Erro ao renumerar vagas', 'error');
+    btn.disabled = false; btn.textContent = '✅ Confirmar Renumeração';
   }
 }
 
