@@ -1322,7 +1322,16 @@ addRoute('GET', '/api/queue/calendar', async (req, res, ctx) => {
   const opsStart = settings['ops_start_time'] || '07:00';
   const opsEnd   = settings['ops_end_time']   || '18:00';
   applyEstimatedTimes(activeEnriched, getManeuverTime(settings), opsStart, opsEnd);
-  sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime(settings) });
+  const mtRow = await tGet(`SELECT MAX(COALESCE(completed_at, started_at, requested_at)) as mt FROM queue_operations WHERE DATE(requested_at)=? OR status NOT IN ('completed','cancelled')`, [today]);
+  const mtime = mtRow?.mt || today;
+  sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime(settings), mtime });
+});
+
+addRoute('GET', '/api/queue/calendar/mtime', async (req, res, ctx) => {
+  const { dbGet: tGet } = ctx.db;
+  const today = todayStr();
+  const row = await tGet(`SELECT MAX(COALESCE(completed_at, started_at, requested_at)) as mt FROM queue_operations WHERE DATE(requested_at)=? OR status NOT IN ('completed','cancelled')`, [today]);
+  sendJson(res, { mtime: row?.mt || today });
 });
 
 addRoute('GET', '/api/queue', async (req, res, ctx) => {
@@ -1907,7 +1916,7 @@ addRoute('POST', '/api/store/pix-qrcode', async (req, res, ctx) => {
 // ═════════════════════════════════════════════════════════════════════
 addRoute('GET', '/api/conveniencia/catalog', async (req, res, ctx) => {
   const items = await ctx.db.dbAll(
-    'SELECT id, name, category, price, stock, unit FROM store_items WHERE active=1 ORDER BY category, name'
+    'SELECT id, name, category, price, stock, unit, photo_url FROM store_items WHERE active=1 ORDER BY category, name'
   );
   const catMap = {};
   for (const item of items) {

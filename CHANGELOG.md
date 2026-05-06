@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.12] -- 2026-05-06
+- fotos de produtos visíveis em conveniência e totem; cache do catálogo invalidado ao salvar/remover itens
+
 ## [2.3.8] -- 2026-05-06
 - migration 012 sincroniza spot_id nos contratos de producao
 
@@ -180,6 +183,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
