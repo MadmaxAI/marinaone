@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.42] -- 2026-05-06
+- SA: clicar na linha da tabela abre detalhes do tenant
+
 ## [2.3.40] -- 2026-05-06
 - Receita Mes: exibe valor do mes + total acumulado na tabela SA
 
@@ -207,6 +210,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

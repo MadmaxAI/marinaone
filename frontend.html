@@ -7373,7 +7373,7 @@ function saRenderTable() {
     const statusBadge = t.active
       ? '<span class="badge badge-success">Ativa</span>'
       : '<span class="badge badge-danger">Inativa</span>';
-    return `<tr>
+    return `<tr class="row-link" onclick="saViewTenant(${origIdx})" title="Clique para ver detalhes">
       <td>
         <div style="display:flex;align-items:center;gap:8px">
           ${st?.marina_logo ? `<img src="${st.marina_logo}" style="width:28px;height:28px;object-fit:contain;border-radius:4px;flex-shrink:0">` : '<span style="width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:16px">⚓</span>'}
@@ -7391,7 +7391,7 @@ function saRenderTable() {
       </td>
       <td>${statusBadge}</td>
       <td style="font-size:12px;color:var(--text3)">${dt}</td>
-      <td>
+      <td onclick="event.stopPropagation()">
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="saViewTenant(${origIdx})" title="Ver detalhes">👁️</button>
           <button class="btn btn-ghost btn-sm" onclick="saEditTenant(${origIdx})" title="Editar">✏️</button>
