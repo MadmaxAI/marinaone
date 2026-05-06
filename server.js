@@ -39,13 +39,14 @@ const MODULES = [
   { key: 'financial',   label: 'Financeiro',        group: 'Operações' },
   { key: 'store',        label: 'Loja / PDV',        group: 'Operações' },
   { key: 'conveniencia', label: 'Conveniência',      group: 'Operações' },
+  { key: 'totem',        label: 'Totem',             group: 'Operações' },
   { key: 'maintenance',  label: 'Manutenção',        group: 'Operações' },
   { key: 'analytics',   label: 'Analytics',         group: 'Análise'   },
   { key: 'alerts',      label: 'Alertas',           group: 'Análise'   },
   { key: 'settings',    label: 'Configurações',     group: 'Sistema'   },
 ];
 const MODULE_KEYS  = MODULES.map(m => m.key);
-const VALID_ROLES  = ['admin', 'operador', 'loja', 'cliente'];
+const VALID_ROLES  = ['admin', 'operador', 'loja', 'cliente', 'totem'];
 
 // Sub-módulos por módulo (abas internas com controle granular)
 const SUBMODULES = {
@@ -783,7 +784,7 @@ addRoute('PUT', '/api/access/permissions', async (req, res, ctx) => {
 addRoute('POST', '/api/access/permissions/reset', async (req, res, ctx) => {
   if (!requireRole(ctx, res, 'admin')) return;
   const pool = getTenantPool(ctx.tenantSlug);
-  await pool.unsafe(`DELETE FROM role_permissions WHERE role IN ('operador','loja','cliente')`);
+  await pool.unsafe(`DELETE FROM role_permissions WHERE role IN ('operador','loja','cliente','totem')`);
   await seedDefaultPermissions(pool);
   sendJson(res, { ok: true });
 });
@@ -2359,11 +2360,12 @@ async function boot() {
     for (const { slug } of tenants) {
       try {
         await runMigrations(slug);
+        await seedDefaultPermissions(getTenantPool(slug));
       } catch (e) {
         console.error(`[boot] Erro ao migrar tenant ${slug}:`, e.message);
       }
     }
-    if (tenants.length > 0) console.log(`[boot] Migrations verificadas em ${tenants.length} tenant(s).`);
+    if (tenants.length > 0) console.log(`[boot] Migrations e permissões verificadas em ${tenants.length} tenant(s).`);
   } catch (e) {
     console.error('[boot] Erro ao listar tenants para migração:', e.message);
   }

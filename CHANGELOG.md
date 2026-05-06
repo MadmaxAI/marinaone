@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.2] -- 2026-05-06
+- Role totem dedicada com pagina e layout kiosk touch-first para tablet
+
 ## [2.3.1] -- 2026-05-06
 - Conveniencia layout PDV, foto produto sugestao internet, edicao item corrigida
 
@@ -165,6 +168,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

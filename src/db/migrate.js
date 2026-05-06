@@ -211,6 +211,12 @@ async function seedDefaultPermissions(pool) {
       conveniencia: [1,1,0,0],
       maintenance: [1,0,0,0], analytics: [0,0,0,0], alerts: [1,0,0,0], settings: [0,0,0,0],
     },
+    totem: {
+      dashboard: [0,0,0,0], queue: [0,0,0,0], clients: [0,0,0,0], vessels: [0,0,0,0],
+      spots: [0,0,0,0], contracts: [0,0,0,0], financial: [0,0,0,0], store: [0,0,0,0],
+      conveniencia: [0,0,0,0], totem: [1,1,0,0],
+      maintenance: [0,0,0,0], analytics: [0,0,0,0], alerts: [0,0,0,0], settings: [0,0,0,0],
+    },
   };
 
   for (const [role, modules] of Object.entries(perms)) {
