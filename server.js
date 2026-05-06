@@ -469,6 +469,9 @@ addRoute('GET', '/api/version', (req, res) => {
 // ═════════════════════════════════════════════════════════════════════
 const { saasAll, saasGet, saasRun } = createSaasHelpers();
 
+// OTPs de recuperação em memória: email → { otp, expires }
+const _saOtps = new Map();
+
 addRoute('POST', '/api/superadmin/auth/login', async (req, res, ctx) => {
   if (!checkRateLimit(req)) return sendJson(res, { error: 'Muitas tentativas. Aguarde 15 minutos.' }, 429);
   const { email = '', password = '' } = ctx.body;
@@ -483,6 +486,29 @@ addRoute('POST', '/api/superadmin/auth/login', async (req, res, ctx) => {
   sendJson(res, { token, admin: { id: admin.id, name: admin.name, email: admin.email } });
 });
 
+addRoute('POST', '/api/superadmin/auth/forgot', async (req, res) => {
+  const { email = '' } = req.body || {};
+  const admin = await saasGet('SELECT id, email FROM saas.super_admins WHERE email=$1', [email.toLowerCase()]);
+  if (!admin) return sendJson(res, { ok: true }); // não revelar se email existe
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  _saOtps.set(admin.email, { otp, expires: Date.now() + 10 * 60 * 1000 });
+  console.log(`\n⚠️  SUPER-ADMIN RESET OTP para ${admin.email}: ${otp}  (válido 10 min)\n`);
+  sendJson(res, { ok: true });
+});
+
+addRoute('POST', '/api/superadmin/auth/reset', async (req, res) => {
+  const { email = '', otp = '', new_password = '' } = req.body || {};
+  if (!new_password || new_password.length < 6) return sendJson(res, { error: 'Nova senha muito curta (mín. 6 caracteres)' }, 400);
+  const admin = await saasGet('SELECT id, email FROM saas.super_admins WHERE email=$1', [email.toLowerCase()]);
+  const entry = _saOtps.get(email.toLowerCase());
+  if (!admin || !entry || entry.otp !== otp || Date.now() > entry.expires) {
+    return sendJson(res, { error: 'Código inválido ou expirado' }, 401);
+  }
+  _saOtps.delete(email.toLowerCase());
+  await saasRun('UPDATE saas.super_admins SET password_hash=$1 WHERE id=$2', [await bcryptHash(new_password), admin.id]);
+  sendJson(res, { ok: true });
+});
+
 function requireSuperAdmin(ctx, res) {
   if (!ctx.user || ctx.user.role !== 'superadmin') {
     sendJson(res, { error: 'Acesso restrito ao super-admin' }, 403);
@@ -490,6 +516,25 @@ function requireSuperAdmin(ctx, res) {
   }
   return true;
 }
+
+addRoute('PUT', '/api/superadmin/profile', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const { new_email, current_password, new_password } = ctx.body || {};
+  if (!current_password) return sendJson(res, { error: 'Senha atual obrigatória' }, 400);
+  const admin = await saasGet('SELECT * FROM saas.super_admins WHERE id=$1', [ctx.user.super_admin_id]);
+  if (!admin) return sendJson(res, { error: 'Admin não encontrado' }, 404);
+  const { ok } = await verifyPassword(current_password, admin.password_hash);
+  if (!ok) return sendJson(res, { error: 'Senha atual incorreta' }, 422);
+  if (new_email) {
+    const dup = await saasGet('SELECT id FROM saas.super_admins WHERE email=$1 AND id<>$2', [new_email.toLowerCase(), admin.id]);
+    if (dup) return sendJson(res, { error: 'E-mail já em uso' }, 409);
+    await saasRun('UPDATE saas.super_admins SET email=$1 WHERE id=$2', [new_email.toLowerCase(), admin.id]);
+  }
+  if (new_password) {
+    await saasRun('UPDATE saas.super_admins SET password_hash=$1 WHERE id=$2', [await bcryptHash(new_password), admin.id]);
+  }
+  sendJson(res, { ok: true });
+});
 
 addRoute('GET', '/api/superadmin/tenants', async (req, res, ctx) => {
   if (!requireSuperAdmin(ctx, res)) return;
@@ -561,6 +606,23 @@ addRoute('GET', '/api/superadmin/tenants/:slug/credentials', async (req, res, ct
     admin_email:    email,
     admin_password: password,
   });
+});
+
+addRoute('DELETE', '/api/superadmin/tenants/:slug', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const { slug } = ctx.params;
+  const { confirm_slug } = ctx.body || {};
+  if (confirm_slug !== slug) return sendJson(res, { error: 'Confirmação incorreta' }, 400);
+  const tenant = await saasGet('SELECT * FROM saas.tenants WHERE slug=$1', [slug]);
+  if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+  if (tenant.active) return sendJson(res, { error: 'Desative o tenant antes de excluí-lo' }, 409);
+  const { slugToSchema, evictTenantPool } = require('./src/db/pool');
+  const schemaName = slugToSchema(slug);
+  await evictTenantPool(slug);
+  await getGlobalPool().unsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+  await saasRun('DELETE FROM saas.tenants WHERE slug=$1', [slug]);
+  console.log(`[superadmin] Tenant "${slug}" excluído por ${ctx.user.email}`);
+  sendJson(res, { ok: true });
 });
 
 addRoute('PUT', '/api/superadmin/tenants/:slug', async (req, res, ctx) => {

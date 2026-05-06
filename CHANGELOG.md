@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.40] -- 2026-05-06
+- Receita Mes: exibe valor do mes + total acumulado na tabela SA
+
 ## [2.3.34] -- 2026-05-06
 - Linhas clicaveis em Clientes e Manutencao; grafico Cobranças por Status em portugues
 
@@ -204,6 +207,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

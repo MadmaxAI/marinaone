@@ -425,6 +425,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <span id="sa-version-badge" style="font-size:10px;color:var(--text3);letter-spacing:.3px;cursor:default"></span>
       <span id="sa-user-name" style="font-size:13px;color:var(--text3)"></span>
       <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 10px;border-radius:10px;background:linear-gradient(135deg,#7c3aed,#4c1d95);color:#fff">SUPERADMIN</span>
+      <button class="btn btn-ghost btn-sm" onclick="saEditProfile()">⚙️ Minha Conta</button>
       <button class="btn btn-ghost btn-sm" onclick="saLogout()">Sair</button>
     </div>
   </div>
@@ -523,6 +524,7 @@ function togglePasswordVisibility(inputId, btn) {
 
 // ── ESQUECI MINHA SENHA ───────────────────────────────
 function showForgotPassword() {
+  if (window._saMode) { showSAForgotPassword(); return; }
   document.getElementById('modal-root').innerHTML = `
   <div class="modal-overlay" onclick="if(event.target===this)closeForgotModal()" style="z-index:3000">
     <div class="modal-box" style="max-width:400px">
@@ -554,6 +556,76 @@ function showForgotPassword() {
 
 function closeForgotModal() {
   document.getElementById('modal-root').innerHTML = '';
+}
+
+function showSAForgotPassword() {
+  document.getElementById('modal-root').innerHTML = `
+  <div class="modal-overlay" onclick="if(event.target===this)closeForgotModal()" style="z-index:3000">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header">
+        <div class="modal-title">🔑 Recuperar Acesso Super Admin</div>
+        <button class="modal-close" onclick="closeForgotModal()">✕</button>
+      </div>
+      <div style="padding:0 4px">
+        <div id="sa-forgot-step1">
+          <p style="font-size:13px;color:var(--text3);margin-bottom:16px">
+            Informe o e-mail do super admin. Um código de 6 dígitos será gerado e exibido nos <strong>logs do servidor</strong> (<code>docker logs marinaone_app</code>).
+          </p>
+          <div id="sa-forgot-err" class="login-error" style="display:none;margin-bottom:12px"></div>
+          <div class="form-group"><label>E-mail</label><input id="sa-forgot-email" type="email" placeholder="arthur@marinaone.com.br"></div>
+          <div class="form-actions" style="border-top:none;margin-top:16px">
+            <button class="btn btn-ghost" onclick="closeForgotModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saForgotRequestOtp()">Gerar Código</button>
+          </div>
+        </div>
+        <div id="sa-forgot-step2" style="display:none">
+          <p style="font-size:13px;color:var(--text3);margin-bottom:16px">
+            Código enviado aos logs. Consulte com <code>docker logs marinaone_app --tail=10</code> e preencha abaixo.
+          </p>
+          <div id="sa-forgot-err2" class="login-error" style="display:none;margin-bottom:12px"></div>
+          <div class="form-group"><label>Código (6 dígitos)</label><input id="sa-forgot-otp" type="text" maxlength="6" placeholder="123456"></div>
+          <div class="form-group"><label>Nova senha</label><input id="sa-forgot-newpwd" type="password" placeholder="Mín. 6 caracteres"></div>
+          <div class="form-actions" style="border-top:none;margin-top:16px">
+            <button class="btn btn-ghost" onclick="closeForgotModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saForgotReset()">Redefinir Senha</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(() => document.getElementById('sa-forgot-email')?.focus(), 100);
+}
+
+async function saForgotRequestOtp() {
+  const email = document.getElementById('sa-forgot-email')?.value.trim();
+  const errEl = document.getElementById('sa-forgot-err');
+  if (!email) { errEl.textContent = 'Informe o e-mail'; errEl.style.display = 'block'; return; }
+  await fetch(API + '/superadmin/auth/forgot', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ email })
+  });
+  document.getElementById('sa-forgot-step1').style.display = 'none';
+  document.getElementById('sa-forgot-step2').style.display = 'block';
+  setTimeout(() => document.getElementById('sa-forgot-otp')?.focus(), 100);
+}
+
+async function saForgotReset() {
+  const email      = document.getElementById('sa-forgot-email')?.value.trim();
+  const otp        = document.getElementById('sa-forgot-otp')?.value.trim();
+  const new_password = document.getElementById('sa-forgot-newpwd')?.value;
+  const errEl = document.getElementById('sa-forgot-err2');
+  errEl.style.display = 'none';
+  if (!otp || !new_password) { errEl.textContent = 'Preencha o código e a nova senha'; errEl.style.display = 'block'; return; }
+  const r = await fetch(API + '/superadmin/auth/reset', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ email, otp, new_password })
+  });
+  const d = await r.json();
+  if (!r.ok) { errEl.textContent = d.error || 'Código inválido'; errEl.style.display = 'block'; return; }
+  closeForgotModal();
+  const err = document.getElementById('login-error');
+  err.style.cssText = 'display:block;background:rgba(34,197,94,.1);color:#22c55e;border-left:3px solid #22c55e';
+  err.textContent = '✅ Senha redefinida com sucesso. Faça login com a nova senha.';
 }
 
 async function submitForgotPassword() {
@@ -7181,6 +7253,49 @@ function saLogout() {
   location.reload();
 }
 
+function saEditProfile() {
+  const currentEmail = window.saUser?.email || '';
+  modal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">⚙️ Minha Conta</div>
+    <div class="form-group">
+      <label>E-mail atual</label>
+      <div style="font-size:13px;color:var(--text3);padding:6px 0">${currentEmail}</div>
+    </div>
+    <div class="form-group">
+      <label>Novo e-mail <span style="color:var(--text3);font-size:11px">(deixe em branco para não alterar)</span></label>
+      <input id="sa-profile-email" type="email" placeholder="${currentEmail}">
+    </div>
+    <div class="form-group">
+      <label>Nova senha <span style="color:var(--text3);font-size:11px">(deixe em branco para não alterar)</span></label>
+      <input id="sa-profile-newpwd" type="password" placeholder="Nova senha">
+    </div>
+    <div class="form-group">
+      <label>Senha atual <span style="color:var(--danger)">*</span></label>
+      <input id="sa-profile-curpwd" type="password" placeholder="Obrigatória para confirmar">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saProfileSave()">Salvar</button>
+    </div>
+  </div>`);
+}
+
+async function saProfileSave() {
+  const new_email       = document.getElementById('sa-profile-email')?.value.trim();
+  const new_password    = document.getElementById('sa-profile-newpwd')?.value;
+  const current_password = document.getElementById('sa-profile-curpwd')?.value;
+  if (!current_password) { toast('Informe a senha atual', 'error'); return; }
+  if (!new_email && !new_password) { toast('Informe ao menos um campo para alterar', 'error'); return; }
+  const body = { current_password };
+  if (new_email)    body.new_email    = new_email;
+  if (new_password) body.new_password = new_password;
+  const r = await saApi('PUT', '/superadmin/profile', body);
+  if (!r || r.error) { toast(r?.error || 'Erro ao salvar', 'error'); return; }
+  toast('Dados atualizados. Faça login novamente.');
+  closeModalForce();
+  if (new_email || new_password) setTimeout(() => { saLogout(); }, 1500);
+}
+
 async function saApi(method, path, body) {
   const r = await fetch(API + path, {
     method,
@@ -7269,7 +7384,11 @@ function saRenderTable() {
       <td>${planBadge(t.plan)}</td>
       <td>${st?.clients ?? '—'}</td>
       <td>${st?.users   ?? '—'}</td>
-      <td style="font-size:12px">${st ? fmtBRL(st.revenue_month ?? st.revenue) : '—'}</td>
+      <td style="font-size:12px">
+        ${st?.revenue != null
+          ? `<div style="font-weight:600">${fmtBRL(st.revenue_month)}</div><div style="font-size:10px;color:var(--text3)">Total: ${fmtBRL(st.revenue)}</div>`
+          : '—'}
+      </td>
       <td>${statusBadge}</td>
       <td style="font-size:12px;color:var(--text3)">${dt}</td>
       <td>
@@ -7279,6 +7398,7 @@ function saRenderTable() {
           <button class="btn btn-ghost btn-sm" onclick="saToggleActive('${t.slug}',${!!t.active})" title="${t.active?'Desativar':'Ativar'}">
             ${t.active ? '⏸️' : '▶️'}
           </button>
+          ${!t.active ? `<button class="btn btn-danger btn-sm" onclick="saDeleteTenant('${t.slug}','${t.name.replace(/'/g,"\\'")}')" title="Excluir tenant permanentemente">🗑️</button>` : ''}
         </div>
       </td>
     </tr>`;
@@ -7313,6 +7433,36 @@ async function saLoadTenants() {
 async function saToggleActive(slug, currentlyActive) {
   if (!confirm(`${currentlyActive?'Desativar':'Ativar'} a marina "${slug}"?`)) return;
   await saApi('PUT', `/superadmin/tenants/${slug}`, { active: !currentlyActive });
+  saLoadTenants();
+}
+
+function saDeleteTenant(slug, name) {
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+    <div class="modal-title" style="color:var(--danger)">⚠️ Excluir Tenant Permanentemente</div>
+    <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-weight:700;margin-bottom:6px">Esta ação é irreversível.</div>
+      <div style="font-size:13px;color:var(--text2)">Todos os dados da marina <strong>${name}</strong> serão permanentemente apagados:
+        clientes, embarcações, contratos, cobranças, usuários, vagas, operações, configurações e schema do banco de dados.
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Digite <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">${slug}</code> para confirmar</label>
+      <input id="sa-delete-confirm" type="text" placeholder="${slug}" autocomplete="off">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
+      <button class="btn btn-danger" onclick="saDeleteTenantConfirm('${slug}')">🗑️ Excluir Permanentemente</button>
+    </div>
+  </div>`);
+}
+
+async function saDeleteTenantConfirm(slug) {
+  const typed = document.getElementById('sa-delete-confirm')?.value.trim();
+  if (typed !== slug) { toast('Confirmação incorreta — digite o slug exato', 'error'); return; }
+  const r = await saApi('DELETE', `/superadmin/tenants/${slug}`, { confirm_slug: slug });
+  if (!r || r.error) { toast(r?.error || 'Erro ao excluir', 'error'); return; }
+  closeModalForce();
+  toast(`Tenant "${slug}" excluído com sucesso`);
   saLoadTenants();
 }
 
@@ -7386,7 +7536,8 @@ async function saViewTenant(idx) {
             <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;margin-left:6px" onclick="navigator.clipboard.writeText('${devUrl}');toast('URL copiada!')">📋</button>
           </div>
           <div style="font-size:12px"><span style="color:var(--text3)">Prod:</span>
-            <span style="font-family:monospace;color:var(--text2)">${prodUrl}</span>
+            <a href="${prodUrl}" target="_blank" style="color:var(--accent);font-family:monospace">${prodUrl}</a>
+            <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;margin-left:6px" onclick="navigator.clipboard.writeText('${prodUrl}');toast('URL copiada!')">📋</button>
           </div>
         </div>
       </div>
@@ -7416,28 +7567,42 @@ async function saViewTenant(idx) {
     }
     const email    = creds.admin_email    || '';
     const password = creds.admin_password || '';
-    const emailHtml = email
-      ? `<span style="font-family:monospace;font-weight:600;color:var(--text)">${email}</span>
-         <div style="display:flex;gap:4px">
-           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Copiar e-mail"
-                   onclick="navigator.clipboard.writeText('${email}');toast('E-mail copiado!')">📋</button>
-           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;color:var(--primary)" title="Alterar e-mail do admin"
-                   onclick="saChangeAdminEmail('${t.slug}','${email}')">✏️ Alterar</button>
-         </div>`
-      : `<span style="color:var(--text3);font-size:12px">Não informado</span>
-         <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;color:var(--primary)" title="Definir e-mail do admin"
-                 onclick="saChangeAdminEmail('${t.slug}','')">✏️ Definir</button>`;
-    const pwdHtml = password
-      ? `<span id="sv-pwd-text" style="font-family:monospace;font-weight:600;color:var(--text);letter-spacing:2px">••••••••</span>
-         <div style="display:flex;gap:4px">
-           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Mostrar/ocultar"
-                   onclick="(function(btn){const el=document.getElementById('sv-pwd-text');const shown=el.dataset.shown==='1';el.textContent=shown?'••••••••':'${password}';el.dataset.shown=shown?'0':'1';btn.textContent=shown?'👁️':'🙈';})(this)">👁️</button>
-           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" title="Copiar senha"
-                   onclick="navigator.clipboard.writeText('${password}');toast('Senha copiada!')">📋</button>
-         </div>`
-      : `<span style="color:var(--text3);font-size:12px">Não armazenada</span>
-         <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;color:var(--warning)" title="Redefinir senha do admin"
-                 onclick="saResetAdminPassword('${t.slug}', '${email}')">🔑 Redefinir</button>`;
+
+    const maskEmail = e => {
+      const [u, d] = e.split('@');
+      return (u[0] || '') + '***@' + (d ? d[0] + '***' + d.slice(d.lastIndexOf('.')) : '***');
+    };
+
+    const credRow = (id, label, value, maskedValue, onEdit, onCopy) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;width:52px">${label}</span>
+        <span id="${id}" data-shown="0" data-full="${value.replace(/"/g,'&quot;')}" data-masked="${maskedValue.replace(/"/g,'&quot;')}"
+              style="font-family:monospace;font-size:13px;font-weight:600;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis">
+          ${maskedValue}
+        </span>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="btn btn-ghost btn-sm" style="padding:3px 8px;font-size:12px" title="Visualizar / ocultar"
+                  onclick="(function(btn){const el=document.getElementById('${id}');const shown=el.dataset.shown==='1';el.textContent=shown?el.dataset.masked:el.dataset.full;el.dataset.shown=shown?'0':'1';btn.textContent=shown?'👁️':'🙈';})(this)">👁️</button>
+          <button class="btn btn-ghost btn-sm" style="padding:3px 8px;font-size:12px" title="Editar"
+                  onclick="${onEdit}">✏️</button>
+          <button class="btn btn-ghost btn-sm" style="padding:3px 8px;font-size:12px" title="Copiar" ${!value?'disabled':''}
+                  onclick="${onCopy}">📋</button>
+        </div>
+      </div>`;
+
+    const emailRow = credRow(
+      'sv-email-text', 'E-mail',
+      email, email ? maskEmail(email) : '—',
+      `saChangeAdminEmail('${t.slug}','${email}')`,
+      email ? `navigator.clipboard.writeText('${email}');toast('E-mail copiado!')` : ''
+    );
+    const pwdRow = credRow(
+      'sv-pwd-text', 'Senha',
+      password, password ? '••••••••' : '—',
+      `saResetAdminPassword('${t.slug}','${email}')`,
+      password ? `navigator.clipboard.writeText('${password}');toast('Senha copiada!')` : ''
+    );
+
     const warningHtml = password
       ? `<div style="margin-top:10px;font-size:11px;color:var(--text3);padding:8px 10px;background:rgba(239,68,68,.08);border-radius:6px;border-left:3px solid #ef4444">
            ⚠️ Credenciais iniciais. Oriente o admin a trocar a senha no primeiro acesso.
@@ -7445,13 +7610,7 @@ async function saViewTenant(idx) {
       : `<div style="margin-top:10px;font-size:11px;color:var(--text3);padding:8px 10px;background:rgba(245,158,11,.08);border-radius:6px;border-left:3px solid var(--warning)">
            ℹ️ Senha criada antes do registro de credenciais. Use "Redefinir" para gerar uma nova.
          </div>`;
-    el.innerHTML = title + `
-      <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px 12px;align-items:center;font-size:13px">
-        <span style="color:var(--text3);white-space:nowrap">E-mail:</span>
-        ${emailHtml}
-        <span style="color:var(--text3);white-space:nowrap">Senha:</span>
-        ${pwdHtml}
-      </div>` + warningHtml;
+    el.innerHTML = title + emailRow + pwdRow + warningHtml;
   });
 }
 
