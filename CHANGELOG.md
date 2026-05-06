@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.27] -- 2026-05-06
+- Cronograma: ajustes finais de layout - barras top:10px height:90px, container 120px, linha vermelha 20px abaixo das barras, trator virado para direita na timeline e legenda
+
 ## [2.3.18] -- 2026-05-06
 - Cronograma: limites fixos por horario de operacao, labels sem overflow na borda final, trator virado para a direita
 
@@ -192,6 +195,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

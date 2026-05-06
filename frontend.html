@@ -1781,9 +1781,9 @@ function _renderCalContent(container, cal, noticesRaw) {
                     : isNow      ? 'pulse 2s infinite'
                     : 'none';
     return `<div style="
-        position:absolute;left:${leftPct.toFixed(2)}%;width:${widthPct.toFixed(2)}%;
+        position:absolute;left:${leftPct.toFixed(2)}%;width:${widthPct.toFixed(2)}%;top:10px;height:90px;
         background:${color};color:${textColor};opacity:${opacity};
-        border-radius:6px;padding:6px 8px;font-size:11px;min-height:52px;
+        border-radius:6px;padding:6px 8px;font-size:11px;
         box-shadow:${boxShadow}0 1px 3px rgba(0,0,0,.15);
         cursor:default;overflow:hidden;animation:${animation};
       " title="${op.vessel_name} — ${opLabel[op.operation_type]||op.operation_type}\n${fmtTime(op._start.toISOString())} → ${fmtTime(op._end.toISOString())}\n${op.client_name}${calOverdue?'\n⚠ ATRASADO +'+calOverdueMin+'min':''}">
@@ -1804,7 +1804,7 @@ function _renderCalContent(container, cal, noticesRaw) {
          <div style="position:absolute;top:-18px;left:0;transform:translateX(-50%);white-space:nowrap">
            <div class="cal-now-label" style="background:var(--danger);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap">${fmtTime(now.toISOString())}</div>
          </div>
-         <div style="position:absolute;bottom:-28px;left:0;transform:translateX(-50%) scaleX(-1);font-size:22px;line-height:1;animation:tractor-roll 1.5s ease-in-out infinite;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">🚜</div>
+         <div style="position:absolute;bottom:-22px;left:0;transform:translateX(-50%) scaleX(-1);font-size:22px;line-height:1;animation:tractor-roll 1.5s ease-in-out infinite;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">🚜</div>
        </div>` : '';
 
   // Hour tick marks
@@ -1862,10 +1862,10 @@ function _renderCalContent(container, cal, noticesRaw) {
         ${[['descida','#3b82f6','Descida'],['subida','#f59e0b','Subida'],['atracacao','#8b5cf6','Atracação']].map(([,c,l])=>
           `<span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>${l}</span>`
         ).join('')}
-        <span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="font-size:15px;line-height:1">🚜</span>Agora</span>
+        <span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="font-size:15px;line-height:1;display:inline-block;transform:scaleX(-1)">🚜</span>Agora</span>
       </div>
     </div>
-    <div style="position:relative;height:80px;margin:24px 0 8px">
+    <div style="position:relative;height:120px;margin:24px 0 8px">
       ${ticks}
       ${nowLine}
       ${bars}
