@@ -1425,7 +1425,7 @@ addRoute('POST', '/api/queue', async (req, res, ctx) => {
 
   const client    = await tGet('SELECT * FROM clients WHERE id=?', [vessel.client_id]);
   const priority  = client && ['gold', 'vip'].includes(client.tier) ? 1 : 0;
-  const maxOrder  = await tGet(`SELECT MAX(queue_order) as mo FROM queue_operations WHERE status='waiting'`);
+  const maxOrder  = await tGet(`SELECT MAX(queue_order) as mo FROM queue_operations WHERE status NOT IN ('completed','cancelled')`);
   const queueOrder = (Number(maxOrder?.mo) || 0) + 1;
   const r = await tRun(`INSERT INTO queue_operations(vessel_id,client_id,operation_type,status,priority,notes,queue_order,requested_at) VALUES(?,?,?,'waiting',?,?,?,?)`,
                        [ctx.body.vessel_id, vessel.client_id, opType, priority, ctx.body.notes || null, queueOrder, nowStr()]);
@@ -1479,8 +1479,20 @@ addRoute('GET', '/api/queue/notices', async (req, res, ctx) => {
       n.active = 0;
     }
   }
-  const notices = await tAll(`SELECT * FROM queue_notices WHERE active=1 ORDER BY created_at ASC`);
-  // Para role cliente: retorna também o max_op_id para o frontend filtrar
+  let notices = await tAll(`SELECT * FROM queue_notices WHERE active=1 ORDER BY created_at ASC`);
+  // Para role cliente: só exibir aviso se o cliente tinha operação na fila no momento da alteração.
+  // Clientes que entraram após a alteração (op_id > max_op_id) já usam o novo escalonamento e não precisam ver o banner.
+  if (ctx.user && ctx.user.role === 'cliente' && ctx.user.client_id) {
+    const filtered = [];
+    for (const n of notices) {
+      const clientOp = await tAll(
+        `SELECT id FROM queue_operations WHERE client_id=? AND id<=?`,
+        [ctx.user.client_id, n.max_op_id]
+      );
+      if (clientOp.length > 0) filtered.push(n);
+    }
+    notices = filtered;
+  }
   sendJson(res, notices);
 });
 

@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.5] -- 2026-05-06
+- banner aviso fila por cliente e correcao de ordenacao da fila ativa
+
 ## [2.3.3] -- 2026-05-06
 - Novo fluxo de versao: testar.bat bumpa versao antes do build
 
@@ -171,6 +174,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
