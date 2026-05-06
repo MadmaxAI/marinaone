@@ -82,6 +82,109 @@ Cada arquivo deve ser **idempotente** — pode rodar N vezes sem erro (`IF NOT E
 
 ---
 
+## Regras de Produto — Domínio Marina One
+
+### Papéis de usuário (VALID_ROLES)
+| Papel | Acesso |
+|-------|--------|
+| `admin` | Acesso total a todos os módulos |
+| `operador` | Operações e fila; sem acesso financeiro |
+| `loja` | Loja/PDV e conveniência |
+| `cliente` | Somente os próprios dados (vessels, contracts, queue, financial, conveniência) |
+| `totem` | Somente módulo totem (conveniência modo kiosk) |
+
+Regra crítica: papel `cliente` é filtrado por `client_id` em **todas** as queries — nunca retornar dados de outros clientes.
+
+### Vagas (spots)
+- Tipos válidos: `seca` (garagem terrestre) e `molhada` (flutuante/atracação)
+- Status válidos: `available` → `occupied` | `maintenance`
+- Uma vaga comporta **no máximo uma embarcação** (`spots.vessel_id`)
+
+### Contratos
+- **Um contrato ativo por embarcação** — uma embarcação não pode ter dois contratos com `status='active'`
+- **Um cliente pode ter múltiplos contratos** — um por cada embarcação que mantém na marina
+- Status válidos: `active` → `cancelled`
+- Tipo do contrato (`seca` ou `molhada`) reflete o tipo da vaga associada
+- **Ao criar contrato com vaga:** atualizar `spots.status='occupied'` e `spots.vessel_id=vessel_id`
+- **Ao cancelar contrato:**
+  1. Bloquear se houver parcelas vencidas não pagas
+  2. Exigir justificativa obrigatória
+  3. Cancelar parcelas futuras pendentes (`status='cancelled'`)
+  4. Liberar vaga: `spots.status='available'`, `spots.vessel_id=NULL`
+  5. Registrar em `system_logs`
+- **Ao criar contrato:** gerar mensalidades mensais automaticamente
+  - Sem data de término: até 31/12 do ano corrente
+  - Com data de término: do início até o término (máximo 60 parcelas)
+
+### Fila de operações
+- **State machine:** `waiting` → `in_progress` → `completed` | `cancelled`
+- `DELETE /api/queue/:id` faz soft delete: `status='cancelled'` — nunca apaga a linha
+- `queue_order ASC` = mais antigo na frente (FIFO)
+- `MAX(queue_order)` deve sempre usar `WHERE status NOT IN ('completed','cancelled')` para não colidir com ops ativas em `in_progress`
+- **Uma operação ativa por embarcação:** não permitir nova op se já existe `status IN ('waiting','in_progress')`
+- Tipos de operação: `descida` (colocar na água), `subida` (tirar da água), outros
+  - `descida` só permitida se embarcação **não** está na água
+  - `subida` só permitida se embarcação **está** na água
+  - Estado da embarcação verificado por `isVesselInWater()` — nunca replicar essa lógica
+- Horário de operações configurável por tenant: `ops_start_time` / `ops_end_time` (padrão 07:00–18:00)
+- Tempo de manobra configurável: `maneuver_time_min`
+
+### Notificações da fila (queue_notices)
+- Para `role='cliente'`: exibir **apenas** notices onde o cliente tinha operação com `id <= max_op_id` no momento da criação
+- Nunca exibir notice para cliente que entrou na fila depois da mudança de horário
+
+### Financeiro
+- Status de cobrança: `pending` → `paid` | `overdue` | `cancelled`
+- Ao marcar `paid`: preencher `paid_date` automaticamente com a data de hoje
+
+### Loja / Conveniência / Totem
+- **Estoque nunca negativo:** usar `GREATEST(0, stock - qty)` ao debitar
+- `source` dos pedidos: `totem`, `self_service`, `pdv`
+- Status de pedido: `open`, `pending_payment`, `paid`, `cancelled`
+- `delivery_status`: `null` → `preparando` → `entregando` → `entregue`
+- Conveniência e Totem usam o **mesmo catálogo** (`/api/conveniencia/catalog`) — qualquer alteração na loja reflete em ambos
+
+---
+
+## Arquitetura — Fontes de Verdade
+
+### Regra principal
+Cada relacionamento tem **um único campo canônico**. Nunca criar lógica de fallback que leia de dois campos distintos para o mesmo dado — isso gera inconsistência silenciosa.
+
+### Mapa de fontes de verdade
+
+| Dado | Campo canônico | Nunca usar como alternativa |
+|------|---------------|----------------------------|
+| Vaga de um contrato | `contracts.spot_id` | `spots.vessel_id` para inferir vaga |
+| Embarcação de uma vaga | `spots.vessel_id` | Inferir via contrato ativo |
+| Estado na água (embarcação) | `isVesselInWater()` em server.js | Replicar essa lógica em outro lugar |
+| Permissões de papel | tabela `role_permissions` | Hard-code por role no código |
+| Versão do sistema | `package.json` → `APP_VERSION` | Qualquer outra fonte |
+
+### Consistência de API — campos por rota
+Toda rota GET que expõe um recurso deve retornar **todos os campos** que qualquer tela do frontend pode precisar. Proibido criar SELECTs parciais por tela. Exemplo do erro a evitar: `/api/conveniencia/catalog` que omitia `photo_url` presente na tabela.
+
+### Cache do frontend — regra de invalidação
+Todo cache client-side deve ser zerado (`= null`) imediatamente após qualquer operação que altere o dado correspondente.
+
+| Cache | Zerrar quando |
+|-------|--------------|
+| `_convCatalog` | `saveItem()`, `deleteItem()` |
+| Qualquer cache futuro | Na função `save*()` e `delete*()` correspondente |
+
+### Consultas no contexto de tenant
+- Usar **sempre** `ctx.db.dbAll / dbGet / dbRun` nas rotas de tenant
+- Nunca chamar o pool global diretamente dentro de uma rota autenticada de tenant
+- O schema correto já está resolvido pelo `tenantMiddleware` antes de chegar na rota
+
+### Resolução de tenant (ordem de prioridade)
+1. Header `X-Tenant-Slug`
+2. Subdomínio: `porto-belo.marinaone.com.br`
+3. Query string: `?tenant=porto-belo`
+4. Env `SINGLE_TENANT_SLUG` (modo single-tenant local/Docker)
+
+---
+
 ## Comandos disponíveis
 
 | Comando | Quando usar |
