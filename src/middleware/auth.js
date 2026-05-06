@@ -39,7 +39,12 @@ function verifyPassword(plain, hash) {
 }
 
 // ── Middleware de autenticação ────────────────────────────────────────
-const PUBLIC_ROUTES = new Set(['/api/auth/login', '/api/version']);
+const PUBLIC_ROUTES = new Set([
+  '/api/auth/login',
+  '/api/version',
+  '/api/conveniencia/catalog',
+  '/api/conveniencia/order',
+]);
 
 function authMiddleware(req, res, next) {
   const path = (req.url || '').split('?')[0];

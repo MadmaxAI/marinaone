@@ -196,16 +196,19 @@ async function seedDefaultPermissions(pool) {
     operador: {
       dashboard: [1,0,0,0], queue: [1,1,1,1], clients: [1,1,1,0], vessels: [1,1,1,0],
       spots: [1,0,0,0], contracts: [0,0,0,0], financial: [0,0,0,0], store: [1,1,1,0],
+      conveniencia: [1,1,0,0],
       maintenance: [1,1,1,1], analytics: [0,0,0,0], alerts: [1,0,1,0], settings: [0,0,0,0],
     },
     loja: {
       dashboard: [1,0,0,0], queue: [0,0,0,0], clients: [1,0,0,0], vessels: [1,0,0,0],
       spots: [0,0,0,0], contracts: [0,0,0,0], financial: [0,0,0,0], store: [1,1,1,0],
+      conveniencia: [1,1,0,0],
       maintenance: [0,0,0,0], analytics: [0,0,0,0], alerts: [1,0,0,0], settings: [0,0,0,0],
     },
     cliente: {
       dashboard: [1,0,0,0], queue: [1,0,0,0], clients: [1,0,0,0], vessels: [1,0,0,0],
       spots: [1,0,0,0], contracts: [1,0,0,0], financial: [1,0,0,0], store: [1,1,0,0],
+      conveniencia: [1,1,0,0],
       maintenance: [1,0,0,0], analytics: [0,0,0,0], alerts: [1,0,0,0], settings: [0,0,0,0],
     },
   };

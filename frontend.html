@@ -266,6 +266,48 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
 .th-sort .si.on{opacity:1;color:var(--accent)}
 .tbl-search{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;color:var(--text);outline:none;flex:1;max-width:240px}
 .tbl-search:focus{border-color:var(--accent)}
+/* CONVENIÊNCIA */
+.conv-container{display:flex;justify-content:center;align-items:flex-start;padding:20px 0}
+.conv-step-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px;width:100%;max-width:520px;text-align:center}
+.conv-title{font-size:28px;font-weight:800;margin-bottom:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.conv-subtitle{font-size:14px;color:var(--text3);margin-bottom:32px}
+.conv-option-btn{display:flex;align-items:center;gap:16px;padding:20px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;width:100%;text-align:left;transition:.2s;margin-bottom:12px;color:var(--text)}
+.conv-option-btn:hover{border-color:var(--accent);background:rgba(59,130,246,.08)}
+.conv-option-icon{font-size:32px;width:48px;text-align:center;flex-shrink:0}
+.conv-option-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px}
+.conv-option-desc{font-size:12px;color:var(--text3)}
+.conv-layout{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start}
+.conv-catalog{}
+.conv-cart-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;position:sticky;top:0}
+.conv-cat-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding:16px 0 8px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.conv-cat-title:first-child{padding-top:0}
+.conv-item-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:12px;margin-bottom:16px}
+.conv-item-card{background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:14px 12px;display:flex;flex-direction:column;gap:8px;transition:.2s;text-align:center}
+.conv-item-card:hover{border-color:var(--accent)}
+.conv-item-card.conv-item-out{opacity:.5}
+.conv-item-emoji{font-size:32px}
+.conv-item-name{font-size:12px;font-weight:600;color:var(--text);line-height:1.3;min-height:32px;display:flex;align-items:center;justify-content:center}
+.conv-item-price{font-size:15px;font-weight:700;color:var(--success)}
+.conv-item-stock{font-size:10px;color:var(--text3)}
+.conv-qty-ctrl{display:flex;align-items:center;justify-content:center;gap:10px}
+.conv-qty-btn{width:30px;height:30px;border-radius:50%;border:none;background:var(--surface3);color:var(--text);font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;transition:.15s;flex-shrink:0}
+.conv-qty-btn:hover{background:var(--accent);color:#fff}
+.conv-qty-num{font-size:16px;font-weight:700;min-width:24px;text-align:center}
+.conv-cart-empty{color:var(--text3);text-align:center;font-size:13px;padding:16px 0}
+.conv-cart-item{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.conv-cart-item:last-child{border-bottom:none}
+.conv-cart-total{font-size:18px;font-weight:700;color:var(--success);text-align:right;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.conv-order-num{font-size:72px;font-weight:800;color:var(--success);line-height:1;margin:16px 0}
+.conv-source-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(99,102,241,.15);color:#a78bfa}
+@media(max-width:768px){.conv-layout{grid-template-columns:1fr}.conv-cart-panel{position:static}.conv-step-card{padding:28px 20px}}
+/* ITEM PHOTO */
+.item-photo{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--surface3);display:block;margin-bottom:8px}
+.item-photo-placeholder{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:40px;background:var(--surface3);border-radius:8px;margin-bottom:8px}
+.photo-upload-area{border:2px dashed var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:12px}
+.photo-upload-area:hover{border-color:var(--accent);background:rgba(59,130,246,.05)}
+.photo-preview-wrap{position:relative;display:inline-block;margin-bottom:12px}
+.photo-preview-wrap img{width:120px;height:120px;object-fit:cover;border-radius:10px;border:2px solid var(--border);display:block}
+.photo-remove-btn{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--danger);color:#fff;border:none;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center}
 </style>
 </head>
 <body>
@@ -328,6 +370,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <div class="nav-section" data-section="Operações">Operações</div>
       <button class="nav-item" onclick="nav('financial')" data-page="financial" data-module="financial"><span class="icon">💰</span>Financeiro</button>
       <button class="nav-item" onclick="nav('store')" data-page="store" data-module="store"><span class="icon">🏪</span>Loja / PDV</button>
+      <button class="nav-item" onclick="nav('conveniencia')" data-page="conveniencia" data-module="conveniencia"><span class="icon">🛍️</span>Conveniência</button>
       <button class="nav-item" onclick="nav('maintenance')" data-page="maintenance" data-module="maintenance"><span class="icon">🔧</span>Manutenção</button>
       <div class="nav-section" data-section="Análise">Análise</div>
       <button class="nav-item" onclick="nav('analytics')" data-page="analytics" data-module="analytics"><span class="icon">📊</span>Analytics</button>
@@ -766,7 +809,7 @@ async function refreshBadges() {
 }
 
 // ── NAV ──────────────────────────────────────────────
-const pageTitles = {dashboard:'Dashboard',queue:'Fila de Operações',clients:'Clientes',vessels:'Embarcações',spots:'Vagas',contracts:'Contratos',financial:'Financeiro',store:'Loja / PDV',maintenance:'Manutenção',analytics:'Analytics',alerts:'Alertas',settings:'Configurações',users:'Usuários',access:'Controle de Acesso'};
+const pageTitles = {dashboard:'Dashboard',queue:'Fila de Operações',clients:'Clientes',vessels:'Embarcações',spots:'Vagas',contracts:'Contratos',financial:'Financeiro',store:'Loja / PDV',conveniencia:'Conveniência',maintenance:'Manutenção',analytics:'Analytics',alerts:'Alertas',settings:'Configurações',users:'Usuários',access:'Controle de Acesso'};
 
 // ── Helpers de permissão ──────────────────────────────
 function can(module, action = 'view') {
@@ -3858,7 +3901,7 @@ async function renderStoreDashboard() {
     const items = Array.isArray(o.items) ? o.items.map(i=>`${i.name}×${i.qty}`).join(', ') : String(o.items||'');
     const ago = o.created_at ? fmtDT(o.created_at) : '';
     return `<div class="pipeline-card" onclick="goToOrders('${filter}')" title="Ver pedidos desta etapa">
-      <div class="pc-client">${o.client_name||'Balcão'} <span style="font-size:10px;color:var(--text3)">#${o.id}</span></div>
+      <div class="pc-client">${o.client_name||o.customer_name||'Balcão'} <span style="font-size:10px;color:var(--text3)">#${o.id}</span></div>
       <div class="pc-items" title="${items}">${items}</div>
       <div class="pc-footer"><span class="pc-total">${fmt(o.total)}</span><span class="pc-time">${ago}</span></div>
     </div>`;
@@ -3874,7 +3917,7 @@ async function renderStoreDashboard() {
     return `<tr class="row-link" onclick="goToOrders('todos')" title="Ver todos os pedidos">
       <td class="font-bold text-xs" style="color:var(--text3)">#${o.id}</td>
       <td>${fmtDT(o.created_at)}</td>
-      <td>${o.client_name||'Balcão'}</td>
+      <td>${o.client_name||o.customer_name||'Balcão'}</td>
       <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${items}</td>
       <td class="text-success font-bold">${fmt(o.total)}</td>
       <td>${pmtBadge(o.payment_method)}</td>
@@ -3992,6 +4035,9 @@ async function renderPDV() {
       <div class="item-grid" id="pdv-items-grid">
         ${(items||[]).map(item=>`
         <div class="store-item-card" onclick="addToCart(${item.id},'${item.name.replace(/'/g,"\\'")}',${item.price},${item.stock})">
+          ${item.photo_url
+            ? `<img class="item-photo" src="${item.photo_url}" alt="${item.name}" loading="lazy">`
+            : `<div class="item-photo-placeholder">${_convCatEmoji(item.category)}</div>`}
           <div class="store-item-name">${item.name}</div>
           <div class="store-item-cat">${item.category}</div>
           <div class="store-item-price">${fmt(item.price)}</div>
@@ -4845,15 +4891,36 @@ function filterStockTable(filter, el) {
   renderStoreItems();
 }
 
+// Redimensiona imagem no cliente antes de enviar (max 400px, JPEG 78%)
+async function _resizeImg(file, maxPx=400, quality=0.78) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
 async function openItemModal(id=null) {
-  let item = id ? (await api('GET','/store/items')).find(i=>i.id===id) : {};
+  let item = id ? (await api('GET', `/store/items/${id}`)) : {};
   if (!item) item = {};
+  window._imPhoto = undefined; // undefined = sem alteração; '' = remover; 'data:...' = nova foto
+  const hasPhoto = !!item.photo_url;
   modal(`<div class="modal" onclick="event.stopPropagation()">
     <div class="modal-title">${id?'Editar':'Novo'} Item</div>
     <div class="form-row cols2">
       <div class="form-group"><label>Nome *</label><input id="im-name" value="${item.name||''}"></div>
       <div class="form-group"><label>Categoria</label>
-        <select id="im-cat">${['manutencao','equipamento','bebida','alimento','limpeza','outros'].map(c=>`<option value="${c}" ${item.category===c?'selected':''}>${c}</option>`).join('')}</select>
+        <select id="im-cat">${['bebida','alimento','lanche','sorvete','acessorio','manutencao','equipamento','limpeza','outros'].map(c=>`<option value="${c}" ${item.category===c?'selected':''}>${c}</option>`).join('')}</select>
       </div>
     </div>
     <div class="form-row cols3">
@@ -4865,15 +4932,128 @@ async function openItemModal(id=null) {
       <div class="form-group"><label>Estoque Atual</label><input id="im-stock" type="number" value="${item.stock||0}"></div>
       <div class="form-group"><label>Estoque Mínimo</label><input id="im-min" type="number" value="${item.min_stock||5}"></div>
     </div>
+    <div class="form-group">
+      <label>Foto do Produto</label>
+      <div id="im-photo-wrap">
+        ${hasPhoto
+          ? `<div class="photo-preview-wrap"><img id="im-photo-preview" src="${item.photo_url}"><button class="photo-remove-btn" onclick="_imRemovePhoto()" title="Remover foto">×</button></div>`
+          : `<div class="photo-upload-area" onclick="document.getElementById('im-photo-input').click()">
+               <div style="font-size:32px;margin-bottom:6px">📷</div>
+               <div style="font-size:13px;color:var(--text2)">Clique para adicionar foto</div>
+               <div style="font-size:11px;color:var(--text3);margin-top:4px">JPG, PNG ou WEBP — será redimensionada automaticamente</div>
+             </div>`
+        }
+        <input type="file" id="im-photo-input" accept="image/*" style="display:none" onchange="_imPhotoChange(this)">
+        ${hasPhoto ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="document.getElementById('im-photo-input').click()">↩ Trocar foto</button>` : ''}
+        <button class="btn btn-ghost btn-sm" id="im-suggest-btn" style="margin-top:6px;width:100%" onclick="_imSuggestPhoto()">🔍 Sugerir foto pela internet</button>
+        <div id="im-photo-suggestions" style="display:none;margin-top:8px"></div>
+      </div>
+    </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModalForce()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveItem(${id||'null'})">Salvar</button>
+      <button class="btn btn-primary" onclick="saveItem(${id||'null'},'${item.photo_url||''}')">Salvar</button>
     </div>
   </div>`);
 }
 
-async function saveItem(id) {
-  const body = {name:document.getElementById('im-name').value,category:document.getElementById('im-cat').value,price:parseFloat(document.getElementById('im-price').value),cost:parseFloat(document.getElementById('im-cost').value)||0,unit:document.getElementById('im-unit').value,stock:parseInt(document.getElementById('im-stock').value)||0,min_stock:parseInt(document.getElementById('im-min').value)||5};
+async function _imPhotoChange(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const dataUrl = await _resizeImg(file);
+  if (!dataUrl) { toast('Erro ao processar imagem','error'); return; }
+  window._imPhoto = dataUrl;
+  const wrap = document.getElementById('im-photo-wrap');
+  if (wrap) wrap.innerHTML = `
+    <div class="photo-preview-wrap">
+      <img id="im-photo-preview" src="${dataUrl}">
+      <button class="photo-remove-btn" onclick="_imRemovePhoto()" title="Remover foto">×</button>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="document.getElementById('im-photo-input').click()">↩ Trocar foto</button>
+    <input type="file" id="im-photo-input" accept="image/*" style="display:none" onchange="_imPhotoChange(this)">`;
+}
+
+function _imRemovePhoto() {
+  window._imPhoto = '';
+  const wrap = document.getElementById('im-photo-wrap');
+  if (wrap) wrap.innerHTML = `
+    <div class="photo-upload-area" onclick="document.getElementById('im-photo-input').click()">
+      <div style="font-size:32px;margin-bottom:6px">📷</div>
+      <div style="font-size:13px;color:var(--text2)">Clique para adicionar foto</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">JPG, PNG ou WEBP — será redimensionada automaticamente</div>
+    </div>
+    <input type="file" id="im-photo-input" accept="image/*" style="display:none" onchange="_imPhotoChange(this)">`;
+}
+
+async function _imSuggestPhoto() {
+  const name = (document.getElementById('im-name')?.value || '').trim();
+  if (!name) return toast('Digite o nome do produto primeiro', 'warning');
+  const btn = document.getElementById('im-suggest-btn');
+  const sugDiv = document.getElementById('im-photo-suggestions');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
+  try {
+    const r = await api('GET', `/store/suggest-photo?q=${encodeURIComponent(name)}`);
+    const suggestions = r.suggestions || [];
+    if (!suggestions.length) {
+      toast('Nenhuma sugestão encontrada para este produto', 'warning');
+      return;
+    }
+    sugDiv.style.display = 'block';
+    sugDiv.innerHTML = `
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Clique para usar como foto do produto:</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        ${suggestions.map(s => `
+          <div style="cursor:pointer;border-radius:8px;overflow:hidden;border:2px solid var(--border);transition:.15s"
+               onclick="_imUseSuggestion('${s.url.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',this)"
+               onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+            <img src="${s.url}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;display:block"
+                 onerror="this.parentElement.style.display='none'">
+          </div>`).join('')}
+      </div>`;
+  } catch(e) {
+    toast('Erro ao buscar sugestões', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Sugerir foto pela internet'; }
+  }
+}
+
+async function _imUseSuggestion(url, el) {
+  el.style.opacity = '0.5';
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('indisponível');
+    const blob = await r.blob();
+    const file = new File([blob], 'sugestao.jpg', { type: blob.type || 'image/jpeg' });
+    const dataUrl = await _resizeImg(file);
+    window._imPhoto = dataUrl;
+    const wrap = document.getElementById('im-photo-wrap');
+    if (wrap) wrap.innerHTML = `
+      <div class="photo-preview-wrap">
+        <img id="im-photo-preview" src="${dataUrl}">
+        <button class="photo-remove-btn" onclick="_imRemovePhoto()" title="Remover foto">×</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="document.getElementById('im-photo-input').click()">↩ Trocar foto</button>
+      <input type="file" id="im-photo-input" accept="image/*" style="display:none" onchange="_imPhotoChange(this)">
+      <button class="btn btn-ghost btn-sm" id="im-suggest-btn" style="margin-top:6px;width:100%" onclick="_imSuggestPhoto()">🔍 Sugerir foto pela internet</button>
+      <div id="im-photo-suggestions" style="display:none;margin-top:8px"></div>`;
+    toast('Foto aplicada! Salve para confirmar.', 'success');
+  } catch(e) {
+    toast('Não foi possível usar esta imagem, tente outra', 'warning');
+    el.style.opacity = '1';
+  }
+}
+
+async function saveItem(id, existingPhoto='') {
+  const body = {
+    name: document.getElementById('im-name').value,
+    category: document.getElementById('im-cat').value,
+    price: parseFloat(document.getElementById('im-price').value),
+    cost: parseFloat(document.getElementById('im-cost').value)||0,
+    unit: document.getElementById('im-unit').value,
+    stock: parseInt(document.getElementById('im-stock').value)||0,
+    min_stock: parseInt(document.getElementById('im-min').value)||5,
+    // _imPhoto: undefined = sem mudança (mantém foto existente), '' = remover, 'data:...' = nova
+    photo_url: window._imPhoto === undefined ? existingPhoto : (window._imPhoto || null),
+  };
   if (!body.name||!body.price) { toast('Nome e preço obrigatórios','error'); return; }
   if (id) await api('PUT',`/store/items/${id}`,body); else await api('POST','/store/items',body);
   toast('Item salvo!'); closeModalForce(); showStoreTab('items', document.querySelectorAll('.tab')[1]);
@@ -4921,7 +5101,7 @@ async function renderOrders(stageFilter) {
   const stageFiltered = stageFilter === 'todos' ? allOrders : allOrders.filter(o => orderStage(o) === stageFilter);
   const searched = q ? stageFiltered.filter(o =>
     String(o.id).includes(q) ||
-    (o.client_name||'balcão').toLowerCase().includes(q) ||
+    (o.client_name||o.customer_name||'balcão').toLowerCase().includes(q) ||
     (o.vessel_name||'').toLowerCase().includes(q) ||
     (Array.isArray(o.items)?o.items.map(i=>i.name).join(' '):String(o.items||'')).toLowerCase().includes(q) ||
     (o.payment_method||'').toLowerCase().includes(q)
@@ -4988,16 +5168,21 @@ async function renderOrders(stageFilter) {
   }
   function _renderOrdersTbody(rows) {
     const dc = window._ordersDeliveryCell || deliveryCell;
-    return rows.map(o=>`<tr>
-      <td class="font-bold text-xs" style="color:var(--text3)">#${o.id}</td>
-      <td>${fmtDT(o.created_at)}</td>
-      <td>${o.client_name||'<span class="text-muted">Balcão</span>'}</td>
-      <td>${o.vessel_name||'—'}</td>
-      <td style="max-width:200px;white-space:normal;font-size:12px">${Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):o.items}</td>
-      <td class="text-success font-bold">${fmt(o.total)}</td>
-      <td>${pmtBadge(o.payment_method)}</td>
-      <td>${dc(o)}</td>
-    </tr>`).join('')||`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum pedido nesta etapa</td></tr>`;
+    return rows.map(o => {
+      const convSrc = o.source && o.source !== 'pdv';
+      const displayName = o.client_name || o.customer_name || '';
+      const srcBadge = convSrc ? ` <span class="conv-source-badge">${o.source==='totem'?'Totem':'Self-service'}</span>` : '';
+      return `<tr>
+        <td class="font-bold text-xs" style="color:var(--text3)">#${o.id}</td>
+        <td>${fmtDT(o.created_at)}</td>
+        <td>${displayName ? displayName+srcBadge : '<span class="text-muted">Balcão</span>'+srcBadge}</td>
+        <td>${o.vessel_name||'—'}</td>
+        <td style="max-width:200px;white-space:normal;font-size:12px">${Array.isArray(o.items)?o.items.map(i=>`${i.name}×${i.qty}`).join(', '):o.items}</td>
+        <td class="text-success font-bold">${fmt(o.total)}</td>
+        <td>${pmtBadge(o.payment_method)}</td>
+        <td>${dc(o)}</td>
+      </tr>`;
+    }).join('')||`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum pedido nesta etapa</td></tr>`;
   }
 
   const savedQ = q;
@@ -7441,6 +7626,297 @@ async function trySAAutoLogin() {
     saShowPanel();
     return true;
   } catch { sessionStorage.removeItem('mo_sa_token'); window.saToken = ''; return false; }
+}
+
+// ── PAGE: CONVENIÊNCIA (auto-atendimento / totem) ──────
+let _convStep = 'identify'; // 'identify'|'login'|'nameinput'|'catalog'|'done'
+let _convCustomer = null;   // { name, client_id }
+let _convCart = [];
+let _convOrderId = null;
+let _convTotem = false;
+let _convCatalog = null;
+let _convAutoResetTimer = null;
+
+pages.conveniencia = async () => {
+  _convTotem = new URLSearchParams(window.location.search).get('totem') === 'true';
+  if (_convTotem) {
+    document.getElementById('app').classList.add('sidebar-collapsed');
+  }
+  // Auto-identifica cliente logado
+  if (isCliente() && _convStep === 'identify') {
+    _convCustomer = { name: currentUser.name, client_id: currentUser.client_id };
+    _convCart = [];
+    _convStep = 'catalog';
+  } else if (_convStep === 'done' || _convStep === 'catalog' || _convStep === 'login' || _convStep === 'nameinput') {
+    // Mantém estado atual
+  } else {
+    _convCustomer = null;
+    _convCart = [];
+    _convStep = 'identify';
+  }
+  if (_convStep === 'catalog' && !_convCatalog) {
+    _convCatalog = await api('GET', '/conveniencia/catalog');
+  }
+  _renderConv();
+};
+
+function _convReset() {
+  if (_convAutoResetTimer) { clearInterval(_convAutoResetTimer); _convAutoResetTimer = null; }
+  _convCustomer = null;
+  _convCart = [];
+  _convOrderId = null;
+  _convStep = 'identify';
+  if (isCliente()) {
+    _convCustomer = { name: currentUser.name, client_id: currentUser.client_id };
+    _convStep = 'catalog';
+  }
+  _renderConv();
+}
+
+function _convCatEmoji(cat) {
+  const map = { bebidas:'🥤', alimentos:'🍔', lanches:'🥪', acessorios:'⚓', acessórios:'⚓',
+    combustivel:'⛽', combustível:'⛽', limpeza:'🧹', eletronicos:'📱', eletrônicos:'📱',
+    servicos:'🛠️', serviços:'🛠️', sorvetes:'🍦', doces:'🍬', salgados:'🥙' };
+  return map[(cat||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')] || '📦';
+}
+
+function _convCartAdd(item_id, name, price, unit) {
+  const ex = _convCart.find(i => i.item_id === item_id);
+  if (ex) { ex.qty++; } else { _convCart.push({ item_id, name, price: Number(price), qty: 1, unit }); }
+  _renderConv();
+}
+function _convCartRemove(item_id) {
+  const ex = _convCart.find(i => i.item_id === item_id);
+  if (!ex) return;
+  if (ex.qty <= 1) _convCart = _convCart.filter(i => i.item_id !== item_id);
+  else ex.qty--;
+  _renderConv();
+}
+function _convCartTotal() {
+  return _convCart.reduce((s, i) => s + i.price * i.qty, 0);
+}
+
+async function _convLoginSubmit() {
+  const email = (document.getElementById('conv-login-email')?.value || '').trim();
+  const pwd   = document.getElementById('conv-login-pwd')?.value || '';
+  if (!email || !pwd) return toast('Informe email e senha', 'warning');
+  const r = await api('POST', '/auth/login', { email, password: pwd });
+  if (r && r.token) {
+    if (r.role === 'cliente') {
+      _convCustomer = { name: r.name, client_id: r.client_id };
+      _convStep = 'catalog';
+      if (!_convCatalog) _convCatalog = await api('GET', '/conveniencia/catalog');
+      _renderConv();
+    } else {
+      toast('Esta conta não é de cliente. Use "continuar sem conta".', 'warning');
+    }
+  } else {
+    toast((r && r.error) || 'Email ou senha inválidos', 'error');
+  }
+}
+
+function _convNameSubmit() {
+  const name = (document.getElementById('conv-name-input')?.value || '').trim();
+  if (!name) return toast('Informe seu nome', 'warning');
+  _convCustomer = { name, client_id: null };
+  _convStep = 'catalog';
+  (async () => {
+    if (!_convCatalog) _convCatalog = await api('GET', '/conveniencia/catalog');
+    _renderConv();
+  })();
+}
+
+async function _convSubmitOrder() {
+  if (!_convCart.length) return toast('Adicione itens ao pedido', 'warning');
+  if (!_convCustomer) return toast('Identifique-se primeiro', 'warning');
+  const btn = document.getElementById('conv-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+  const r = await api('POST', '/conveniencia/order', {
+    customer_name: _convCustomer.name,
+    client_id: _convCustomer.client_id || null,
+    items: _convCart.map(i => ({ item_id: i.item_id, name: i.name, price: i.price, qty: i.qty })),
+    source: _convTotem ? 'totem' : 'self_service',
+  });
+  if (r && r.id) {
+    _convOrderId = r.id;
+    _convStep = 'done';
+    _renderConv();
+    if (_convTotem) {
+      let secs = 30;
+      _convAutoResetTimer = setInterval(() => {
+        secs--;
+        const el = document.getElementById('conv-countdown');
+        if (el) el.textContent = secs;
+        if (secs <= 0) { clearInterval(_convAutoResetTimer); _convAutoResetTimer = null; _convReset(); }
+      }, 1000);
+    }
+  } else {
+    toast((r && r.error) || 'Erro ao enviar pedido', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirmar Pedido'; }
+  }
+}
+
+function _renderConv() {
+  const content = document.getElementById('content');
+  if (!content) return;
+
+  if (_convStep === 'identify') {
+    setContent(`
+    <div class="conv-container">
+      <div class="conv-step-card">
+        <div style="font-size:52px;margin-bottom:16px">🛍️</div>
+        <div class="conv-title">Conveniência</div>
+        <div class="conv-subtitle">Como prefere se identificar?</div>
+        <button class="conv-option-btn" onclick="_convStep='login';_renderConv()">
+          <div class="conv-option-icon">🔑</div>
+          <div>
+            <div class="conv-option-title">Tenho conta na marina</div>
+            <div class="conv-option-desc">Acesse com email e senha para vincular o pedido à sua embarcação</div>
+          </div>
+          <span style="color:var(--text3);margin-left:auto">›</span>
+        </button>
+        <button class="conv-option-btn" onclick="_convStep='nameinput';_renderConv()">
+          <div class="conv-option-icon">👤</div>
+          <div>
+            <div class="conv-option-title">Continuar sem conta</div>
+            <div class="conv-option-desc">Informe apenas seu nome para o balcão identificar seu pedido</div>
+          </div>
+          <span style="color:var(--text3);margin-left:auto">›</span>
+        </button>
+      </div>
+    </div>`);
+
+  } else if (_convStep === 'login') {
+    setContent(`
+    <div class="conv-container">
+      <div class="conv-step-card">
+        <div style="font-size:52px;margin-bottom:16px">🔑</div>
+        <div class="conv-title">Entrar</div>
+        <div class="conv-subtitle">Use seu email e senha de cliente da marina</div>
+        <div class="form-group" style="text-align:left;margin-bottom:16px">
+          <label>Email</label>
+          <input id="conv-login-email" type="email" placeholder="seu@email.com" style="font-size:15px;padding:12px">
+        </div>
+        <div class="form-group" style="text-align:left;margin-bottom:28px">
+          <label>Senha</label>
+          <input id="conv-login-pwd" type="password" placeholder="••••••" style="font-size:15px;padding:12px"
+            onkeydown="if(event.key==='Enter')_convLoginSubmit()">
+        </div>
+        <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="_convLoginSubmit()">Entrar</button>
+        <button class="btn btn-ghost" style="width:100%;margin-top:10px" onclick="_convStep='identify';_renderConv()">← Voltar</button>
+      </div>
+    </div>`);
+    setTimeout(() => document.getElementById('conv-login-email')?.focus(), 80);
+
+  } else if (_convStep === 'nameinput') {
+    setContent(`
+    <div class="conv-container">
+      <div class="conv-step-card">
+        <div style="font-size:52px;margin-bottom:16px">👤</div>
+        <div class="conv-title">Seu nome</div>
+        <div class="conv-subtitle">Para o balcão identificar seu pedido</div>
+        <div class="form-group" style="text-align:left;margin-bottom:28px">
+          <label>Nome</label>
+          <input id="conv-name-input" type="text" placeholder="Ex: João Silva"
+            style="font-size:15px;padding:12px" onkeydown="if(event.key==='Enter')_convNameSubmit()">
+        </div>
+        <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="_convNameSubmit()">Continuar →</button>
+        <button class="btn btn-ghost" style="width:100%;margin-top:10px" onclick="_convStep='identify';_renderConv()">← Voltar</button>
+      </div>
+    </div>`);
+    setTimeout(() => document.getElementById('conv-name-input')?.focus(), 80);
+
+  } else if (_convStep === 'catalog') {
+    const catalog = _convCatalog;
+    const cartTotal = _convCartTotal();
+    const cartCount = _convCart.reduce((s, i) => s + i.qty, 0);
+
+    const catalogHtml = !catalog ? '<p style="color:var(--text3)">Carregando catálogo...</p>' :
+      (catalog.categories || []).length === 0 ? '<p style="color:var(--text3)">Nenhum produto disponível no momento.</p>' :
+      (catalog.categories || []).map(cat => {
+        const emoji = _convCatEmoji(cat.name);
+        return `<div class="conv-cat-title">${emoji} ${cat.name.charAt(0).toUpperCase()+cat.name.slice(1)}</div>
+        <div class="item-grid" style="margin-bottom:16px">${cat.items.map(item => {
+          const out = item.stock <= 0;
+          const safeN = item.name.replace(/'/g,"\\'");
+          return `<div class="store-item-card${out?' conv-item-out':''}" ${out ? '' : `onclick="_convCartAdd(${item.id},'${safeN}',${item.price},'${item.unit||'un'}')"`} style="${out?'cursor:default':''}">
+            ${item.photo_url
+              ? `<img class="item-photo" src="${item.photo_url}" alt="${item.name}" loading="lazy">`
+              : `<div class="item-photo-placeholder">${emoji}</div>`}
+            <div class="store-item-name">${item.name}</div>
+            <div class="store-item-cat">${cat.name}</div>
+            <div class="store-item-price">${fmt(item.price)}</div>
+            ${out ? `<div class="store-item-stock">⚠️ Indisponível</div>` : ''}
+          </div>`;
+        }).join('')}</div>`;
+      }).join('');
+
+    const cartHtml = _convCart.length === 0
+      ? '<div class="conv-cart-empty">Nenhum item adicionado</div>'
+      : _convCart.map(i => {
+          const safeN = i.name.replace(/'/g,"\\'");
+          return `<div class="cart-item">
+            <div style="flex:1"><div class="font-bold text-sm">${i.name}</div><div class="text-xs text-muted">${fmt(i.price)} × ${i.qty}</div></div>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-ghost btn-sm" onclick="_convCartRemove(${i.item_id})">−</button>
+              <span>${i.qty}</span>
+              <button class="btn btn-ghost btn-sm" onclick="_convCartAdd(${i.item_id},'${safeN}',${i.price},'${i.unit}')">+</button>
+              <span class="text-success font-bold" style="min-width:70px;text-align:right">${fmt(i.price*i.qty)}</span>
+            </div>
+          </div>`;
+        }).join('');
+
+    setContent(`
+    <div style="max-width:1060px;margin:0 auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px">
+        <div>
+          <h2 style="font-size:20px;font-weight:700">🛍️ Conveniência</h2>
+          <p style="font-size:13px;color:var(--text3)">Olá, <strong style="color:var(--text)">${_convCustomer?.name || 'Cliente'}</strong> — escolha os produtos</p>
+        </div>
+        ${!isCliente() ? `<button class="btn btn-ghost btn-sm" onclick="_convReset()">↩ Trocar cliente</button>` : ''}
+      </div>
+      <div class="conv-layout">
+        <div class="conv-catalog">${catalogHtml}</div>
+        <div class="conv-cart-panel">
+          <div style="font-size:14px;font-weight:700;margin-bottom:14px">
+            🛒 Carrinho
+            ${cartCount > 0 ? `<span style="background:var(--accent);color:#fff;font-size:11px;padding:2px 8px;border-radius:20px;margin-left:6px">${cartCount}</span>` : ''}
+          </div>
+          ${cartHtml}
+          ${_convCart.length > 0 ? `
+            <div class="conv-cart-total">Total: R$ ${cartTotal.toFixed(2)}</div>
+            <button id="conv-submit-btn" class="btn btn-success" style="width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:700"
+              onclick="_convSubmitOrder()">✅ Confirmar Pedido</button>
+            <p style="font-size:11px;color:var(--text3);text-align:center;margin-top:8px">Pagamento no balcão com o nº do pedido</p>
+          ` : ''}
+        </div>
+      </div>
+    </div>`);
+
+  } else if (_convStep === 'done') {
+    const itensStr = _convCart.map(i => `${i.qty}× ${i.name}`).join(', ');
+    setContent(`
+    <div class="conv-container">
+      <div class="conv-step-card">
+        <div style="font-size:56px;margin-bottom:12px">✅</div>
+        <div class="conv-title" style="-webkit-text-fill-color:var(--success)">Pedido Enviado!</div>
+        <div class="conv-subtitle">Apresente o número abaixo no balcão para pagar e retirar</div>
+        <div style="background:var(--surface2);border:2px solid var(--success);border-radius:16px;padding:28px;margin:20px 0">
+          <div style="font-size:12px;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px">Nº do Pedido</div>
+          <div class="conv-order-num">#${_convOrderId}</div>
+        </div>
+        <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:14px;margin-bottom:16px;text-align:left">
+          <p style="font-size:12px;color:var(--text2)">📋 <strong>Itens:</strong> ${itensStr}</p>
+          <p style="font-size:13px;color:var(--success);margin-top:6px;font-weight:700">💰 Total: R$ ${_convCartTotal().toFixed(2)}</p>
+        </div>
+        <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:12px;padding:14px;margin-bottom:24px;font-size:13px;color:var(--text2)">
+          ⚠️ Dirija-se ao balcão com o número <strong>#${_convOrderId}</strong> para efetuar o pagamento e retirar seus produtos.
+        </div>
+        ${_convTotem ? `<p style="font-size:12px;color:var(--text3);margin-bottom:16px">Reiniciando em <span id="conv-countdown">30</span> segundos…</p>` : ''}
+        <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="_convReset()">🔄 Novo Pedido</button>
+      </div>
+    </div>`);
+  }
 }
 
 // ── INIT ──────────────────────────────────────────────

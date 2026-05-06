@@ -37,8 +37,9 @@ const MODULES = [
   { key: 'spots',       label: 'Vagas',             group: 'Gestão'    },
   { key: 'contracts',   label: 'Contratos',         group: 'Gestão'    },
   { key: 'financial',   label: 'Financeiro',        group: 'Operações' },
-  { key: 'store',       label: 'Loja / PDV',        group: 'Operações' },
-  { key: 'maintenance', label: 'Manutenção',        group: 'Operações' },
+  { key: 'store',        label: 'Loja / PDV',        group: 'Operações' },
+  { key: 'conveniencia', label: 'Conveniência',      group: 'Operações' },
+  { key: 'maintenance',  label: 'Manutenção',        group: 'Operações' },
   { key: 'analytics',   label: 'Analytics',         group: 'Análise'   },
   { key: 'alerts',      label: 'Alertas',           group: 'Análise'   },
   { key: 'settings',    label: 'Configurações',     group: 'Sistema'   },
@@ -1589,18 +1590,29 @@ addRoute('GET', '/api/store/items', async (req, res, ctx) => {
   sendJson(res, await tAll(sql + ' ORDER BY category,name', a));
 });
 
+addRoute('GET', '/api/store/items/:id', async (req, res, ctx) => {
+  const item = await ctx.db.dbGet('SELECT * FROM store_items WHERE id=? AND active=1', [ctx.params.id]);
+  if (!item) return sendJson(res, 404, { error: 'Item não encontrado' });
+  sendJson(res, item);
+});
+
 addRoute('POST', '/api/store/items', async (req, res, ctx) => {
   const b = ctx.body;
-  const r = await ctx.db.dbRun('INSERT INTO store_items(name,category,price,cost,stock,min_stock,unit) VALUES(?,?,?,?,?,?,?)',
-                               [b.name, b.category||'outros', b.price, b.cost||0, b.stock||0, b.min_stock||5, b.unit||'un']);
+  const r = await ctx.db.dbRun(
+    'INSERT INTO store_items(name,category,price,cost,stock,min_stock,unit,photo_url) VALUES(?,?,?,?,?,?,?,?)',
+    [b.name, b.category||'outros', b.price, b.cost||0, b.stock||0, b.min_stock||5, b.unit||'un', b.photo_url||null]
+  );
   sendJson(res, { id: r.lastInsertRowid }, 201);
 });
 
 addRoute('PUT', '/api/store/items/:id', async (req, res, ctx) => {
   const b = ctx.body;
   const { dbAll: tAll, dbGet: tGet, dbRun: tRun } = ctx.db;
-  await tRun('UPDATE store_items SET name=?,category=?,price=?,cost=?,stock=?,min_stock=?,unit=? WHERE id=?',
-             [b.name, b.category, b.price, b.cost||0, b.stock||0, b.min_stock||5, b.unit||'un', ctx.params.id]);
+  await tRun(
+    'UPDATE store_items SET name=?,category=?,price=?,cost=?,stock=?,min_stock=?,unit=?,photo_url=? WHERE id=?',
+    [b.name, b.category, b.price, b.cost||0, b.stock||0, b.min_stock||5, b.unit||'un',
+     b.photo_url||null, ctx.params.id]
+  );
   await checkStock(tAll, tAll, tGet, tRun);
   sendJson(res, { ok: true });
 });
@@ -1608,6 +1620,23 @@ addRoute('PUT', '/api/store/items/:id', async (req, res, ctx) => {
 addRoute('DELETE', '/api/store/items/:id', async (req, res, ctx) => {
   await ctx.db.dbRun('UPDATE store_items SET active=0 WHERE id=?', [ctx.params.id]);
   sendJson(res, { ok: true });
+});
+
+addRoute('GET', '/api/store/suggest-photo', async (req, res, ctx) => {
+  const q = (ctx.qs.q || '').trim();
+  if (!q) return sendJson(res, 400, { error: 'Parâmetro q obrigatório' });
+  try {
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&json=1&action=process&fields=product_name,image_small_url&page_size=12&lc=pt`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'MarinaOne/2.0 (rj.madmax@gmail.com)' }, signal: AbortSignal.timeout(8000) });
+    const data = await r.json();
+    const suggestions = (data.products || [])
+      .filter(p => p.image_small_url)
+      .slice(0, 6)
+      .map(p => ({ url: p.image_small_url, title: p.product_name || q }));
+    sendJson(res, { suggestions });
+  } catch (e) {
+    sendJson(res, 502, { error: 'Erro ao buscar sugestões: ' + e.message });
+  }
 });
 
 addRoute('GET', '/api/store/orders', async (req, res, ctx) => {
@@ -1860,6 +1889,44 @@ addRoute('POST', '/api/store/pix-qrcode', async (req, res, ctx) => {
   const amount = parseFloat(ctx.body.amount) || 0;
   const txid   = crypto.randomBytes(12).toString('hex').toUpperCase().slice(0, 25);
   sendJson(res, { payload: buildPix(cfg.key, cfg.merchant_name, cfg.city, amount, txid), txid, amount });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — CONVENIÊNCIA (auto-atendimento / totem)
+// ═════════════════════════════════════════════════════════════════════
+addRoute('GET', '/api/conveniencia/catalog', async (req, res, ctx) => {
+  const items = await ctx.db.dbAll(
+    'SELECT id, name, category, price, stock, unit FROM store_items WHERE active=1 ORDER BY category, name'
+  );
+  const catMap = {};
+  for (const item of items) {
+    const cat = item.category || 'outros';
+    if (!catMap[cat]) catMap[cat] = [];
+    catMap[cat].push({ ...item, price: Number(item.price), stock: Number(item.stock) });
+  }
+  const categories = Object.entries(catMap).map(([name, items]) => ({ name, items }));
+  sendJson(res, { categories });
+});
+
+addRoute('POST', '/api/conveniencia/order', async (req, res, ctx) => {
+  const b = ctx.body;
+  const { dbAll: tAll, dbGet: tGet, dbRun: tRun } = ctx.db;
+  const items = b.items || [];
+  if (!items.length) return sendJson(res, { error: 'Nenhum item no pedido' }, 400);
+  const customerName = (b.customer_name || '').trim();
+  if (!customerName && !b.client_id) return sendJson(res, { error: 'Informe o nome do cliente' }, 400);
+  const subtotal = items.reduce((s, i) => s + Number(i.price) * Number(i.qty), 0);
+  const source = b.source === 'totem' ? 'totem' : 'self_service';
+  const r = await tRun(
+    'INSERT INTO store_orders(vessel_id,client_id,customer_name,items,subtotal,discount,total,status,payment_method,notes,source,delivery_status) VALUES(?,?,?,?,?,0,?,?,?,?,?,?)',
+    [b.vessel_id||null, b.client_id||null, customerName||null, JSON.stringify(items),
+     subtotal, subtotal, 'open', null, b.notes||null, source, null]
+  );
+  for (const item of items) {
+    await tRun('UPDATE store_items SET stock=GREATEST(0,stock-?) WHERE id=?', [item.qty, item.item_id]);
+  }
+  await checkStock(tAll, tAll, tGet, tRun);
+  sendJson(res, { id: r.lastInsertRowid, order_number: r.lastInsertRowid }, 201);
 });
 
 // ═════════════════════════════════════════════════════════════════════

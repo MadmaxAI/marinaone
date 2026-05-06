@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.1] -- 2026-05-06
+- Conveniencia layout PDV, foto produto sugestao internet, edicao item corrigida
+
 ## [2.3.0] -- 2026-05-05
 - Controle de acesso granular por sub-modulo com alinhamento de permissoes
 
@@ -162,6 +165,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
