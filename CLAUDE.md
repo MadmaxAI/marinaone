@@ -185,6 +185,122 @@ Todo cache client-side deve ser zerado (`= null`) imediatamente após qualquer o
 
 ---
 
+## Design de Interface
+
+### Princípios obrigatórios
+- **Mobile-first:** toda tela deve ser usável em 375px de largura mínima
+- **SPA:** navegação sempre via `nav('pagina')` e `pages.*` — nunca `location.reload()`
+- **Feedback imediato:** `toast()` para toda ação do usuário (salvar, excluir, erro, sucesso)
+- **Estado vazio:** toda lista/tabela deve ter mensagem quando não há dados
+- **Sem surpresas:** ações destrutivas pedem confirmação com `confirm()`
+
+### Classes CSS padrão (não criar variantes novas sem necessidade)
+| Elemento | Classes disponíveis |
+|----------|-------------------|
+| Badges | `badge-success` (verde), `badge-info` (azul), `badge-warning` (amarelo), `badge-gray` (neutro), `badge-danger` (vermelho) |
+| Botões | `btn-primary`, `btn-ghost`, `btn-danger`, `btn-sm` |
+| Tabelas | `thead` fixo + `tbody` scrollável; `colspan` DEVE ser atualizado ao adicionar/remover colunas |
+| Layout | `card`, `card-header`, `card-body`; sidebar + topbar fixos |
+
+### Consistência entre telas
+- A mesma ação deve ter o mesmo visual e comportamento em todas as telas
+- Módulos que exibem o mesmo recurso (ex: loja → conveniência → totem) devem mostrar os mesmos campos — inclusive foto, preço, estoque
+- Ao adicionar campo novo em uma tela, verificar todas as outras que exibem o mesmo dado
+
+---
+
+## Padrões Técnicos — Frontend
+
+### Dados em tempo real (padrão mtime)
+Para manter telas atualizadas sem onerar tráfego:
+1. Criar endpoint leve `GET /api/[recurso]/mtime` → retorna apenas `{ mtime }`
+2. Polling a cada 20s comparando mtime anterior vs atual
+3. Fetch completo dos dados **somente quando mtime mudar**
+4. Atualizações puramente visuais (posição, relógio, progresso) via manipulação DOM direta — sem request ao servidor
+
+Exemplo implementado: calendário de operações (`/api/queue/calendar/mtime` + `_updateCalTractor()`)
+
+### Cache client-side — regra absoluta
+Todo cache deve ser invalidado imediatamente na função que altera o dado:
+```js
+_convCatalog = null; // sempre após saveItem() e deleteItem()
+```
+Ao criar qualquer novo cache (`let _xxxCache = null`), documentar aqui qual função o invalida.
+
+| Cache | Invalidar em |
+|-------|-------------|
+| `_convCatalog` | `saveItem()`, `deleteItem()` |
+
+### Colspan em tabelas
+Ao adicionar ou remover colunas de uma tabela, atualizar **sempre** o `colspan` do row de estado vazio correspondente. Esquecer isso quebra o layout silenciosamente.
+
+---
+
+## Segurança
+
+### Implementado (v2.3.14 — não reverter)
+- **Senhas:** bcrypt 10 rounds. Hashes SHA-256 legados migram automaticamente para bcrypt no primeiro login bem-sucedido — transparente para o usuário
+- **JWT_SECRET:** obrigatório via env var; servidor recusa iniciar sem ela
+- **Rate limiting:** 10 tentativas de login por IP a cada 15 minutos (tenant e superadmin)
+
+### Pendente — priorizar antes de 10+ tenants
+| Item | Risco atual | Ação necessária |
+|------|------------|-----------------|
+| CORS `*` | Baixo (JWT mitiga) | Restringir para `*.marinaone.com.br` em produção |
+| `?tenant=` em produção | Baixo (requer auth válida) | Desabilitar via Cloudflare Worker em produção |
+| Pool por tenant (max 10) | **Alto a 8+ tenants** | PgBouncer ou pool compartilhado |
+| `admin_password_plain` em `saas.tenants` | **Alto** | Campo existe para o painel super-admin exibir credenciais; migrar para entrega segura fora do banco |
+
+### Regras permanentes
+- Nunca logar senhas, tokens ou dados sensíveis no console
+- Toda rota autenticada de tenant valida papel via `requireRole()` ou `clientScope()`
+- `role='cliente'` SEMPRE filtrado por `client_id` — nunca retornar dados de outros clientes
+- Rotas públicas são exatamente: `/api/auth/login`, `/api/version`, `/api/conveniencia/catalog`, `/api/conveniencia/order` — não adicionar sem deliberação
+
+---
+
+## Escalabilidade — Limites e Roadmap
+
+### Estado atual (Railway Hobby — adequado para até ~8 tenants)
+- Single Node.js process (sem cluster)
+- Pool dedicado por tenant: `max: 10` conexões — PostgreSQL esgota a ~8–10 tenants ativos
+- Cache em memória por processo — incompatível com múltiplas instâncias
+- Sem compressão gzip nas respostas
+
+### Sinais de que é hora de escalar
+| Sinal | Ação |
+|-------|------|
+| 8+ tenants ativos | PgBouncer ou pool compartilhado com `SET search_path` |
+| Queries de analytics lentas | PM2 cluster mode (usa múltiplos cores) |
+| 2+ instâncias no Railway | Redis para `_tenantCache` e rate limiting compartilhado |
+| Tempo de resposta >500ms em rotas simples | Gzip + Railway Pro |
+
+### O que NÃO fazer prematuramente
+- Não adicionar Redis antes de ter 2+ instâncias rodando
+- Não migrar para microserviços — o monolito atual é adequado para dezenas de tenants
+- Não criar filas/workers assíncronos sem demanda real
+
+### Vantagem arquitetural preservada
+Schema-per-tenant permite migrar qualquer tenant para banco PostgreSQL separado no futuro sem alterar uma linha de código — apenas mudar `DATABASE_URL` por tenant.
+
+---
+
+## Decisões Técnicas Relevantes
+
+### Por que `compat.js` existe
+O sistema foi migrado de SQLite para PostgreSQL. A camada `compat.js` traduz sintaxe SQLite (`?`, `INSERT OR IGNORE`, `datetime('now')`) para PostgreSQL em tempo real. É intencional e não deve ser removida — o código das rotas usa essa API.
+
+### Histórico de inconsistências já corrigidas (não reincidir)
+| Inconsistência | Como aconteceu | Solução aplicada |
+|---------------|---------------|-----------------|
+| Contratos mostrando vaga sem `spot_id` | JOIN duplo com fallback via `spots.vessel_id` | Removido fallback; `spot_id` é fonte única |
+| Fotos ausentes em conveniência/totem | SELECT parcial omitia `photo_url` | Todo SELECT de recurso compartilhado retorna campos completos |
+| Fila com ordem invertida | `MAX(queue_order)` excluía só `completed`, não `cancelled` | `WHERE status NOT IN ('completed','cancelled')` |
+| Trator do calendário parado | Atualização só no fetch; sem movimento entre fetches | `_updateCalTractor()` via DOM a cada 20s, independente de fetch |
+| Cache de catálogo desatualizado | `saveItem()`/`deleteItem()` não zeravam `_convCatalog` | `_convCatalog = null` em ambas as funções |
+
+---
+
 ## Comandos disponíveis
 
 | Comando | Quando usar |
