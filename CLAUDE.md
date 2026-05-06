@@ -290,6 +290,21 @@ Schema-per-tenant permite migrar qualquer tenant para banco PostgreSQL separado 
 ### Por que `compat.js` existe
 O sistema foi migrado de SQLite para PostgreSQL. A camada `compat.js` traduz sintaxe SQLite (`?`, `INSERT OR IGNORE`, `datetime('now')`) para PostgreSQL em tempo real. É intencional e não deve ser removida — o código das rotas usa essa API.
 
+### Timezone UTC-3 fixo — não alterar
+`BRT_OFFSET_MS = -3 * 60 * 60 * 1000` em `server.js` é **intencional**. O Brasil aboliu horário de verão em 2019 — UTC-3 é permanente. Não "corrigir" para biblioteca de timezone.
+
+### `admin_password_plain` em `saas.tenants` — não remover
+A coluna existe para o painel super-admin exibir as credenciais de acesso de cada marina ao CEO. Remover ou apagar o campo quebra essa funcionalidade. O item já está na lista de pendências de segurança (migrar para entrega segura), mas a remoção só deve acontecer junto com uma solução alternativa de exibição.
+
+### Adicionar pacote npm — procedimento obrigatório
+O Docker usa volume anônimo para `node_modules` que **não é atualizado no rebuild normal**.
+Ao adicionar qualquer novo pacote (`npm install <pkg> --save`), executar:
+```bash
+docker compose rm -fsv app   # remove container + volume anônimo de node_modules
+docker compose up -d          # recria com o novo pacote instalado
+```
+Sem isso o servidor não inicia com erro `Cannot find module`.
+
 ### Histórico de inconsistências já corrigidas (não reincidir)
 | Inconsistência | Como aconteceu | Solução aplicada |
 |---------------|---------------|-----------------|
