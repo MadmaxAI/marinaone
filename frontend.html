@@ -2098,7 +2098,7 @@ function _clientUserCell(c) {
 }
 function _renderClientsTbody(clients) {
   if (!clients.length) return '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhum cliente encontrado</td></tr>';
-  return clients.map(c=>`<tr>
+  return clients.map(c=>`<tr class="row-link" onclick="viewClient(${c.id})" title="Clique para ver detalhes">
     <td class="font-bold">${c.name}</td>
     <td class="text-xs text-muted">${c.cpf||'—'}</td>
     <td>${tierBadge(c.tier)}</td>
@@ -2107,7 +2107,7 @@ function _renderClientsTbody(clients) {
     <td>${c.vessel_count||0}</td>
     <td class="text-success font-bold">${fmt(c.ltv)}</td>
     <td>${_clientUserCell(c)}</td>
-    <td><div class="flex gap-2">
+    <td onclick="event.stopPropagation()"><div class="flex gap-2">
       <button class="btn btn-ghost btn-sm" onclick="viewClient(${c.id})" title="Ver detalhes do cliente">👁 Ver</button>
       <button class="btn btn-ghost btn-sm" onclick="openClientModal(${c.id})" title="Editar cliente">✏️</button>
     </div></td>
@@ -5563,7 +5563,7 @@ function _maintTheadCells() {
 }
 function _renderMaintTbody(items) {
   if (!items.length) return '<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:32px">Nenhuma OS encontrada</td></tr>';
-  return items.map(m=>`<tr>
+  return items.map(m=>`<tr class="row-link" onclick="openMaintenanceModal(${m.id})" title="Clique para ver / editar OS">
     <td class="font-bold text-xs">${m.os_number}</td>
     <td>${m.vessel_name||'—'}</td>
     <td><span class="badge ${m.type==='corretiva'?'badge-danger':'badge-info'}">${m.type}</span></td>
@@ -5573,7 +5573,7 @@ function _renderMaintTbody(items) {
     <td>${m.technician_level?`<span class="badge badge-gray" style="text-transform:capitalize">${m.technician_level}</span>`:'—'}</td>
     <td>${fmt(m.cost)}</td>
     <td>${statusBadge(m.status)}</td>
-    <td><div class="flex gap-2">
+    <td onclick="event.stopPropagation()"><div class="flex gap-2">
       <button class="btn btn-ghost btn-sm" onclick="openMaintenanceModal(${m.id})" title="Editar ordem de serviço">✏️</button>
       ${m.status!=='completed'?`<button class="btn btn-success btn-sm" onclick="completeMaintenance(${m.id})">✓</button>`:''}
     </div></td>
@@ -5842,8 +5842,9 @@ pages.analytics = async () => {
           pageCharts.loja = new Chart(document.getElementById('an-loja'),{type:'bar',data:{labels:e.loja_por_mes.map(r=>r.month),datasets:[{label:'Loja',data:e.loja_por_mes.map(r=>r.total),backgroundColor:'rgba(245,158,11,.7)',borderColor:'#f59e0b',borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},x:{grid:{display:false}}}}});
         }
         if (e.charges_por_status && e.charges_por_status.length) {
-          const statusColors={'paid':'rgba(16,185,129,.8)','pending':'rgba(245,158,11,.8)','overdue':'rgba(239,68,68,.8)'};
-          pageCharts.charges = new Chart(document.getElementById('an-charges'),{type:'doughnut',data:{labels:e.charges_por_status.map(s=>s.status),datasets:[{data:e.charges_por_status.map(s=>s.total),backgroundColor:e.charges_por_status.map(s=>statusColors[s.status]||'rgba(99,102,241,.8)')}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8'}}}}});
+          const statusColors={'paid':'rgba(16,185,129,.8)','pending':'rgba(245,158,11,.8)','overdue':'rgba(239,68,68,.8)','cancelled':'rgba(148,163,184,.8)'};
+          const statusLabels={'paid':'Pago','pending':'Pendente','overdue':'Vencido','cancelled':'Cancelado'};
+          pageCharts.charges = new Chart(document.getElementById('an-charges'),{type:'doughnut',data:{labels:e.charges_por_status.map(s=>statusLabels[s.status]||s.status),datasets:[{data:e.charges_por_status.map(s=>s.total),backgroundColor:e.charges_por_status.map(s=>statusColors[s.status]||'rgba(99,102,241,.8)')}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8'}}}}});
         }
         pageCharts.cat = new Chart(document.getElementById('an-cat'),{type:'bar',data:{labels:['Armazenagem Seca','Armazenagem Molhada','Loja'],datasets:[{data:[k.receita_seca||0,k.receita_molhada||0,k.receita_loja||0],backgroundColor:['rgba(16,185,129,.7)','rgba(59,130,246,.7)','rgba(245,158,11,.7)'],borderRadius:6}]},options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.4)'}},y:{grid:{display:false}}}}});
       },0);

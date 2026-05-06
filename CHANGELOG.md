@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.34] -- 2026-05-06
+- Linhas clicaveis em Clientes e Manutencao; grafico Cobranças por Status em portugues
+
 ## [2.3.32] -- 2026-05-06
 - Separar campos distintos do banco em elementos visuais proprios em todas as tabelas e modais; historico de operacoes em tabela com inicio e termino; corrigir fonte do campo contrato na modal de embarcacao
 
@@ -201,6 +204,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
