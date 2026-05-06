@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.32] -- 2026-05-06
+- Separar campos distintos do banco em elementos visuais proprios em todas as tabelas e modais; historico de operacoes em tabela com inicio e termino; corrigir fonte do campo contrato na modal de embarcacao
+
 ## [2.3.28] -- 2026-05-06
 - Vagas: funcao Resequenciar com preview e confirmacao - renumera spots sem afetar vinculos
 
@@ -198,6 +201,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

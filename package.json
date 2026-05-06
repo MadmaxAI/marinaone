@@ -1,6 +1,6 @@
 {
   "name": "marina-one",
-  "version": "2.3.28",
+  "version": "2.3.32",
   "description": "Sistema SaaS de gestão integrada de marina — Multi-Tenant PostgreSQL",
   "main": "server.js",
   "scripts": {

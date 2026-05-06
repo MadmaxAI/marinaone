@@ -1197,8 +1197,9 @@ pages.dashboard = async () => {
         <div class="queue-card" style="cursor:pointer" onclick="nav('queue')" title="Ir para fila de operações">
           <div class="queue-priority ${q.priority?'high':'normal'}"></div>
           <div class="queue-info">
-            <div class="queue-vessel">${q.vessel_name} ${tierBadge(q.client_tier)}</div>
+            <div class="queue-vessel">${q.vessel_name}</div>
             <div class="queue-detail">${opBadge(q.operation_type)} · ${q.client_name} · ${fmtDT(q.requested_at)}</div>
+            <div style="margin-top:3px">${tierBadge(q.client_tier)}</div>
           </div>
           ${statusBadge(q.status)}
         </div>`).join('') : '<div class="empty-state"><div class="icon">✅</div><p>Fila vazia</p></div>'}
@@ -1600,7 +1601,8 @@ function renderQueue(queue) {
       </div>
       <div class="flex items-center gap-2 mb-1" style="flex-wrap:wrap">
         ${VESSEL_STATUS_BADGE(q.vessel_status)}
-        <span class="text-xs text-muted">${q.client_name} · ${q.vessel_type||''}${q.vessel_length?' '+q.vessel_length+'m':''}</span>
+        <span class="text-xs text-muted">${q.client_name}</span>
+        ${(q.vessel_type||q.vessel_length) ? `<span class="text-xs text-muted">${q.vessel_type||''}${q.vessel_length?' '+q.vessel_length+'m':''}</span>` : ''}
         ${timeInfo}
       </div>
       <div class="text-xs text-muted">
@@ -1843,7 +1845,8 @@ function _renderCalContent(container, cal, noticesRaw) {
     return `<tr style="${rowOverdue?'background:rgba(239,68,68,.06)':''}">
       <td style="white-space:nowrap;font-weight:600">${fmtTime(op._start.toISOString())}</td>
       <td style="white-space:nowrap">${fmtTime(op._end.toISOString())}</td>
-      <td><strong>${op.vessel_name}</strong> <span style="font-size:11px;color:var(--text3)">${op.client_name}</span></td>
+      <td><strong>${op.vessel_name}</strong></td>
+      <td style="font-size:11px;color:var(--text3)">${op.client_name}</td>
       <td>${opBadge(op.operation_type)}</td>
       <td>${VESSEL_SIZE_LABEL[op.vessel_size]||'—'}</td>
       <td>${stBadge}</td>
@@ -1874,7 +1877,7 @@ function _renderCalContent(container, cal, noticesRaw) {
   <div class="card">
     <div class="card-title mb-2">📋 Detalhamento do Dia</div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Início</th><th>Término</th><th>Embarcação / Cliente</th><th>Operação</th><th>Porte</th><th>Status</th><th>Duração</th></tr></thead>
+      <thead><tr><th>Início</th><th>Término</th><th>Embarcação</th><th>Cliente</th><th>Operação</th><th>Porte</th><th>Status</th><th>Duração</th></tr></thead>
       <tbody>${tableRows}</tbody>
     </table></div>
   </div>`;
@@ -2075,7 +2078,8 @@ function renderClientsRows(clients) {
 }
 function _clientsTheadCells() {
   const TK = 'clients';
-  return _th(TK,'name','Cliente') + _th(TK,'tier','Tier') + '<th>Contato</th>' +
+  return _th(TK,'name','Cliente') + _th(TK,'cpf','CPF') + _th(TK,'tier','Tier') +
+    _th(TK,'email','E-mail') + '<th>Fone</th>' +
     _th(TK,'vessel_count','Embarcações') + _th(TK,'ltv','LTV') +
     _th(TK,'user_email','Perfil de Acesso') + '<th>Ações</th>';
 }
@@ -2093,11 +2097,13 @@ function _clientUserCell(c) {
     </div>`;
 }
 function _renderClientsTbody(clients) {
-  if (!clients.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhum cliente encontrado</td></tr>';
+  if (!clients.length) return '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhum cliente encontrado</td></tr>';
   return clients.map(c=>`<tr>
-    <td><div class="font-bold">${c.name}</div><div class="text-xs text-muted">${c.cpf||'—'}</div></td>
+    <td class="font-bold">${c.name}</td>
+    <td class="text-xs text-muted">${c.cpf||'—'}</td>
     <td>${tierBadge(c.tier)}</td>
-    <td><div>${c.email||'—'}</div><div class="text-xs text-muted">${c.phone||''}</div></td>
+    <td>${c.email||'—'}</td>
+    <td class="text-xs text-muted">${c.phone||'—'}</td>
     <td>${c.vessel_count||0}</td>
     <td class="text-success font-bold">${fmt(c.ltv)}</td>
     <td>${_clientUserCell(c)}</td>
@@ -2121,7 +2127,8 @@ async function searchClients() {
 async function viewClient(id) {
   const c = await api('GET',`/clients/${id}`);
   modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-title">👤 ${c.name} ${tierBadge(c.tier)}</div>
+    <div class="modal-title">👤 ${c.name}</div>
+    <div style="margin:-8px 0 16px">${tierBadge(c.tier)}</div>
     <div class="grid g2 mb-2">
       <div class="card"><b>E-mail:</b> ${c.email||'—'}<br><b>Fone:</b> ${c.phone||'—'}<br><b>CPF:</b> ${c.cpf||'—'}<br><b>Endereço:</b> ${c.address||'—'}</div>
       <div class="card"><b>LTV:</b> <span class="text-success font-bold">${fmt(c.ltv)}</span><br><b>Embarcações:</b> ${c.vessel_count||0}<br><b>Contratos:</b> ${(c.contracts||[]).length}<br><b>Desde:</b> ${fmtDate(c.created_at)}</div>
@@ -2264,11 +2271,12 @@ function _vesselsTheadCells() {
   const TK = 'vessels';
   return '<th style="width:56px"></th>' +
     _th(TK,'name','Embarcação') + _th(TK,'type','Tipo') + _th(TK,'client_name','Cliente') +
+    _th(TK,'client_tier','Tier') +
     '<th>Vaga</th>' + _th(TK,'vessel_status','Status') + '<th>Contrato</th>' +
     '<th title="Disponível para locação">Locação</th>' + '<th>Ações</th>';
 }
 function _renderVesselsTbody(vessels) {
-  if (!vessels.length) return '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
+  if (!vessels.length) return '<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:32px">Nenhuma embarcação encontrada</td></tr>';
   return vessels.map(v => {
     const photoHtml = v.photo
       ? `<img src="${v.photo}" alt="${v.name}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block">`
@@ -2278,9 +2286,10 @@ function _renderVesselsTbody(vessels) {
       : `<span class="badge badge-gray" title="Não disponível para locação" style="font-size:10px">—</span>`;
     return `<tr class="row-link" onclick="viewVessel(${v.id})" title="Clique para ver detalhes">
       <td style="padding:6px 8px">${photoHtml}</td>
-      <td><div class="font-bold">${v.name}</div><div class="text-xs text-muted">${v.model||''} ${v.manufacturer||''}</div></td>
+      <td><div class="font-bold">${v.name}</div>${v.model?`<div class="text-xs text-muted">${v.model}</div>`:''}${v.manufacturer?`<div class="text-xs text-muted">${v.manufacturer}</div>`:''}</td>
       <td><span class="badge badge-info">${v.type||'—'}</span></td>
-      <td>${v.client_name} ${tierBadge(v.client_tier)}</td>
+      <td>${v.client_name}</td>
+      <td>${tierBadge(v.client_tier)}</td>
       <td>${v.spot_number?`<span class="badge badge-success">${v.spot_number}</span>`:'<span class="badge badge-gray">—</span>'}</td>
       <td>${VESSEL_STATUS_BADGE(v.vessel_status)}</td>
       <td>${v.contract_id ? (v.spot_type==='seca' ? '<span class="badge badge-success">🏗️ Seca</span>' : v.spot_type==='molhada' ? '<span class="badge badge-info">⚓ Molhada</span>' : '<span class="badge badge-warning">📋 Ativo</span>') : '<span class="badge badge-gray">—</span>'}</td>
@@ -2321,7 +2330,7 @@ async function viewVessel(id) {
     ? `<span class="badge ${spot.type==='seca'?'badge-success':'badge-info'}">${spot.number}</span> <span style="font-size:12px;color:var(--text3)">${spot.type==='seca'?'🏗️ Seca':'🌊 Molhada'}</span>`
     : `<span style="color:var(--text3);font-size:13px">Sem vaga atribuída</span>`;
   const contractHtml = v.contract
-    ? `${statusBadge(v.contract.status)} ${v.contract.type}${v.contract.spot_number ? ' — Vaga ' + v.contract.spot_number : ''}`
+    ? `<span style="font-size:13px">${statusBadge(v.contract.status)} ${v.contract.type}${v.contract.spot_number ? ' — Vaga ' + v.contract.spot_number : ''}</span>`
     : `<span style="color:var(--text3);font-size:13px">Sem contrato ativo</span>`;
 
   // Bloco de locação (largura total, abaixo das duas colunas)
@@ -2355,7 +2364,8 @@ async function viewVessel(id) {
     : `<div style="margin-top:12px;padding:8px 12px;border-radius:8px;background:var(--surface2);font-size:12px;color:var(--text3)">❌ Não disponível para locação</div>`;
 
   modal(`<div class="modal modal-lg" onclick="event.stopPropagation()" style="max-width:760px">
-    <div class="modal-title" style="margin-bottom:16px">${v.name} ${VESSEL_STATUS_BADGE(v.vessel_status)}</div>
+    <div class="modal-title" style="margin-bottom:4px">${v.name}</div>
+    <div style="margin-bottom:16px">${VESSEL_STATUS_BADGE(v.vessel_status)}</div>
 
     <div style="display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start">
 
@@ -2395,11 +2405,15 @@ async function viewVessel(id) {
 
         <div style="background:var(--surface2);border-radius:10px;padding:14px">
           <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">⚙️ Histórico de Operações</div>
-          ${(v.history||[]).slice(0,5).map(op=>`
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-              <div>${opBadge(op.operation_type)} ${statusBadge(op.status)}</div>
-              <span style="font-size:11px;color:var(--text3)">${fmtDT(op.requested_at)}</span>
-            </div>`).join('')||'<p style="color:var(--text3);font-size:13px;margin:0">Sem histórico</p>'}
+          ${(v.history||[]).length ? `<div class="table-wrap"><table style="font-size:12px">
+            <thead><tr><th>Operação</th><th>Status</th><th>Início</th><th>Término</th></tr></thead>
+            <tbody>${(v.history||[]).slice(0,10).map(op=>`<tr>
+              <td>${opBadge(op.operation_type)}</td>
+              <td>${statusBadge(op.status)}</td>
+              <td style="white-space:nowrap;color:var(--text3)">${op.started_at ? fmtDT(op.started_at) : '—'}</td>
+              <td style="white-space:nowrap;color:var(--text3)">${op.completed_at ? fmtDT(op.completed_at) : '—'}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>` : '<p style="color:var(--text3);font-size:13px;margin:0">Sem histórico</p>'}
         </div>
 
       </div>
@@ -2882,7 +2896,8 @@ function spotDetail(id, spot) {
     </div>`;
 
   modal(`<div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-title">Vaga ${spot.number} <span class="badge ${spot.type==='seca'?'badge-success':'badge-info'}">${spot.type}</span></div>
+    <div class="modal-title">Vaga ${spot.number}</div>
+    <div style="margin-bottom:8px"><span class="badge ${spot.type==='seca'?'badge-success':'badge-info'}">${spot.type}</span></div>
     <div style="margin-bottom:12px">Status: ${statusBadge(spot.status)}</div>
     ${vesselBlock}
     ${statusBlock}
@@ -3156,14 +3171,15 @@ function renderContractRows(contracts) {
 }
 function _contractsTheadCells() {
   const TK = 'contracts';
-  return _th(TK,'client_name','Cliente') + '<th>Embarcação</th>' + _th(TK,'type','Tipo') +
+  return _th(TK,'client_name','Cliente') + _th(TK,'client_tier','Tier') + '<th>Embarcação</th>' + _th(TK,'type','Tipo') +
     '<th>Vaga</th>' + _th(TK,'monthly_value','Mensal') + _th(TK,'start_date','Vigência') +
     _th(TK,'status','Status') + '<th>Ações</th>';
 }
 function _renderContractsTbody(contracts) {
-  if (!contracts.length) return '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum contrato</td></tr>';
+  if (!contracts.length) return '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhum contrato</td></tr>';
   return contracts.map(c=>`<tr class="row-link" onclick="viewContract(${c.id})" title="Clique para ver detalhes">
-    <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
+    <td>${c.client_name}</td>
+    <td>${tierBadge(c.client_tier)}</td>
     <td>${c.vessel_name}</td>
     <td><span class="badge ${c.type==='molhada'?'badge-info':'badge-success'}">${c.type}</span></td>
     <td>${c.spot_number||'—'}</td>
@@ -3241,7 +3257,8 @@ async function viewContract(id) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div class="settings-info-box">
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px">CLIENTE</div>
-        <div style="font-weight:600">${c.client_name} ${tierBadge(c.client_tier)}</div>
+        <div style="font-weight:600">${c.client_name}</div>
+        <div style="margin-top:4px">${tierBadge(c.client_tier)}</div>
       </div>
       <div class="settings-info-box">
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px">EMBARCAÇÃO</div>
@@ -3707,15 +3724,16 @@ function renderChargeRows(charges, monthKey) {
 function _chargesTheadCells(TK) {
   return _th(TK,'client_name','Cliente') + '<th>Descrição</th>' +
     _th(TK,'amount','Valor') + _th(TK,'due_date','Vencimento') +
-    _th(TK,'paid_date','Pagamento') + _th(TK,'status','Status') + '<th>Ações</th>';
+    _th(TK,'paid_date','Dt. Pagamento') + '<th>Método</th>' + _th(TK,'status','Status') + '<th>Ações</th>';
 }
 function _renderChargesTbody(charges) {
   return charges.map(c=>`<tr class="row-link" onclick="viewChargeDetail(${c.id})" title="Clique para ver detalhes">
-    <td>${c.client_name} ${tierBadge(c.client_tier)}</td>
+    <td><div>${c.client_name}</div><div style="margin-top:3px">${tierBadge(c.client_tier)}</div></td>
     <td>${c.description}</td>
     <td class="font-bold">${fmt(c.amount)}</td>
     <td>${fmtDate(c.due_date)}</td>
-    <td>${c.paid_date?fmtDate(c.paid_date):'—'} ${c.payment_method?'<span class="badge badge-gray">'+c.payment_method+'</span>':''}</td>
+    <td>${c.paid_date?fmtDate(c.paid_date):'—'}</td>
+    <td>${c.payment_method?'<span class="badge badge-gray">'+c.payment_method+'</span>':'—'}</td>
     <td>${chargeBadge(c)}</td>
     <td onclick="event.stopPropagation()"><div class="flex gap-2">
       ${c.status!=='paid'?`<button class="btn btn-success btn-sm" onclick="markPaid(${c.id})">💰 Pagar</button>`:''}
@@ -3761,7 +3779,8 @@ async function viewChargeDetail(id) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div class="settings-info-box">
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px">CLIENTE</div>
-        <div style="font-weight:600">${c.client_name} ${tierBadge(c.client_tier)}</div>
+        <div style="font-weight:600">${c.client_name}</div>
+        <div style="margin-top:4px">${tierBadge(c.client_tier)}</div>
       </div>
       <div class="settings-info-box" style="border-left:3px solid ${statusColors[c.status]||'var(--border)'}">
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px">STATUS</div>
@@ -3774,7 +3793,7 @@ async function viewChargeDetail(id) {
       <div style="font-weight:500">${c.description||'—'}</div>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
       <div class="settings-info-box">
         <div style="font-size:11px;color:var(--text3);margin-bottom:4px">VALOR</div>
         <div style="font-weight:700;font-size:18px;color:var(--accent)">${fmt(c.amount)}</div>
@@ -3784,8 +3803,12 @@ async function viewChargeDetail(id) {
         <div style="font-weight:600">${fmtDate(c.due_date)}</div>
       </div>
       <div class="settings-info-box">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">PAGAMENTO</div>
-        <div style="font-weight:600">${c.paid_date ? fmtDate(c.paid_date) : '—'}${c.payment_method ? ' <span class="badge badge-gray">'+c.payment_method+'</span>' : ''}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">DT. PAGAMENTO</div>
+        <div style="font-weight:600">${c.paid_date ? fmtDate(c.paid_date) : '—'}</div>
+      </div>
+      <div class="settings-info-box">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">MÉTODO</div>
+        <div style="font-weight:600">${c.payment_method ? '<span class="badge badge-gray">'+c.payment_method+'</span>' : '—'}</div>
       </div>
     </div>
 
@@ -4672,7 +4695,8 @@ async function renderClientAccounts() {
     <div class="card" style="margin-bottom:12px;border-left:3px solid var(--info,#38bdf8)">
       <div class="card-header" style="margin-bottom:10px">
         <div>
-          <div class="font-bold" style="font-size:14px">🧾 ${tierBadge(a.client_tier)} ${a.client_name}</div>
+          <div class="font-bold" style="font-size:14px">🧾 ${a.client_name}</div>
+          <div style="margin-top:3px">${tierBadge(a.client_tier)}</div>
           ${a.client_phone?`<div class="text-xs text-muted">${a.client_phone}</div>`:''}
         </div>
         <div style="display:flex;align-items:center;gap:12px">
@@ -4711,7 +4735,8 @@ async function renderClientAccounts() {
     <div class="card" style="margin-bottom:12px">
       <div class="card-header" style="margin-bottom:10px">
         <div>
-          <div class="font-bold" style="font-size:14px">${tierBadge(a.client_tier)} ${a.client_name}</div>
+          <div class="font-bold" style="font-size:14px">${a.client_name}</div>
+          <div style="margin-top:3px">${tierBadge(a.client_tier)}</div>
           ${a.client_phone?`<div class="text-xs text-muted">${a.client_phone}</div>`:''}
         </div>
         <div style="text-align:right">
