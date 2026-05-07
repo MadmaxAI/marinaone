@@ -1749,6 +1749,103 @@ function _startCalRefresh() {
 }
 function _stopCalRefresh() {
   if (_calRefreshTimer) { clearInterval(_calRefreshTimer); _calRefreshTimer = null; }
+  if (_weatherRefTimer) { clearInterval(_weatherRefTimer); _weatherRefTimer = null; }
+}
+
+// ── PREVISÃO DO TEMPO — calendário ───────────────────────────────────
+let _weatherCache     = null;
+let _weatherCacheTime = 0;
+let _weatherRefTimer  = null;
+
+function _weatherEmoji(data) {
+  const id = data?.weather?.[0]?.id;
+  if (!id) {
+    // WeatherAPI format
+    const code = data?.current?.condition?.code;
+    if (!code) return '🌡️';
+    if (code === 1000) return '☀️';
+    if ([1003].includes(code)) return '🌤️';
+    if ([1006].includes(code)) return '⛅';
+    if ([1009].includes(code)) return '☁️';
+    if (code >= 1150 && code <= 1201) return '🌧️';
+    if (code >= 1210 && code <= 1282) return '❄️';
+    if (code >= 1273) return '⛈️';
+    return '🌦️';
+  }
+  if (id >= 200 && id < 300) return '⛈️';
+  if (id >= 300 && id < 600) return '🌧️';
+  if (id >= 600 && id < 700) return '❄️';
+  if (id >= 700 && id < 800) return '🌫️';
+  if (id === 800) return '☀️';
+  if (id === 801) return '🌤️';
+  if (id === 802) return '⛅';
+  return '☁️';
+}
+
+function _parseWeather(data) {
+  if (!data) return null;
+  // OpenWeatherMap
+  if (data.main) return {
+    emoji: _weatherEmoji(data),
+    temp:  Math.round(data.main.temp),
+    desc:  data.weather?.[0]?.description || '',
+    hum:   data.main.humidity,
+    wind:  Math.round((data.wind?.speed || 0) * 3.6), // m/s → km/h
+  };
+  // WeatherAPI
+  if (data.current) return {
+    emoji: _weatherEmoji(data),
+    temp:  Math.round(data.current.temp_c),
+    desc:  data.current.condition?.text || '',
+    hum:   data.current.humidity,
+    wind:  Math.round(data.current.wind_kph || 0),
+  };
+  return null;
+}
+
+async function _fetchWeatherForCal(force) {
+  const now = Date.now();
+  if (!force && _weatherCache && now - _weatherCacheTime < 30 * 60 * 1000) return _weatherCache;
+  try {
+    const sett = await api('GET', '/settings');
+    const lat = sett?.marina_lat, lng = sett?.marina_lng;
+    if (!lat || !lng) return null;
+    const raw = await api('GET', `/weather?lat=${lat}&lon=${lng}`);
+    if (!raw || raw.error) return null;
+    _weatherCache     = _parseWeather(raw);
+    _weatherCacheTime = now;
+    return _weatherCache;
+  } catch { return null; }
+}
+
+function _renderWeatherWidget(w) {
+  const el = document.getElementById('cal-weather-widget');
+  if (!el) return;
+  if (!w) { el.style.display = 'none'; return; }
+  const desc = w.desc.charAt(0).toUpperCase() + w.desc.slice(1);
+  el.style.display = '';
+  el.innerHTML = `
+    <div style="display:inline-flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:7px 20px;font-size:13px;color:var(--text2);white-space:nowrap">
+      <span style="font-size:22px;line-height:1">${w.emoji}</span>
+      <span style="font-weight:700;font-size:15px;color:var(--text)">${w.temp}°C</span>
+      <span style="color:var(--border)">·</span>
+      <span>${desc}</span>
+      <span style="color:var(--border)">·</span>
+      <span>💧 ${w.hum}%</span>
+      <span style="color:var(--border)">·</span>
+      <span>💨 ${w.wind} km/h</span>
+    </div>`;
+}
+
+async function _loadCalWeather() {
+  const w = await _fetchWeatherForCal();
+  _renderWeatherWidget(w);
+  // Atualiza a cada 30min enquanto o calendário estiver aberto
+  if (_weatherRefTimer) clearInterval(_weatherRefTimer);
+  _weatherRefTimer = setInterval(async () => {
+    if (!document.getElementById('cal-weather-widget')) { clearInterval(_weatherRefTimer); return; }
+    _renderWeatherWidget(await _fetchWeatherForCal(true));
+  }, 30 * 60 * 1000);
 }
 
 pages.queue = async () => {
@@ -2145,6 +2242,7 @@ async function renderQueueCalendar() {
   _calMtime = cal.mtime || null;
   _renderCalContent(container, cal, noticesRaw);
   _startCalRefresh();
+  _loadCalWeather(); // async, não bloqueia
 }
 
 function _renderCalContent(container, cal, noticesRaw) {
@@ -2304,12 +2402,13 @@ function _renderCalContent(container, cal, noticesRaw) {
 
   container.innerHTML = noticesBannerHtml + `
   <div class="card mb-2" style="padding:16px">
-    <div class="flex justify-between items-center mb-3">
-      <div>
+    <div style="position:relative;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+      <div style="min-width:0">
         <div style="font-size:16px;font-weight:700;text-transform:capitalize">${todayStr}</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">${allOps.length} operação${allOps.length!==1?'s':''} · Tempo de manobra: ${mvTime}min entre operações</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">${allOps.length} operação${allOps.length!==1?'s':''} · Tempo de manobra: ${mvTime}min entre operações</div>
       </div>
-      <div class="flex gap-2">
+      <div id="cal-weather-widget" style="display:none;position:absolute;left:50%;transform:translateX(-50%)"></div>
+      <div class="flex gap-2" style="flex-shrink:0;flex-wrap:wrap">
         ${[['descida','#3b82f6','Descida'],['subida','#f59e0b','Subida'],['atracacao','#8b5cf6','Atracação']].map(([,c,l])=>
           `<span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>${l}</span>`
         ).join('')}
@@ -7315,6 +7414,23 @@ async function renderSettings(tab) {
       <div class="form-group"><label>WhatsApp (com DDI, ex: 5511999990000)</label><input id="s-marina_whatsapp" value="${s.marina_whatsapp||''}" placeholder="5511999990000"></div>
       <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
         <button class="btn btn-primary" onclick="saveSettings(['marina_name','marina_cnpj','marina_address','marina_city','marina_state','marina_cep','marina_phone','marina_email','marina_whatsapp'])">💾 Salvar Dados da Marina</button>
+      </div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-title">🌤️ Localização — Previsão do Tempo</div>
+      <div class="settings-info-box">Coordenadas geográficas da marina. Usadas para exibir a previsão do tempo no calendário de operações. Obtenha em <strong>maps.google.com</strong> → clique com botão direito no local → copie as coordenadas.</div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>Latitude</label>
+          <input id="s-marina_lat" value="${s.marina_lat||''}" placeholder="-23.5505">
+        </div>
+        <div class="form-group">
+          <label>Longitude</label>
+          <input id="s-marina_lng" value="${s.marina_lng||''}" placeholder="-46.6333">
+        </div>
+      </div>
+      <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
+        <button class="btn btn-primary" onclick="saveSettings(['marina_lat','marina_lng'])">💾 Salvar Localização</button>
       </div>
     </div>`;
 
