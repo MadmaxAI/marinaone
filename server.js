@@ -47,6 +47,29 @@ const MODULES = [
 ];
 const MODULE_KEYS  = MODULES.map(m => m.key);
 const VALID_ROLES  = ['admin', 'operador', 'loja', 'cliente', 'totem'];
+// Roles que recebem alertas (totem é kiosk — sem dashboard de alertas)
+const ALERT_ROLES  = VALID_ROLES.filter(r => r !== 'totem');
+
+// Carrega roles do banco; fallback para VALID_ROLES se tabela ainda não existir
+async function getAllRoles(tAll) {
+  try {
+    return await tAll(`SELECT key, label, description, color, icon, is_system, active FROM roles WHERE active=TRUE ORDER BY is_system DESC, key ASC`);
+  } catch { return VALID_ROLES.map(k => ({ key: k, label: k, is_system: true, active: true })); }
+}
+async function isValidRole(role, tAll) {
+  const roles = await getAllRoles(tAll);
+  return roles.some(r => r.key === role);
+}
+// Definição canônica de todos os tipos de alerta do sistema
+const ALERT_TYPE_DEFS = [
+  { key: 'queue_warning',      label: 'Operação próxima do início',       description: 'Faltam ≤20% do tempo até o início agendado',                module: 'Fila',       sort: 1 },
+  { key: 'queue_overdue',      label: 'Operação não iniciada no horário', description: 'Horário previsto passou sem a operação ser iniciada',          module: 'Fila',       sort: 2 },
+  { key: 'queue_inconsistent', label: 'Operação inconsistente',           description: 'Operação inválida para o estado atual da embarcação',          module: 'Fila',       sort: 3 },
+  { key: 'queue_delayed',      label: 'Operação em atraso',               description: 'Operação em andamento ultrapassou a duração estimada',         module: 'Fila',       sort: 4 },
+  { key: 'financial_overdue',  label: 'Parcela vencida',                  description: 'Cobrança com vencimento passado sem pagamento registrado',     module: 'Financeiro', sort: 5 },
+  { key: 'stock_zero',         label: 'Estoque zerado',                   description: 'Item da loja com estoque igual a zero',                       module: 'Loja',       sort: 6 },
+  { key: 'stock_low',          label: 'Estoque abaixo do mínimo',         description: 'Item com estoque abaixo do nível mínimo configurado',          module: 'Loja',       sort: 7 },
+];
 
 // Sub-módulos por módulo (abas internas com controle granular)
 const SUBMODULES = {
@@ -445,6 +468,81 @@ async function cleanupStaleQueueOps(tAll, tRun) {
     }
   } catch (e) {
     console.error('[queue] cleanupStaleQueueOps:', e.message);
+  }
+}
+
+// Formata Date em HH:MM no fuso BRT
+function fmtTimeBrt(date) {
+  const b = _brt(date);
+  return `${String(b.getUTCHours()).padStart(2,'0')}:${String(b.getUTCMinutes()).padStart(2,'0')}`;
+}
+
+// Calcula horários âncora fixos (baseados em requested_at, não em now)
+// para uso na detecção de alertas — evita falsos positivos durante o shift de display
+function computeAnchoredTimes(enriched, maneuver, opsStart, opsEnd) {
+  const hhmm2min    = s => { const [h, m] = (s||'00:00').split(':').map(Number); return h*60+m; };
+  const brtMinOfDay = d => { const b = _brt(d); return b.getUTCHours()*60 + b.getUTCMinutes(); };
+  const setBrtHhmm  = (d, min) => { const r = new Date(d); r.setUTCHours(Math.floor(min/60)+3, min%60, 0, 0); return r; };
+  const clampS = d => { const sm = hhmm2min(opsStart); const dm = brtMinOfDay(d); return dm < sm ? setBrtHhmm(d, sm) : d; };
+  const clampE = d => { if (!opsEnd) return d; const em = hhmm2min(opsEnd); const dm = brtMinOfDay(d); return dm > em ? setBrtHhmm(d, em) : d; };
+
+  const anchors = {};
+  const inProg  = enriched.find(r => r.status === 'in_progress');
+  let cursor;
+
+  if (inProg && inProg.started_at) {
+    const sa  = inProg.started_at instanceof Date ? inProg.started_at : new Date(inProg.started_at);
+    const end = new Date(sa.getTime() + (inProg.estimated_duration_min || 0) * 60000);
+    cursor = clampS(clampE(new Date(end.getTime() + maneuver * 60000)));
+  } else {
+    const first = enriched.find(r => r.status === 'waiting');
+    if (!first || !first.requested_at) return anchors;
+    const reqAt = new Date(first.requested_at);
+    const base  = clampS(new Date(reqAt.getTime() + 60000));
+    cursor = clampS(new Date(base.getTime() + maneuver * 60000));
+  }
+
+  for (const row of enriched) {
+    if (row.status !== 'waiting') continue;
+    anchors[row.id] = new Date(cursor);
+    const end = new Date(cursor.getTime() + (row.estimated_duration_min || 0) * 60000);
+    cursor = clampS(clampE(new Date(end.getTime() + maneuver * 60000)));
+  }
+  return anchors;
+}
+
+// Gera alertas de fila: yellow (20% do tempo restante) e red (atraso)
+async function checkQueueAlerts(enriched, settings, tAll, tRun) {
+  const now      = new Date();
+  const maneuver = getManeuverTime(settings);
+  const opsStart = settings['ops_start_time'] || '07:00';
+  const opsEnd   = settings['ops_end_time']   || '18:00';
+  const anchors  = computeAnchoredTimes(enriched, maneuver, opsStart, opsEnd);
+
+  for (const op of enriched) {
+    if (op.status !== 'waiting') continue;
+    const anchor = anchors[op.id];
+    if (!anchor) continue;
+
+    const reqAt        = new Date(op.requested_at);
+    const totalWindow  = anchor - reqAt;        // ms
+    const timeUntil    = anchor - now;           // ms
+
+    if (timeUntil <= 0) {
+      await tRun(
+        `INSERT OR IGNORE INTO queue_alerts(operation_id, vessel_name, client_name, operation_type, alert_type, message)
+         VALUES(?,?,?,?,'overdue',?)`,
+        [op.id, op.vessel_name, op.client_name, op.operation_type,
+         `Operação não iniciada: ${op.vessel_name} (${op.operation_type}) prevista para ${fmtTimeBrt(anchor)}`]
+      );
+    } else if (totalWindow > 0 && timeUntil / totalWindow <= 0.20) {
+      await tRun(
+        `INSERT OR IGNORE INTO queue_alerts(operation_id, vessel_name, client_name, operation_type, alert_type, message)
+         VALUES(?,?,?,?,'warning',?)`,
+        [op.id, op.vessel_name, op.client_name, op.operation_type,
+         `Próxima operação: ${op.vessel_name} (${op.operation_type}) em ${Math.ceil(timeUntil/60000)}min (${fmtTimeBrt(anchor)})`]
+      );
+    }
   }
 }
 
@@ -1751,15 +1849,17 @@ addRoute('GET', '/api/access/modules', async (req, res, ctx) => {
 addRoute('GET', '/api/access/permissions', async (req, res, ctx) => {
   if (!requireRole(ctx, res, 'admin')) return;
   const { dbAll: tAll } = ctx.db;
+  const allRoles = await getAllRoles(tAll);
+  const roleKeys = allRoles.map(r => r.key);
   const out = {};
-  for (const role of VALID_ROLES) out[role] = await loadPermissionsAll(role, tAll);
-  sendJson(res, { roles: VALID_ROLES, modules: MODULES, submodules: SUBMODULES, permissions: out });
+  for (const role of roleKeys) out[role] = await loadPermissionsAll(role, tAll);
+  sendJson(res, { roles: allRoles, modules: MODULES, submodules: SUBMODULES, permissions: out });
 });
 
 addRoute('PUT', '/api/access/permissions', async (req, res, ctx) => {
   if (!requireRole(ctx, res, 'admin')) return;
   const { role, module, submodule = '', can_view, can_create, can_edit, can_delete } = ctx.body || {};
-  if (!VALID_ROLES.includes(role))   return sendJson(res, { error: 'Role inválido' }, 400);
+  if (!(await isValidRole(role, ctx.db.dbAll))) return sendJson(res, { error: 'Role inválido' }, 400);
   if (role === 'admin')              return sendJson(res, { error: 'Não é permitido alterar permissões do admin' }, 400);
   if (!MODULE_KEYS.includes(module)) return sendJson(res, { error: 'Módulo inválido' }, 400);
   if (submodule && !SUBMODULE_KEYS[`${module}.${submodule}`]) return sendJson(res, { error: 'Sub-módulo inválido' }, 400);
@@ -1803,7 +1903,7 @@ addRoute('POST', '/api/users', async (req, res, ctx) => {
   const b = ctx.body || {};
   if (!b.email || !b.name || !b.password || !b.role)
     return sendJson(res, { error: 'Campos obrigatórios: email, name, password, role' }, 400);
-  if (!VALID_ROLES.includes(b.role)) return sendJson(res, { error: 'Role inválido' }, 400);
+  if (!(await isValidRole(b.role, ctx.db.dbAll))) return sendJson(res, { error: 'Role inválido' }, 400);
   if (b.role === 'cliente' && !b.client_id)
     return sendJson(res, { error: 'Usuário do tipo cliente precisa de client_id' }, 400);
   const { dbRun: tRun } = ctx.db;
@@ -1829,7 +1929,7 @@ addRoute('PUT', '/api/users/:id', async (req, res, ctx) => {
     const n = await tGet(`SELECT COUNT(*) as n FROM users WHERE role='admin' AND active=1`);
     if (Number(n?.n) <= 1) return sendJson(res, { error: 'Não pode remover o último administrador' }, 400);
   }
-  const role = b.role && VALID_ROLES.includes(b.role) ? b.role : u.role;
+  const role = b.role && (await isValidRole(b.role, ctx.db.dbAll)) ? b.role : u.role;
   const cid  = role === 'cliente' ? (b.client_id || u.client_id) : null;
   const act  = b.active === undefined ? u.active : (b.active ? 1 : 0);
   await tRun('UPDATE users SET name=?,email=?,role=?,client_id=?,active=? WHERE id=?',
@@ -2371,6 +2471,7 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
   const opsStart = settings['ops_start_time'] || '07:00';
   const opsEnd   = settings['ops_end_time']   || '18:00';
   applyEstimatedTimes(enriched, getManeuverTime(settings), opsStart, opsEnd);
+  if (!status) await checkQueueAlerts(enriched, settings, tAll, tRun).catch(e => console.error('[alerts]', e.message));
   sendJson(res, enriched);
 });
 
@@ -2528,11 +2629,90 @@ addRoute('PUT', '/api/queue/:id', async (req, res, ctx) => {
   if (['completed','cancelled'].includes(ns) && !completed) completed = nowStr();
   await tRun('UPDATE queue_operations SET status=?,started_at=?,completed_at=?,operator=?,notes=? WHERE id=?',
              [ns, started || null, completed || null, b.operator || old.operator || null, b.notes || old.notes || null, ctx.params.id]);
+  // Auto-dismiss alertas ao mudar status
+  if (ns === 'in_progress') {
+    await tRun(`UPDATE queue_alerts SET dismissed_at=NOW() WHERE operation_id=? AND alert_type='warning' AND dismissed_at IS NULL`, [ctx.params.id]);
+  } else if (['completed','cancelled'].includes(ns)) {
+    await tRun(`UPDATE queue_alerts SET dismissed_at=NOW() WHERE operation_id=? AND dismissed_at IS NULL`, [ctx.params.id]);
+  }
   sendJson(res, { ok: true });
 });
 
 addRoute('DELETE', '/api/queue/:id', async (req, res, ctx) => {
   await ctx.db.dbRun(`UPDATE queue_operations SET status='cancelled' WHERE id=?`, [ctx.params.id]);
+  await ctx.db.dbRun(`UPDATE queue_alerts SET dismissed_at=NOW() WHERE operation_id=? AND dismissed_at IS NULL`, [ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+// ── Alertas de fila ──────────────────────────────────────────────────
+
+addRoute('GET', '/api/queue/alerts', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { dbAll: tAll } = ctx.db;
+  const role = ctx.user.role;
+  // Busca tipos de alerta habilitados para o papel do usuário
+  const cfg = await tAll(`SELECT alert_type FROM alert_role_config WHERE role=? AND enabled=TRUE`, [role]);
+  if (!cfg.length) return sendJson(res, []);
+  const types = cfg.map(r => r.alert_type);
+  const placeholders = types.map(() => '?').join(',');
+  const alerts = await tAll(
+    `SELECT * FROM queue_alerts WHERE dismissed_at IS NULL AND alert_type IN (${placeholders}) ORDER BY created_at DESC`,
+    types
+  );
+  sendJson(res, alerts);
+});
+
+addRoute('GET', '/api/queue/alerts/mtime', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { dbGet: tGet } = ctx.db;
+  const role = ctx.user.role;
+  const cfg = await ctx.db.dbAll(`SELECT alert_type FROM alert_role_config WHERE role=? AND enabled=TRUE`, [role]);
+  if (!cfg.length) return sendJson(res, { mtime: null, count: 0 });
+  const types = cfg.map(r => r.alert_type);
+  const placeholders = types.map(() => '?').join(',');
+  const row = await tGet(
+    `SELECT MAX(created_at) as mt, COUNT(*) as cnt FROM queue_alerts WHERE dismissed_at IS NULL AND alert_type IN (${placeholders})`,
+    types
+  );
+  sendJson(res, { mtime: row?.mt || null, count: Number(row?.cnt || 0) });
+});
+
+addRoute('PATCH', '/api/queue/alerts/:id/dismiss', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  await ctx.db.dbRun(`UPDATE queue_alerts SET dismissed_at=NOW(), dismissed_by=? WHERE id=?`,
+    [ctx.user.id, ctx.params.id]);
+  sendJson(res, { ok: true });
+});
+
+addRoute('GET', '/api/settings/alert-config', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { dbAll: tAll } = ctx.db;
+  // Roles dinâmicas do banco (exclui totem — kiosk sem dashboard)
+  const allRoles   = await getAllRoles(tAll);
+  const alertRoles = allRoles.filter(r => r.key !== 'totem').map(r => r.key);
+  const rows       = await tAll(`SELECT alert_type, role, enabled FROM alert_role_config`);
+  const cfgMap     = {};
+  rows.forEach(r => { cfgMap[`${r.alert_type}|${r.role}`] = r.enabled; });
+  const fullRows = [];
+  for (const t of ALERT_TYPE_DEFS) {
+    for (const role of alertRoles) {
+      const key = `${t.key}|${role}`;
+      fullRows.push({ alert_type: t.key, role, enabled: cfgMap[key] !== undefined ? cfgMap[key] : false });
+    }
+  }
+  sendJson(res, { roles: alertRoles, types: ALERT_TYPE_DEFS, rows: fullRows });
+});
+
+addRoute('PUT', '/api/settings/alert-config', async (req, res, ctx) => {
+  if (!ctx.user || ctx.user.role !== 'admin') return sendJson(res, { error: 'Acesso negado' }, 403);
+  const { dbRun: tRun } = ctx.db;
+  for (const item of (ctx.body || [])) {
+    await tRun(
+      `INSERT INTO alert_role_config(alert_type, role, enabled) VALUES(?,?,?)
+       ON CONFLICT(alert_type, role) DO UPDATE SET enabled=EXCLUDED.enabled`,
+      [item.alert_type, item.role, item.enabled ? true : false]
+    );
+  }
   sendJson(res, { ok: true });
 });
 
@@ -3262,6 +3442,77 @@ addRoute('GET', '/api/analytics/extended', async (req, res, ctx) => {
     manut_por_tipo: mpt, charges_por_status: cps, top_clientes_loja: tcl,
     vip_count:n(vip?.v), gold_count:n(gold?.v), silver_count:n(silv?.v), std_count:n(std?.v),
   });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — GESTÃO DE ROLES
+// ═════════════════════════════════════════════════════════════════════
+
+addRoute('GET', '/api/roles', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  const { dbAll: tAll } = ctx.db;
+  const roles = await getAllRoles(tAll);
+  // Enriquece com contagem de usuários por role
+  const counts = await tAll(`SELECT role, COUNT(*) as cnt FROM users WHERE active=1 GROUP BY role`);
+  const countMap = {};
+  counts.forEach(c => { countMap[c.role] = Number(c.cnt); });
+  sendJson(res, roles.map(r => ({ ...r, user_count: countMap[r.key] || 0 })));
+});
+
+addRoute('POST', '/api/roles', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const b = ctx.body || {};
+  if (!b.key || !b.label) return sendJson(res, { error: 'key e label são obrigatórios' }, 400);
+  // key deve ser slug válido
+  const key = String(b.key).toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 32);
+  if (!key) return sendJson(res, { error: 'key inválido' }, 400);
+  const { dbRun: tRun, dbAll: tAll } = ctx.db;
+  if (await isValidRole(key, tAll)) return sendJson(res, { error: 'Role já existe' }, 409);
+  await tRun(
+    `INSERT INTO roles(key, label, description, color, icon, is_system) VALUES(?,?,?,?,?,FALSE)`,
+    [key, b.label, b.description || null, b.color || '#6b7280', b.icon || '👤']
+  );
+  // Seed de alert_role_config para a nova role (padrão tudo desabilitado)
+  for (const t of ALERT_TYPE_DEFS) {
+    await tRun(
+      `INSERT OR IGNORE INTO alert_role_config(alert_type, role, enabled) VALUES(?,?,FALSE)`,
+      [t.key, key]
+    );
+  }
+  // Seed de role_permissions vazia para que apareça na tela de permissões
+  for (const mod of MODULE_KEYS) {
+    await tRun(
+      `INSERT OR IGNORE INTO role_permissions(role, module, submodule, can_view, can_create, can_edit, can_delete) VALUES(?,?,'',0,0,0,0)`,
+      [key, mod]
+    );
+  }
+  sendJson(res, { ok: true, key });
+});
+
+addRoute('PUT', '/api/roles/:key', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const b = ctx.body || {};
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const role = await tGet(`SELECT * FROM roles WHERE key=?`, [ctx.params.key]);
+  if (!role) return sendJson(res, { error: 'Role não encontrada' }, 404);
+  await tRun(
+    `UPDATE roles SET label=?, description=?, color=?, icon=? WHERE key=?`,
+    [b.label || role.label, b.description !== undefined ? b.description : role.description,
+     b.color || role.color, b.icon || role.icon, ctx.params.key]
+  );
+  sendJson(res, { ok: true });
+});
+
+addRoute('DELETE', '/api/roles/:key', async (req, res, ctx) => {
+  if (!requireRole(ctx, res, 'admin')) return;
+  const { dbGet: tGet, dbRun: tRun } = ctx.db;
+  const role = await tGet(`SELECT * FROM roles WHERE key=?`, [ctx.params.key]);
+  if (!role) return sendJson(res, { error: 'Role não encontrada' }, 404);
+  if (role.is_system) return sendJson(res, { error: 'Roles de sistema não podem ser excluídas' }, 400);
+  const users = await tGet(`SELECT COUNT(*) as n FROM users WHERE role=? AND active=1`, [ctx.params.key]);
+  if (Number(users?.n) > 0) return sendJson(res, { error: `Existem ${users.n} usuário(s) com esta role. Reatribua-os antes de excluir.` }, 400);
+  await tRun(`UPDATE roles SET active=FALSE WHERE key=?`, [ctx.params.key]);
+  sendJson(res, { ok: true });
 });
 
 // ═════════════════════════════════════════════════════════════════════

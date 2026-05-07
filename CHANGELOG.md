@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.60] -- 2026-05-07
+- gestao de roles: CRUD completo, correcao controle de acesso com roles dinamicas
+
 ## [2.3.56] -- 2026-05-07
 - corrige agendamento da fila: horario fixo ate chegar no start, shift 1:1 sem manobra extra apos passar o horario
 
@@ -219,6 +222,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
