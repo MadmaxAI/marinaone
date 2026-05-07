@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.48] -- 2026-05-06
+- Módulo de configurações SaaS, geração de contrato de licença profissional com template HTML/PDF, análise preditiva de receita e MRR no Analytics
+
 ## [2.3.42] -- 2026-05-06
 - SA: clicar na linha da tabela abre detalhes do tenant
 
@@ -210,6 +213,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

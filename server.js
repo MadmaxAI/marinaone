@@ -627,10 +627,24 @@ addRoute('DELETE', '/api/superadmin/tenants/:slug', async (req, res, ctx) => {
 
 addRoute('PUT', '/api/superadmin/tenants/:slug', async (req, res, ctx) => {
   if (!requireSuperAdmin(ctx, res)) return;
-  const { name, plan, active } = ctx.body || {};
+  const { name, plan, active, cnpj, address, city_state,
+          representative_name, representative_cpf, representative_role } = ctx.body || {};
   await saasRun(
-    'UPDATE saas.tenants SET name=COALESCE($1,name), plan=COALESCE($2,plan), active=COALESCE($3,active) WHERE slug=$4',
-    [name||null, plan||null, active !== undefined ? active : null, ctx.params.slug]
+    `UPDATE saas.tenants SET
+       name                = COALESCE($1, name),
+       plan                = COALESCE($2, plan),
+       active              = COALESCE($3, active),
+       cnpj                = COALESCE($4, cnpj),
+       address             = COALESCE($5, address),
+       city_state          = COALESCE($6, city_state),
+       representative_name = COALESCE($7, representative_name),
+       representative_cpf  = COALESCE($8, representative_cpf),
+       representative_role = COALESCE($9, representative_role)
+     WHERE slug = $10`,
+    [name||null, plan||null, active !== undefined ? active : null,
+     cnpj||null, address||null, city_state||null,
+     representative_name||null, representative_cpf||null, representative_role||null,
+     ctx.params.slug]
   );
   sendJson(res, { ok: true });
 });
@@ -745,6 +759,908 @@ addRoute('GET', '/api/superadmin/tenants/:slug/stats', async (req, res, ctx) => 
     sendJson(res, { error: e.message }, 500);
   }
 });
+
+// ═════════════════════════════════════════════════════════════════════
+//  ROTAS — SUPER-ADMIN: CONTRATOS + FINANCEIRO SAAS
+// ═════════════════════════════════════════════════════════════════════
+
+// Marcar parcelas vencidas automaticamente
+async function saasCheckOverdue() {
+  const today = todayStr();
+  await saasRun(
+    `UPDATE saas.license_charges SET status='overdue'
+     WHERE status='pending' AND due_date < $1`,
+    [today]
+  );
+}
+
+// Gerar parcelas mensais para um contrato
+async function generateLicenseCharges(contractId, tenantSlug, plan, amount, startDate, endDate) {
+  const start  = new Date(startDate + 'T12:00:00Z');
+  const end    = endDate ? new Date(endDate + 'T12:00:00Z') : null;
+  const planLabel = { starter:'Starter', professional:'Professional', enterprise:'Enterprise' };
+  const label  = planLabel[plan] || plan;
+  const charges = [];
+  let cur = new Date(start);
+  const max = 120;
+  while (charges.length < max) {
+    if (end && cur > end) break;
+    const mm = String(cur.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = cur.getUTCFullYear();
+    const dd = String(cur.getUTCDate()).padStart(2, '0');
+    charges.push({
+      due_date:    `${yyyy}-${mm}-${dd}`,
+      description: `Licença ${label} — ${mm}/${yyyy}`,
+    });
+    // próximo mês
+    const nextMonth = cur.getUTCMonth() + 1;
+    const nextYear  = nextMonth === 12 ? cur.getUTCFullYear() + 1 : cur.getUTCFullYear();
+    cur = new Date(Date.UTC(nextYear, nextMonth % 12, cur.getUTCDate()));
+    if (!end && charges.length >= 12) break;
+  }
+  for (const c of charges) {
+    await saasRun(
+      `INSERT INTO saas.license_charges(contract_id,tenant_slug,description,amount,due_date,status)
+       VALUES($1,$2,$3,$4,$5,'pending')`,
+      [contractId, tenantSlug, c.description, amount, c.due_date]
+    );
+  }
+  return charges.length;
+}
+
+// GET /api/superadmin/contracts
+addRoute('GET', '/api/superadmin/contracts', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const rows = await saasAll(
+      `SELECT lc.*, t.name AS tenant_name,
+              (SELECT COUNT(*) FROM saas.license_charges lch WHERE lch.contract_id=lc.id) AS total_charges,
+              (SELECT COUNT(*) FROM saas.license_charges lch WHERE lch.contract_id=lc.id AND lch.status='paid') AS paid_charges,
+              (SELECT COALESCE(SUM(amount),0) FROM saas.license_charges lch WHERE lch.contract_id=lc.id AND lch.status='paid') AS total_paid
+       FROM saas.license_contracts lc
+       JOIN saas.tenants t ON t.slug=lc.tenant_slug
+       ORDER BY lc.created_at DESC`
+    );
+    sendJson(res, rows);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// POST /api/superadmin/contracts
+addRoute('POST', '/api/superadmin/contracts', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const { tenant_slug, plan, monthly_value, start_date, end_date, notes,
+          contract_file_data, contract_file_name, generate_charges } = ctx.body || {};
+  if (!tenant_slug || !plan || !monthly_value || !start_date)
+    return sendJson(res, { error: 'tenant_slug, plan, monthly_value e start_date são obrigatórios' }, 400);
+  try {
+    const row = await saasGet(
+      `INSERT INTO saas.license_contracts(tenant_slug,plan,monthly_value,start_date,end_date,status,notes,contract_file_data,contract_file_name)
+       VALUES($1,$2,$3,$4,$5,'active',$6,$7,$8) RETURNING id`,
+      [tenant_slug, plan, Number(monthly_value), start_date, end_date || null, notes || null,
+       contract_file_data || null, contract_file_name || null]
+    );
+    const contractId = row.id;
+    let chargesCreated = 0;
+    if (generate_charges !== false) {
+      chargesCreated = await generateLicenseCharges(contractId, tenant_slug, plan, Number(monthly_value), start_date, end_date || null);
+    }
+    // Atualiza plan do tenant
+    await saasRun(`UPDATE saas.tenants SET plan=$1 WHERE slug=$2`, [plan, tenant_slug]);
+    sendJson(res, { ok: true, id: contractId, charges_created: chargesCreated });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// PUT /api/superadmin/contracts/:id
+addRoute('PUT', '/api/superadmin/contracts/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const { plan, monthly_value, start_date, end_date, status, notes,
+          contract_file_data, contract_file_name } = ctx.body || {};
+  try {
+    await saasRun(
+      `UPDATE saas.license_contracts SET
+         plan=COALESCE($1,plan), monthly_value=COALESCE($2,monthly_value),
+         start_date=COALESCE($3,start_date), end_date=$4,
+         status=COALESCE($5,status), notes=$6,
+         contract_file_data=COALESCE($7,contract_file_data),
+         contract_file_name=COALESCE($8,contract_file_name)
+       WHERE id=$9`,
+      [plan||null, monthly_value ? Number(monthly_value) : null, start_date||null,
+       end_date||null, status||null, notes||null,
+       contract_file_data||null, contract_file_name||null, ctx.params.id]
+    );
+    sendJson(res, { ok: true });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// DELETE /api/superadmin/contracts/:id  — cancela (soft)
+addRoute('DELETE', '/api/superadmin/contracts/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    await saasRun(`UPDATE saas.license_contracts SET status='cancelled' WHERE id=$1`, [ctx.params.id]);
+    await saasRun(
+      `UPDATE saas.license_charges SET status='cancelled' WHERE contract_id=$1 AND status='pending'`,
+      [ctx.params.id]
+    );
+    sendJson(res, { ok: true });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/contracts/:id/preview  — HTML para impressão/PDF (auth via ?token=)
+addRoute('GET', '/api/superadmin/contracts/:id/preview', async (req, res, ctx) => {
+  // Aceita token via query string para permitir window.open direto
+  const { jwtVerify } = require('./src/middleware/auth');
+  let user = ctx.user;
+  if (!user) {
+    const qToken = (ctx.qs || {}).token || '';
+    try { user = qToken ? jwtVerify(qToken) : null; } catch { user = null; }
+  }
+  if (!user || user.role !== 'superadmin') {
+    res.writeHead(403, { 'Content-Type': 'text/html' });
+    return res.end('<h2>Acesso negado</h2>');
+  }
+  try {
+    const contract = await saasGet(
+      `SELECT lc.*, t.name AS tenant_name, t.admin_email AS tenant_email,
+              t.cnpj AS tenant_cnpj, t.address AS tenant_address,
+              t.city_state AS tenant_city_state,
+              t.representative_name AS tenant_rep_name,
+              t.representative_cpf  AS tenant_rep_cpf,
+              t.representative_role AS tenant_rep_role
+       FROM saas.license_contracts lc
+       JOIN saas.tenants t ON t.slug = lc.tenant_slug
+       WHERE lc.id = $1`, [ctx.params.id]
+    );
+    if (!contract) { res.writeHead(404); return res.end('Contrato não encontrado'); }
+
+    const sRows = await saasAll('SELECT key, value FROM saas.settings');
+    const cfg = {};
+    sRows.forEach(r => { cfg[r.key] = r.value || ''; });
+
+    const html = generateContractHtml(contract, cfg);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+  } catch (e) { res.writeHead(500); res.end(e.message); }
+});
+
+function generateContractHtml(c, cfg) {
+  const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '___/___/______';
+  const blank   = v => v || '___________________________________';
+  const blankS  = v => v || '___________';
+
+  const contractNum = `MO-${String(c.id).padStart(4,'0')}/${new Date().getFullYear()}`;
+  const today       = new Date().toLocaleDateString('pt-BR');
+  const planLabels  = { starter: 'Starter', professional: 'Professional', enterprise: 'Enterprise' };
+  const planLabel   = planLabels[c.plan] || c.plan || '';
+
+  const planFeatures = {
+    starter:      ['Gestão de vagas (até 50 unidades)', 'Cadastro de clientes e embarcações', 'Fila de operações de descida/subida', 'Financeiro básico (contratos e cobranças)', 'Suporte por e-mail em horário comercial'],
+    professional: ['Tudo do plano Starter', 'Gestão avançada de vagas sem limite', 'Módulo de loja de conveniência', 'Integração com API de previsão do tempo', 'Relatórios gerenciais completos', 'Suporte prioritário com tempo de resposta de 4h'],
+    enterprise:   ['Tudo do plano Professional', 'Customizações de layout e marca', 'SLA garantido de 99,5% de disponibilidade', 'Suporte dedicado 24/7', 'Gestor de conta exclusivo', 'Integrações premium sob demanda'],
+  };
+  const features = planFeatures[c.plan] || planFeatures.professional;
+
+  const sla        = c.plan === 'enterprise' ? '99,5%' : '99,0%';
+  const supportSLA = c.plan === 'enterprise' ? '4 horas (24/7)' : c.plan === 'professional' ? '8 horas úteis' : '48 horas úteis';
+
+  const cityForForum = (cfg.company_city_state || 'São Paulo/SP').split('/')[0].trim();
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contrato ${contractNum}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Georgia',serif;font-size:12pt;color:#1a1a2e;background:#fff;line-height:1.65}
+  .print-bar{position:fixed;top:0;left:0;right:0;background:#1e293b;color:#fff;padding:10px 24px;display:flex;align-items:center;gap:12px;z-index:999;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+  .print-bar button{padding:7px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
+  .print-bar .btn-print{background:#6366f1;color:#fff}
+  .print-bar .btn-close{background:rgba(255,255,255,.15);color:#fff}
+  .print-bar span{font-size:13px;color:rgba(255,255,255,.7);margin-left:auto}
+  .page{max-width:800px;margin:80px auto 60px;padding:0 40px}
+  header{text-align:center;border-bottom:3px solid #1a1a2e;padding-bottom:24px;margin-bottom:30px}
+  .co-name{font-size:24pt;font-weight:bold;letter-spacing:3px;text-transform:uppercase;color:#1a1a2e}
+  .co-tagline{font-size:10pt;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-top:4px}
+  .ct-title{font-size:14pt;font-weight:bold;text-transform:uppercase;margin-top:20px;color:#1a1a2e;letter-spacing:1px}
+  .ct-subtitle{font-size:10pt;color:#475569;margin-top:6px}
+  .ct-meta{display:flex;justify-content:center;gap:40px;margin-top:16px;font-size:10pt;color:#475569}
+  .ct-meta strong{color:#1a1a2e}
+  .parties{margin-bottom:28px}
+  .parties-intro{font-size:11pt;margin-bottom:20px;text-align:justify}
+  .party{border:1px solid #cbd5e1;border-radius:8px;padding:16px 20px;margin-bottom:16px;background:#f8fafc}
+  .party-role{font-size:8.5pt;font-weight:bold;text-transform:uppercase;letter-spacing:2px;color:#6366f1;margin-bottom:12px}
+  .party table{width:100%;border-collapse:collapse;font-size:10.5pt}
+  .party table td{padding:3px 6px}
+  .party table td:first-child{font-weight:bold;color:#475569;width:38%;white-space:nowrap}
+  .party-label{margin-top:12px;font-size:10pt;font-style:italic;color:#475569;border-top:1px solid #e2e8f0;padding-top:10px}
+  h2.clause{font-size:11pt;font-weight:bold;text-transform:uppercase;letter-spacing:.5px;color:#1a1a2e;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}
+  p.par{text-align:justify;margin-bottom:10px;font-size:11pt}
+  p.par-indent{text-align:justify;margin:6px 0 6px 24px;font-size:10.5pt}
+  ul.features{margin:8px 0 8px 28px;font-size:10.5pt}
+  ul.features li{margin-bottom:4px}
+  .highlight-box{background:#f0f4ff;border-left:4px solid #6366f1;padding:12px 16px;border-radius:4px;margin:12px 0;font-size:10.5pt}
+  .highlight-box strong{color:#6366f1}
+  .signatures{margin-top:50px;padding-top:28px;border-top:2px solid #1a1a2e;page-break-inside:avoid}
+  .sig-title{text-align:center;font-size:10pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-bottom:32px;color:#475569}
+  .sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px}
+  .sig-block{text-align:center}
+  .sig-line{border-bottom:1px solid #1a1a2e;margin-bottom:10px;height:50px}
+  .sig-name{font-weight:bold;font-size:10.5pt}
+  .sig-detail{font-size:9.5pt;color:#64748b;margin-top:2px}
+  .witnesses{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:60px}
+  .footer-note{margin-top:40px;font-size:9pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:12px;line-height:1.5}
+  @media print{
+    .print-bar{display:none}
+    .page{margin:0;padding:0 20px}
+    @page{margin:2.5cm;size:A4}
+    h2.clause{page-break-after:avoid}
+    .party{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="print-bar">
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Salvar como PDF</button>
+  <button class="btn-close" onclick="window.close()">✕ Fechar</button>
+  <span>Contrato ${contractNum} — ${planLabel} — ${fmtBRL(c.monthly_value)}/mês</span>
+</div>
+<div class="page">
+
+<header>
+  <div class="co-name">${cfg.general_system_name || 'Marina One'}</div>
+  <div class="co-tagline">Plataforma de Gestão de Marinas — SaaS</div>
+  <div class="ct-title">Contrato de Licença de Uso de Software</div>
+  <div class="ct-subtitle">Modalidade Software como Serviço (SaaS) — Lei nº 9.609/98</div>
+  <div class="ct-meta">
+    <span><strong>Nº</strong> ${contractNum}</span>
+    <span><strong>Plano</strong> ${planLabel}</span>
+    <span><strong>Emissão</strong> ${today}</span>
+  </div>
+</header>
+
+<section class="parties">
+  <p class="parties-intro">Pelo presente instrumento particular e na melhor forma de direito, as partes a seguir qualificadas celebram o presente <strong>Contrato de Licença de Uso de Software na Modalidade SaaS</strong>, que se regerá pelas cláusulas e condições seguintes:</p>
+
+  <div class="party">
+    <div class="party-role">Contratante — Fornecedora da Plataforma</div>
+    <table>
+      <tr><td>Razão Social:</td><td>${blank(cfg.company_legal_name)}</td></tr>
+      <tr><td>CNPJ:</td><td>${blank(cfg.company_cnpj)}</td></tr>
+      <tr><td>Endereço:</td><td>${blank(cfg.company_address)}</td></tr>
+      <tr><td>Cidade/Estado/CEP:</td><td>${blank(cfg.company_city_state)}</td></tr>
+      <tr><td>Representante Legal:</td><td>${blank(cfg.company_representative_name)}</td></tr>
+      <tr><td>Cargo:</td><td>${blank(cfg.company_representative_role)}</td></tr>
+      <tr><td>CPF:</td><td>${blankS(cfg.company_representative_cpf)}</td></tr>
+      <tr><td>E-mail:</td><td>${blank(cfg.general_support_email)}</td></tr>
+    </table>
+    <p class="party-label">Doravante denominada simplesmente <strong>"CONTRATANTE"</strong></p>
+  </div>
+
+  <div class="party">
+    <div class="party-role">Licenciado — Beneficiário da Licença</div>
+    <table>
+      <tr><td>Razão Social / Nome:</td><td>${blank(c.tenant_name)}</td></tr>
+      <tr><td>CNPJ / CPF:</td><td>${blank(c.tenant_cnpj)}</td></tr>
+      <tr><td>Endereço:</td><td>${blank(c.tenant_address)}</td></tr>
+      <tr><td>Cidade/Estado/CEP:</td><td>${blank(c.tenant_city_state)}</td></tr>
+      <tr><td>Representante Legal:</td><td>${blank(c.tenant_rep_name)}</td></tr>
+      <tr><td>Cargo:</td><td>${blank(c.tenant_rep_role)}</td></tr>
+      <tr><td>CPF:</td><td>${blankS(c.tenant_rep_cpf)}</td></tr>
+      <tr><td>E-mail:</td><td>${blank(c.tenant_email)}</td></tr>
+    </table>
+    <p class="party-label">Doravante denominada simplesmente <strong>"LICENCIADO"</strong></p>
+  </div>
+</section>
+
+<h2 class="clause">Cláusula 1 — Do Objeto</h2>
+<p class="par">O presente contrato tem por objeto a concessão, pela CONTRATANTE ao LICENCIADO, de licença de uso não exclusiva, intransferível e sem sublicença da plataforma de gestão de marinas denominada <strong>"${cfg.general_system_name || 'Marina One'}"</strong>, desenvolvida, operada e mantida pela CONTRATANTE, disponibilizada na modalidade Software como Serviço (SaaS), acessível via internet por interface web responsiva, nas condições previstas neste instrumento.</p>
+<p class="par-indent">§1º A licença ora concedida é de caráter instrumental, destinando-se exclusivamente ao uso interno e operacional do LICENCIADO na gestão de sua marina, sendo vedado o uso para fins de revenda, sublicenciamento ou prestação de serviços a terceiros.</p>
+<p class="par-indent">§2º A CONTRATANTE poderá, a seu exclusivo critério, adicionar novas funcionalidades à plataforma, sendo tais adições automaticamente incorporadas ao presente contrato sem ônus adicional ao LICENCIADO, desde que dentro do Plano contratado.</p>
+
+<h2 class="clause">Cláusula 2 — Do Plano de Serviços</h2>
+<p class="par">O LICENCIADO contrata o <strong>Plano ${planLabel}</strong>, que compreende as seguintes funcionalidades e recursos:</p>
+<ul class="features">
+${features.map(f => `  <li>${f}</li>`).join('\n')}
+</ul>
+<div class="highlight-box">
+  <strong>Disponibilidade (SLA):</strong> ${sla} de uptime mensal, excluídas janelas de manutenção programada comunicadas com antecedência mínima de 24 horas.<br>
+  <strong>Suporte técnico:</strong> Tempo máximo de primeira resposta de ${supportSLA} a partir do registro do chamado.
+</div>
+
+<h2 class="clause">Cláusula 3 — Do Valor e Forma de Pagamento</h2>
+<p class="par">Pela licença de uso ora contratada, o LICENCIADO pagará à CONTRATANTE a importância mensal de <strong>${fmtBRL(c.monthly_value)} (${valorPorExtenso(Number(c.monthly_value))})</strong>, devida e exigível mensalmente, nos termos do calendário de cobranças gerado na data da assinatura deste instrumento.</p>
+<p class="par-indent">§1º Os pagamentos deverão ser realizados até o vencimento de cada parcela, conforme cronograma previamente disponibilizado. O atraso no pagamento sujeitará o LICENCIADO à multa de 2% sobre o valor em atraso, acrescida de juros moratórios de 1% ao mês e atualização monetária pelo IGPM/FGV.</p>
+<p class="par-indent">§2º A CONTRATANTE poderá reajustar o valor da mensalidade anualmente, com base na variação acumulada do IGPM/FGV ou índice substituto, mediante notificação ao LICENCIADO com antecedência mínima de 30 (trinta) dias.</p>
+<p class="par-indent">§3º O inadimplemento superior a 30 (trinta) dias autoriza a CONTRATANTE a suspender o acesso à plataforma até a regularização, sem prejuízo das demais penalidades contratuais.</p>
+
+<h2 class="clause">Cláusula 4 — Do Prazo de Vigência</h2>
+<p class="par">O presente contrato entra em vigor na data de <strong>${fmtDate(c.start_date)}</strong>${c.end_date ? `, com vigência até <strong>${fmtDate(c.end_date)}</strong>` : ', com vigência por prazo indeterminado'}. ${c.end_date ? 'Ao término do prazo, o contrato poderá ser renovado mediante aditivo assinado pelas partes.' : 'Qualquer das partes poderá denunciar o contrato mediante notificação escrita com antecedência mínima de 30 (trinta) dias.'}</p>
+<p class="par-indent">Parágrafo único. A renovação automática poderá ocorrer por iguais períodos, caso nenhuma das partes manifeste interesse contrário até 30 dias antes do vencimento.</p>
+
+<h2 class="clause">Cláusula 5 — Das Obrigações da Contratante</h2>
+<p class="par">São obrigações da CONTRATANTE:</p>
+<p class="par-indent">I — Disponibilizar a plataforma em funcionamento, com o nível de serviço (SLA) estabelecido na Cláusula 2, durante toda a vigência contratual;</p>
+<p class="par-indent">II — Manter a infraestrutura tecnológica necessária ao funcionamento do sistema, incluindo servidores, banco de dados e rede;</p>
+<p class="par-indent">III — Disponibilizar atualizações, melhorias e correções de segurança no sistema sem custo adicional ao LICENCIADO;</p>
+<p class="par-indent">IV — Manter rotinas de backup dos dados do LICENCIADO com frequência mínima diária, por período de 30 (trinta) dias;</p>
+<p class="par-indent">V — Garantir a confidencialidade e segurança dos dados do LICENCIADO, em conformidade com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD);</p>
+<p class="par-indent">VI — Prestar suporte técnico conforme o nível estabelecido no Plano contratado.</p>
+
+<h2 class="clause">Cláusula 6 — Das Obrigações do Licenciado</h2>
+<p class="par">São obrigações do LICENCIADO:</p>
+<p class="par-indent">I — Efetuar os pagamentos nas datas acordadas, sob pena das penalidades previstas neste contrato;</p>
+<p class="par-indent">II — Utilizar a plataforma exclusivamente para os fins a que se destina, em conformidade com a legislação vigente e os termos deste instrumento;</p>
+<p class="par-indent">III — Manter a confidencialidade das credenciais de acesso (usuário e senha), sendo responsável por todos os atos praticados sob seu login;</p>
+<p class="par-indent">IV — Comunicar imediatamente à CONTRATANTE qualquer incidente de segurança, uso indevido ou acesso não autorizado à plataforma;</p>
+<p class="par-indent">V — Não realizar engenharia reversa, descompilação, desmontagem ou qualquer tentativa de acesso ao código-fonte do software;</p>
+<p class="par-indent">VI — Garantir a veracidade e atualização dos dados cadastrados na plataforma, sendo o único responsável pelas informações inseridas.</p>
+
+<h2 class="clause">Cláusula 7 — Da Propriedade Intelectual</h2>
+<p class="par">A plataforma ${cfg.general_system_name || 'Marina One'}, seu código-fonte, interface, algoritmos, banco de dados, documentação, marcas e demais elementos intelectuais são de propriedade exclusiva da CONTRATANTE, protegidos pela Lei nº 9.609/98 (Lei de Software), Lei nº 9.610/98 (Lei de Direitos Autorais) e demais normas aplicáveis.</p>
+<p class="par-indent">§1º Este contrato não transfere ao LICENCIADO qualquer direito de propriedade intelectual sobre o software, constituindo-se exclusivamente como licença de uso.</p>
+<p class="par-indent">§2º O LICENCIADO poderá fazer referência ao uso da plataforma em seus materiais de comunicação e marketing, mediante prévia e expressa autorização da CONTRATANTE.</p>
+
+<h2 class="clause">Cláusula 8 — Da Proteção de Dados Pessoais (LGPD)</h2>
+<p class="par">As partes comprometem-se a tratar os dados pessoais coletados e processados por meio da plataforma em estrita conformidade com a Lei Geral de Proteção de Dados Pessoais (LGPD — Lei nº 13.709/2018), observando os princípios da finalidade, adequação, necessidade, transparência, segurança e responsabilização.</p>
+<p class="par-indent">§1º A CONTRATANTE atuará na qualidade de <strong>Operadora</strong> dos dados pessoais inseridos pelo LICENCIADO na plataforma, processando-os exclusivamente para a prestação dos serviços contratados.</p>
+<p class="par-indent">§2º O LICENCIADO, na qualidade de <strong>Controlador</strong> dos dados de seus clientes e colaboradores, é o responsável pela coleta, tratamento e compartilhamento de tais dados, devendo obter as bases legais e consentimentos necessários conforme a LGPD.</p>
+<p class="par-indent">§3º Em caso de incidente de segurança que possa afetar dados pessoais, a CONTRATANTE notificará o LICENCIADO em até 72 (setenta e duas) horas após a detecção.</p>
+
+<h2 class="clause">Cláusula 9 — Da Confidencialidade</h2>
+<p class="par">As partes obrigam-se a manter em sigilo todas as informações técnicas, comerciais, operacionais e financeiras a que tiverem acesso em razão deste contrato, não as divulgando a terceiros sem prévia autorização escrita da outra parte, durante a vigência contratual e por um período de 3 (três) anos após seu término.</p>
+<p class="par-indent">Parágrafo único. Excetuam-se as informações que já eram de domínio público antes da data deste contrato, ou que se tornarem públicas sem culpa da parte obrigada ao sigilo.</p>
+
+<h2 class="clause">Cláusula 10 — Da Limitação de Responsabilidade</h2>
+<p class="par">A CONTRATANTE não será responsabilizada por danos indiretos, lucros cessantes, perda de dados por negligência do LICENCIADO ou por eventos fora de seu controle (caso fortuito ou força maior), incluindo falhas de provedores de internet, instabilidades de energia elétrica ou interrupções de serviços de terceiros.</p>
+<p class="par-indent">§1º A responsabilidade total e agregada da CONTRATANTE, a qualquer título, fica limitada ao valor correspondente a 6 (seis) mensalidades efetivamente pagas pelo LICENCIADO nos 6 meses anteriores ao evento danoso.</p>
+
+<h2 class="clause">Cláusula 11 — Da Rescisão</h2>
+<p class="par">O presente contrato poderá ser rescindido, de pleno direito, pela parte inocente, independentemente de notificação judicial ou extrajudicial, nas seguintes hipóteses:</p>
+<p class="par-indent">I — Descumprimento de qualquer cláusula por qualquer das partes, não sanado em 15 (quinze) dias após notificação formal;</p>
+<p class="par-indent">II — Inadimplência do LICENCIADO superior a 30 (trinta) dias;</p>
+<p class="par-indent">III — Insolvência, pedido de recuperação judicial ou falência de qualquer das partes;</p>
+<p class="par-indent">IV — Por mútuo acordo, formalizado por escrito.</p>
+<p class="par-indent">§1º Em caso de rescisão por iniciativa do LICENCIADO sem justa causa antes do término do prazo contratual, serão devidas as mensalidades remanescentes até o final do período, a título de cláusula penal compensatória.</p>
+<p class="par-indent">§2º Na rescisão, o LICENCIADO terá prazo de 30 (trinta) dias para exportar seus dados. Após esse prazo, a CONTRATANTE poderá eliminar os dados de forma irreversível.</p>
+
+<h2 class="clause">Cláusula 12 — Das Disposições Gerais</h2>
+<p class="par-indent">I — O presente contrato é firmado em caráter irrevogável e irretratável, obrigando as partes e seus sucessores.</p>
+<p class="par-indent">II — Quaisquer alterações a este instrumento somente serão válidas se formalizadas mediante aditivo contratual assinado por ambas as partes.</p>
+<p class="par-indent">III — A tolerância de qualquer das partes quanto ao descumprimento de obrigações pela outra não importará novação, renúncia de direitos ou precedente.</p>
+<p class="par-indent">IV — Se qualquer disposição deste contrato for considerada inválida ou inexequível, as demais cláusulas permanecerão em pleno vigor e efeito.</p>
+<p class="par-indent">V — As partes elegem o Foro da Comarca de <strong>${cityForForum}</strong> para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
+
+<div class="signatures">
+  <p class="sig-title">Por estarem assim justas e contratadas, as partes assinam o presente instrumento em 2 (duas) vias de igual teor.</p>
+  <p style="text-align:center;font-size:10pt;color:#475569;margin-bottom:28px">${cityForForum}, ${today}</p>
+  <div class="sig-grid">
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <div class="sig-name">${blank(cfg.company_legal_name)}</div>
+      <div class="sig-detail">${blank(cfg.company_representative_name)}</div>
+      <div class="sig-detail">${cfg.company_representative_role || 'Representante Legal'}</div>
+      <div class="sig-detail" style="margin-top:2px">CONTRATANTE</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <div class="sig-name">${blank(c.tenant_name)}</div>
+      <div class="sig-detail">${blank(c.tenant_rep_name)}</div>
+      <div class="sig-detail">${c.tenant_rep_role || 'Representante Legal'}</div>
+      <div class="sig-detail" style="margin-top:2px">LICENCIADO</div>
+    </div>
+  </div>
+  <div class="witnesses" style="margin-top:48px">
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <div class="sig-detail">Testemunha 1 — Nome: ____________________________</div>
+      <div class="sig-detail">CPF: ________________________</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <div class="sig-detail">Testemunha 2 — Nome: ____________________________</div>
+      <div class="sig-detail">CPF: ________________________</div>
+    </div>
+  </div>
+  <p class="footer-note">Documento gerado eletronicamente pelo sistema ${cfg.general_system_name || 'Marina One'} · Contrato ${contractNum} · ${today}<br>
+  Este documento tem valor jurídico nos termos da Lei nº 14.063/2020 e Medida Provisória nº 2.200-2/2001 quando assinado eletronicamente.</p>
+</div>
+
+</div>
+</body>
+</html>`;
+}
+
+function valorPorExtenso(v) {
+  if (!v || isNaN(v)) return 'valor a definir';
+  const n = Math.round(v * 100);
+  const reais  = Math.floor(n / 100);
+  const cents  = n % 100;
+  const unid   = ['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','quatorze','quinze','dezesseis','dezessete','dezoito','dezenove'];
+  const dez    = ['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+  const cent   = ['','cem','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+  function dezena(n) {
+    if (n < 20) return unid[n];
+    const d = Math.floor(n/10), u = n%10;
+    return dez[d] + (u ? ' e ' + unid[u] : '');
+  }
+  function centena(n) {
+    if (n === 100) return 'cem';
+    const c = Math.floor(n/100), r = n%100;
+    return (c ? cent[c] : '') + (c && r ? ' e ' + dezena(r) : r ? dezena(r) : '');
+  }
+  function milhar(n) {
+    if (n < 1000) return centena(n);
+    const m = Math.floor(n/1000), r = n%1000;
+    const ms = m === 1 ? 'mil' : centena(m) + ' mil';
+    return ms + (r ? ' e ' + centena(r) : '');
+  }
+  const parteReais  = reais  === 0 ? 'zero reais'  : milhar(reais)  + (reais  === 1 ? ' real'   : ' reais');
+  const parteCents  = cents  === 0 ? ''             : ' e ' + dezena(cents) + (cents === 1 ? ' centavo' : ' centavos');
+  return parteReais + parteCents;
+}
+
+// GET /api/superadmin/charges
+addRoute('GET', '/api/superadmin/charges', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    await saasCheckOverdue();
+    const { status, tenant, from, to } = ctx.qs || {};
+    const conds = ['1=1'];
+    const params = [];
+    let p = 1;
+    if (status)  { conds.push(`lch.status=$${p++}`);              params.push(status); }
+    if (tenant)  { conds.push(`lch.tenant_slug=$${p++}`);         params.push(tenant); }
+    if (from)    { conds.push(`lch.due_date>=$${p++}`);           params.push(from); }
+    if (to)      { conds.push(`lch.due_date<=$${p++}`);           params.push(to); }
+    const rows = await saasAll(
+      `SELECT lch.*, t.name AS tenant_name, lc.plan AS contract_plan
+       FROM saas.license_charges lch
+       JOIN saas.tenants t ON t.slug=lch.tenant_slug
+       LEFT JOIN saas.license_contracts lc ON lc.id=lch.contract_id
+       WHERE ${conds.join(' AND ')}
+       ORDER BY lch.due_date DESC
+       LIMIT 500`,
+      params
+    );
+    sendJson(res, rows);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// PUT /api/superadmin/charges/:id
+addRoute('PUT', '/api/superadmin/charges/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  const { status, paid_date, payment_method, amount, notes } = ctx.body || {};
+  try {
+    const old = await saasGet(`SELECT * FROM saas.license_charges WHERE id=$1`, [ctx.params.id]);
+    if (!old) return sendJson(res, { error: 'Parcela não encontrada' }, 404);
+    const ns       = status || old.status;
+    const paidDate = (ns === 'paid' && !old.paid_date) ? todayStr() : (paid_date || old.paid_date || null);
+    await saasRun(
+      `UPDATE saas.license_charges SET status=$1, paid_date=$2, payment_method=$3,
+       amount=COALESCE($4,amount), notes=$5 WHERE id=$6`,
+      [ns, paidDate, payment_method || old.payment_method || null,
+       amount ? Number(amount) : null, notes !== undefined ? notes : old.notes, ctx.params.id]
+    );
+    sendJson(res, { ok: true });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/financial/summary
+addRoute('GET', '/api/superadmin/financial/summary', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    await saasCheckOverdue();
+    const ms = monthStart();
+    const [mrr, revMonth, revTotal, pending, overdue, tenantCount,
+           activeContracts, revenueChart, statusBreakdown] = await Promise.all([
+      saasGet(`SELECT COALESCE(SUM(monthly_value),0) AS v FROM saas.license_contracts WHERE status='active'`),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='paid' AND paid_date>=$1`, [ms]),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='paid'`),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='pending'`),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='overdue'`),
+      saasGet(`SELECT COUNT(*) AS v FROM saas.tenants WHERE active=true`),
+      saasGet(`SELECT COUNT(*) AS v FROM saas.license_contracts WHERE status='active'`),
+      saasAll(
+        `SELECT TO_CHAR(paid_date,'YYYY-MM') AS month, COALESCE(SUM(amount),0) AS total
+         FROM saas.license_charges WHERE status='paid' AND paid_date IS NOT NULL
+         GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY month DESC LIMIT 12`
+      ),
+      saasAll(
+        `SELECT status, COUNT(*) AS count, COALESCE(SUM(amount),0) AS total
+         FROM saas.license_charges GROUP BY status`
+      ),
+    ]);
+    const mrrVal     = Number(mrr?.v     || 0);
+    const revMVal    = Number(revMonth?.v || 0);
+    const revTVal    = Number(revTotal?.v || 0);
+    const pendingVal = Number(pending?.v  || 0);
+    const overdueVal = Number(overdue?.v  || 0);
+    const paidPlusOverdue = revTVal + overdueVal;
+    const collectionRate = paidPlusOverdue > 0 ? Math.round((revTVal / paidPlusOverdue) * 100) : 100;
+    sendJson(res, {
+      mrr:             mrrVal,
+      arr:             mrrVal * 12,
+      revenue_month:   revMVal,
+      revenue_total:   revTVal,
+      pending:         pendingVal,
+      overdue:         overdueVal,
+      collection_rate: collectionRate,
+      tenant_count:    Number(tenantCount?.v || 0),
+      active_contracts:Number(activeContracts?.v || 0),
+      revenue_chart:   revenueChart.reverse().map(r => ({ ...r, total: Number(r.total) })),
+      status_breakdown:statusBreakdown.map(r => ({ ...r, count: Number(r.count), total: Number(r.total) })),
+    });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/analytics
+addRoute('GET', '/api/superadmin/analytics', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    await saasCheckOverdue();
+    const months  = parseInt(ctx.qs?.months || '12', 10);
+    const plan    = ctx.qs?.plan || '';
+    const fromDt  = daysAgo(months * 31);
+
+    const planCond = plan ? `AND lc.plan='${plan.replace(/'/g,"''")}'` : '';
+
+    // --- Receita coletada por mês (tendência) ---
+    const revTrend = await saasAll(
+      `SELECT TO_CHAR(lch.paid_date,'YYYY-MM') AS month, COALESCE(SUM(lch.amount),0) AS total
+       FROM saas.license_charges lch
+       LEFT JOIN saas.license_contracts lc ON lc.id=lch.contract_id
+       WHERE lch.status='paid' AND lch.paid_date IS NOT NULL
+         AND lch.paid_date >= $1 ${planCond}
+       GROUP BY TO_CHAR(lch.paid_date,'YYYY-MM')
+       ORDER BY month ASC`, [fromDt]
+    );
+
+    // --- Novos tenants por mês ---
+    const newTenants = await saasAll(
+      `SELECT TO_CHAR(created_at,'YYYY-MM') AS month, COUNT(*) AS count
+       FROM saas.tenants
+       WHERE created_at >= $1
+       GROUP BY TO_CHAR(created_at,'YYYY-MM')
+       ORDER BY month ASC`, [fromDt]
+    );
+
+    // --- Distribuição por plano (contratos ativos) ---
+    const planDist = await saasAll(
+      `SELECT plan, COUNT(*) AS count, COALESCE(SUM(monthly_value),0) AS mrr
+       FROM saas.license_contracts WHERE status='active'
+       GROUP BY plan ORDER BY mrr DESC`
+    );
+
+    // --- Aging de inadimplência ---
+    const today = todayStr();
+    const [ag0, ag30, ag60, ag90] = await Promise.all([
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='overdue' AND due_date >= $1`, [daysAgo(30)]),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='overdue' AND due_date < $1 AND due_date >= $2`, [daysAgo(30), daysAgo(60)]),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='overdue' AND due_date < $1 AND due_date >= $2`, [daysAgo(60), daysAgo(90)]),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='overdue' AND due_date < $1`, [daysAgo(90)]),
+    ]);
+
+    // --- Top tenants por receita total ---
+    const topTenants = await saasAll(
+      `SELECT lch.tenant_slug, t.name AS tenant_name,
+              COALESCE(SUM(CASE WHEN lch.status='paid' THEN lch.amount ELSE 0 END),0) AS paid_total,
+              COALESCE(SUM(CASE WHEN lch.status IN ('pending','overdue') THEN lch.amount ELSE 0 END),0) AS pending_total,
+              lc_act.plan AS active_plan
+       FROM saas.license_charges lch
+       JOIN saas.tenants t ON t.slug=lch.tenant_slug
+       LEFT JOIN LATERAL (
+         SELECT plan FROM saas.license_contracts WHERE tenant_slug=lch.tenant_slug AND status='active' ORDER BY created_at DESC LIMIT 1
+       ) lc_act ON TRUE
+       GROUP BY lch.tenant_slug, t.name, lc_act.plan
+       ORDER BY paid_total DESC LIMIT 10`
+    );
+
+    // --- Tenants em risco (com valores vencidos) ---
+    const atRisk = await saasAll(
+      `SELECT lch.tenant_slug, t.name AS tenant_name,
+              COALESCE(SUM(lch.amount),0) AS overdue_total,
+              COUNT(*) AS overdue_count,
+              MIN(lch.due_date) AS oldest_due
+       FROM saas.license_charges lch
+       JOIN saas.tenants t ON t.slug=lch.tenant_slug
+       WHERE lch.status='overdue'
+       GROUP BY lch.tenant_slug, t.name
+       ORDER BY overdue_total DESC LIMIT 10`
+    );
+
+    // --- Contratos expirando em 60 dias ---
+    const expiring = await saasAll(
+      `SELECT lc.*, t.name AS tenant_name
+       FROM saas.license_contracts lc
+       JOIN saas.tenants t ON t.slug=lc.tenant_slug
+       WHERE lc.status='active' AND lc.end_date IS NOT NULL
+         AND lc.end_date BETWEEN $1 AND $2
+       ORDER BY lc.end_date ASC`, [today, daysAhead(60)]
+    );
+
+    // --- KPIs globais ---
+    const [mrrRow, arrTotalRow, pendRow, ovdRow, actTenRow, actConRow, churnRow, totalRevRow] = await Promise.all([
+      saasGet(`SELECT COALESCE(SUM(monthly_value),0) AS v FROM saas.license_contracts WHERE status='active' ${planCond.replace('lc.','')}`),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='paid' ${planCond ? "AND contract_id IN (SELECT id FROM saas.license_contracts WHERE "+planCond.replace('lc.','').replace('AND ','')+")" : ''}`),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='pending'`),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='overdue'`),
+      saasGet(`SELECT COUNT(*) AS v FROM saas.tenants WHERE active=true`),
+      saasGet(`SELECT COUNT(*) AS v FROM saas.license_contracts WHERE status='active'`),
+      saasGet(`SELECT COUNT(*) AS v FROM saas.license_contracts WHERE status='cancelled' AND created_at >= $1`, [fromDt]),
+      saasGet(`SELECT COALESCE(SUM(amount),0) AS v FROM saas.license_charges WHERE status='paid'`),
+    ]);
+
+    const mrrVal  = Number(mrrRow?.v  || 0);
+    const actTen  = Number(actTenRow?.v || 0);
+    const arpu    = actTen > 0 ? mrrVal / actTen : 0;
+    const totalRev= Number(totalRevRow?.v || 0);
+    const ovdVal  = Number(ovdRow?.v || 0);
+    const pdTotal = totalRev + ovdVal;
+    const collRate= pdTotal > 0 ? Math.round((totalRev / pdTotal) * 100) : 100;
+
+    // MoM growth — compara último mês completo vs penúltimo
+    const last2 = revTrend.slice(-2);
+    const momGrowth = last2.length === 2 && Number(last2[0].total) > 0
+      ? Math.round(((Number(last2[1].total) - Number(last2[0].total)) / Number(last2[0].total)) * 100)
+      : null;
+
+    // LTV médio (receita total / tenants com pagamentos)
+    const ltvRow = await saasGet(
+      `SELECT COUNT(DISTINCT tenant_slug) AS tenants, COALESCE(SUM(amount),0) AS total
+       FROM saas.license_charges WHERE status='paid'`
+    );
+    const avgLtv = Number(ltvRow?.tenants || 0) > 0
+      ? Number(ltvRow.total) / Number(ltvRow.tenants) : 0;
+
+    sendJson(res, {
+      kpis: {
+        mrr: mrrVal, arr: mrrVal * 12, arpu,
+        active_tenants: actTen,
+        active_contracts: Number(actConRow?.v || 0),
+        churn_period: Number(churnRow?.v || 0),
+        collection_rate: collRate,
+        avg_ltv: avgLtv,
+        mom_growth: momGrowth,
+        total_revenue: totalRev,
+        pending: Number(pendRow?.v || 0),
+        overdue: ovdVal,
+      },
+      rev_trend:   revTrend.map(r => ({ ...r, total: Number(r.total) })),
+      new_tenants: newTenants.map(r => ({ ...r, count: Number(r.count) })),
+      plan_dist:   planDist.map(r => ({ ...r, count: Number(r.count), mrr: Number(r.mrr) })),
+      aging: [
+        { label: '1-30d',  value: Number(ag0?.v  || 0) },
+        { label: '31-60d', value: Number(ag30?.v || 0) },
+        { label: '61-90d', value: Number(ag60?.v || 0) },
+        { label: '90d+',   value: Number(ag90?.v || 0) },
+      ],
+      top_tenants: topTenants.map(r => ({ ...r, paid_total: Number(r.paid_total), pending_total: Number(r.pending_total) })),
+      at_risk:     atRisk.map(r => ({ ...r, overdue_total: Number(r.overdue_total), overdue_count: Number(r.overdue_count) })),
+      expiring,
+    });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/analytics/predict
+addRoute('GET', '/api/superadmin/analytics/predict', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    await saasCheckOverdue();
+    const today  = todayStr();
+    const planF  = ctx.qs?.plan || '';
+    const planCond = planF ? `AND lc.plan='${planF.replace(/'/g,"''")}'` : '';
+
+    // ── 1. RECEITA FUTURA CONCRETA (parcelas pendentes agendadas) ─────
+    const futureRevRows = await saasAll(
+      `SELECT TO_CHAR(lch.due_date,'YYYY-MM') AS month,
+              COALESCE(SUM(lch.amount),0)     AS expected,
+              COALESCE(SUM(CASE WHEN t_risk.is_risky THEN lch.amount ELSE 0 END),0) AS at_risk
+       FROM saas.license_charges lch
+       LEFT JOIN LATERAL (
+         SELECT EXISTS(
+           SELECT 1 FROM saas.license_charges x
+           WHERE x.tenant_slug=lch.tenant_slug AND x.status='overdue'
+         ) AS is_risky
+       ) t_risk ON TRUE
+       LEFT JOIN saas.license_contracts lc ON lc.id=lch.contract_id
+       WHERE lch.status='pending' AND lch.due_date >= $1 ${planCond}
+       GROUP BY TO_CHAR(lch.due_date,'YYYY-MM')
+       ORDER BY month ASC LIMIT 12`,
+      [today]
+    );
+
+    // ── 2. HISTÓRICO DOS ÚLTIMOS 12 MESES (base para regressão) ───────
+    const histRows = await saasAll(
+      `SELECT TO_CHAR(paid_date,'YYYY-MM') AS month, COALESCE(SUM(amount),0) AS total
+       FROM saas.license_charges WHERE status='paid' AND paid_date IS NOT NULL
+         AND paid_date >= $1 ${planCond.replace('lc.plan','plan').replace('lc.','')}
+       GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY month ASC LIMIT 12`,
+      [daysAgo(365)]
+    );
+
+    // ── 3. SCORE DE RISCO POR TENANT ──────────────────────────────────
+    const riskRows = await saasAll(
+      `SELECT t.slug, t.name, t.active, t.plan,
+              COALESCE(SUM(CASE WHEN lch.status='overdue' THEN lch.amount ELSE 0 END),0)  AS overdue_amt,
+              COUNT(CASE WHEN lch.status='overdue' THEN 1 END)                             AS overdue_cnt,
+              MAX(CASE WHEN lch.status='paid' THEN lch.paid_date END)                      AS last_payment,
+              MIN(CASE WHEN lch.status='overdue' THEN lch.due_date END)                    AS oldest_overdue,
+              lc_exp.end_date,
+              lc_exp.monthly_value
+       FROM saas.tenants t
+       LEFT JOIN saas.license_charges lch ON lch.tenant_slug=t.slug
+       LEFT JOIN LATERAL (
+         SELECT end_date, monthly_value FROM saas.license_contracts
+         WHERE tenant_slug=t.slug AND status='active' ORDER BY created_at DESC LIMIT 1
+       ) lc_exp ON TRUE
+       WHERE t.active=true
+       GROUP BY t.slug, t.name, t.active, t.plan, lc_exp.end_date, lc_exp.monthly_value
+       ORDER BY overdue_amt DESC`
+    );
+
+    // Calcula score de risco 0-100 para cada tenant
+    const maxOverdue = riskRows.reduce((m, r) => Math.max(m, Number(r.overdue_amt||0)), 1);
+    const riskScores = riskRows.map(r => {
+      let score = 0;
+      const ovdAmt  = Number(r.overdue_amt || 0);
+      const ovdCnt  = Number(r.overdue_cnt || 0);
+      const expDate = r.end_date ? new Date(r.end_date) : null;
+      const lastPay = r.last_payment ? new Date(r.last_payment) : null;
+      const oldestOverdue = r.oldest_overdue ? new Date(r.oldest_overdue) : null;
+
+      // Inadimplência (0-40 pts)
+      if (ovdAmt > 0) score += Math.min(40, Math.round((ovdAmt / maxOverdue) * 40));
+
+      // Dias de atraso (0-25 pts)
+      if (oldestOverdue) {
+        const daysLate = Math.floor((Date.now() - oldestOverdue.getTime()) / 86400000);
+        score += Math.min(25, Math.round((daysLate / 90) * 25));
+      }
+
+      // Contrato expirando em breve (0-20 pts)
+      if (expDate) {
+        const daysLeft = Math.ceil((expDate.getTime() - Date.now()) / 86400000);
+        if (daysLeft < 0) score += 20;
+        else if (daysLeft <= 15) score += 18;
+        else if (daysLeft <= 30) score += 12;
+        else if (daysLeft <= 60) score += 6;
+      }
+
+      // Sem pagamento nos últimos 60 dias (0-15 pts)
+      if (!lastPay || (Date.now() - lastPay.getTime()) > 60 * 86400000) score += 15;
+
+      score = Math.min(100, score);
+      const level = score >= 70 ? 'critical' : score >= 40 ? 'warning' : 'ok';
+
+      return {
+        slug: r.slug, name: r.name, plan: r.plan,
+        score, level,
+        overdue_amt: ovdAmt, overdue_cnt: ovdCnt,
+        monthly_value: Number(r.monthly_value || 0),
+        days_overdue: oldestOverdue
+          ? Math.floor((Date.now() - oldestOverdue.getTime()) / 86400000) : 0,
+        contract_expires: r.end_date || null,
+        last_payment: r.last_payment || null,
+      };
+    }).sort((a,b) => b.score - a.score);
+
+    // ── 4. CHURN RATE MENSAL (últimos 6 meses) ────────────────────────
+    const churnRows = await saasAll(
+      `SELECT TO_CHAR(created_at,'YYYY-MM') AS month, COUNT(*) AS cancelled
+       FROM saas.license_contracts WHERE status='cancelled' AND created_at >= $1
+       GROUP BY TO_CHAR(created_at,'YYYY-MM') ORDER BY month ASC`, [daysAgo(180)]
+    );
+    const totalActive = Number((await saasGet(
+      `SELECT COUNT(*) AS v FROM saas.license_contracts WHERE status='active'`
+    ))?.v || 1);
+    const avgChurn = churnRows.length
+      ? churnRows.reduce((s,r) => s + Number(r.cancelled), 0) / churnRows.length / totalActive
+      : 0;
+
+    // ── 5. RETENÇÃO: % de tenants que pagaram no prazo (últimos 6m) ───
+    const [onTime, total6m] = await Promise.all([
+      saasGet(`SELECT COUNT(*) AS v FROM saas.license_charges WHERE status='paid' AND paid_date <= due_date AND due_date >= $1`, [daysAgo(180)]),
+      saasGet(`SELECT COUNT(*) AS v FROM saas.license_charges WHERE status IN ('paid','overdue') AND due_date >= $1`, [daysAgo(180)]),
+    ]);
+    const onTimeRate = Number(total6m?.v||0) > 0
+      ? Math.round((Number(onTime?.v||0) / Number(total6m.v)) * 100) : 100;
+
+    sendJson(res, {
+      future_rev:    futureRevRows.map(r => ({ ...r, expected: Number(r.expected), at_risk: Number(r.at_risk) })),
+      hist_monthly:  histRows.map(r => ({ ...r, total: Number(r.total) })),
+      risk_scores:   riskScores,
+      monthly_churn_rate: Math.round(avgChurn * 100 * 10) / 10,
+      on_time_rate:  onTimeRate,
+    });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+//  ROTAS — CONFIGURAÇÕES SAAS
+// ─────────────────────────────────────────────────────────────────────
+
+// GET /api/superadmin/settings
+addRoute('GET', '/api/superadmin/settings', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { saasAll: sAll } = createSaasHelpers();
+    const rows = await sAll('SELECT key, value FROM saas.settings ORDER BY key');
+    const settings = {};
+    rows.forEach(r => { settings[r.key] = r.value; });
+    sendJson(res, settings);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// PUT /api/superadmin/settings
+addRoute('PUT', '/api/superadmin/settings', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { saasRun: sRun } = createSaasHelpers();
+    const entries = Object.entries(ctx.body || {});
+    for (const [key, value] of entries) {
+      await sRun(
+        `INSERT INTO saas.settings(key, value, updated_at) VALUES($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        [key, value ?? '']
+      );
+    }
+    sendJson(res, { ok: true, updated: entries.length });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/settings/test-weather  (testa a chave configurada)
+addRoute('GET', '/api/superadmin/settings/test-weather', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { saasGet: sGet } = createSaasHelpers();
+    const keyRow      = await sGet(`SELECT value FROM saas.settings WHERE key='weather_api_key'`);
+    const providerRow = await sGet(`SELECT value FROM saas.settings WHERE key='weather_provider'`);
+    const apiKey  = keyRow?.value || '';
+    const provider = providerRow?.value || 'openweathermap';
+    if (!apiKey) return sendJson(res, { ok: false, error: 'API key não configurada' });
+    const data = await fetchWeather(-23.5505, -46.6333, apiKey, provider); // São Paulo como teste
+    sendJson(res, { ok: true, sample: data });
+  } catch (e) { sendJson(res, { ok: false, error: e.message }); }
+});
+
+// GET /api/weather?lat=X&lon=Y  (proxy para tenant frontend — requer auth de tenant)
+addRoute('GET', '/api/weather', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  try {
+    const { saasGet: sGet } = createSaasHelpers();
+    const keyRow      = await sGet(`SELECT value FROM saas.settings WHERE key='weather_api_key'`);
+    const providerRow = await sGet(`SELECT value FROM saas.settings WHERE key='weather_provider'`);
+    const apiKey  = keyRow?.value || '';
+    const provider = providerRow?.value || 'openweathermap';
+    if (!apiKey) return sendJson(res, { error: 'Integração de clima não configurada' }, 503);
+    const lat = parseFloat(ctx.query?.lat || '-23.5505');
+    const lon = parseFloat(ctx.query?.lon || '-46.6333');
+    const data = await fetchWeather(lat, lon, apiKey, provider);
+    sendJson(res, data);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+function fetchWeather(lat, lon, apiKey, provider) {
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    let url;
+    if (provider === 'weatherapi') {
+      url = `https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${lat},${lon}&lang=pt`;
+    } else {
+      url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric&lang=pt_br`;
+    }
+    https.get(url, r => {
+      let body = '';
+      r.on('data', d => body += d);
+      r.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch(e) { reject(new Error('Resposta inválida da API de clima')); }
+      });
+    }).on('error', reject);
+  });
+}
 
 // ═════════════════════════════════════════════════════════════════════
 //  ROTAS — AUTH (por tenant)

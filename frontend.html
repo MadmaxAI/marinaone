@@ -430,40 +430,416 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
     </div>
   </div>
 
-  <div style="flex:1;overflow-y:auto;padding:28px;background:var(--bg)">
-    <!-- KPIs -->
-    <div id="sa-kpis" class="grid g4" style="margin-bottom:28px"></div>
+  <!-- Tab nav -->
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:0;flex-shrink:0">
+    <button id="sa-tab-btn-operacional" onclick="saTab('operacional')" style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);border-bottom:2px solid var(--accent);transition:all .15s">🏖️ Operacional</button>
+    <button id="sa-tab-btn-contratos"   onclick="saTab('contratos')"   style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">📄 Contratos</button>
+    <button id="sa-tab-btn-financeiro"  onclick="saTab('financeiro')"  style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">💰 Financeiro</button>
+    <button id="sa-tab-btn-analytics"      onclick="saTab('analytics')"      style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">📊 Analytics</button>
+    <button id="sa-tab-btn-configuracoes" onclick="saTab('configuracoes')" style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">⚙️ Configurações</button>
+  </div>
 
-    <!-- Tabela de Marinas -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">🏖️ Marinas Cadastradas</div>
-        <div style="display:flex;gap:10px">
+  <div style="flex:1;overflow-y:auto;background:var(--bg)">
+
+    <!-- ═══ TAB: OPERACIONAL ═══ -->
+    <div id="sa-tab-operacional" style="padding:28px">
+      <!-- Filtro sempre visível -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <input id="sa-op-search" type="text" placeholder="🔍 Buscar marina..." oninput="saRenderTable()"
+          style="flex:1;min-width:160px;padding:7px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+        <select id="sa-op-plan" onchange="saRenderTable()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <option value="">Todos os planos</option>
+          <option value="starter">Starter</option>
+          <option value="professional">Professional</option>
+          <option value="enterprise">Enterprise</option>
+        </select>
+        <select id="sa-op-status" onchange="saRenderTable()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <option value="">Todos os status</option>
+          <option value="active">Ativas</option>
+          <option value="inactive">Inativas</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sa-op-search').value='';document.getElementById('sa-op-plan').value='';document.getElementById('sa-op-status').value='';saRenderTable()">✕ Limpar</button>
+        <div style="margin-left:auto;display:flex;gap:8px">
           <button class="btn btn-ghost btn-sm" onclick="saLoadTenants()">↻ Atualizar</button>
           <button class="btn btn-primary btn-sm" onclick="saOpenNewTenantModal()">+ Nova Marina</button>
         </div>
       </div>
-      <div class="table-wrap">
-        <table id="sa-table">
-          <thead>
-            <tr>
-              <th>Marina</th>
-              <th>Slug</th>
-              <th>Plano</th>
-              <th>Clientes</th>
-              <th>Usuários</th>
-              <th>Receita</th>
-              <th>Status</th>
-              <th>Criado em</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody id="sa-tbody">
-            <tr><td colspan="9" style="text-align:center;color:var(--text3);padding:40px">Carregando...</td></tr>
-          </tbody>
-        </table>
+      <div id="sa-kpis" class="grid g4" style="margin-bottom:20px"></div>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="sa-table">
+            <thead><tr><th>Marina</th><th>Slug</th><th>Plano</th><th>Clientes</th><th>Usuários</th><th>Receita/Mês</th><th>Status</th><th>Criado em</th><th>Ações</th></tr></thead>
+            <tbody id="sa-tbody"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:40px">Carregando...</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
+
+    <!-- ═══ TAB: CONTRATOS ═══ -->
+    <div id="sa-tab-contratos" style="display:none;padding:28px">
+      <!-- Filtro sempre visível -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <input id="sa-ct-search" type="text" placeholder="🔍 Buscar marina..." oninput="saRenderContracts()"
+          style="flex:1;min-width:160px;padding:7px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+        <select id="sa-contract-filter-status" onchange="saRenderContracts()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <option value="">Todos os status</option>
+          <option value="active">Ativo</option>
+          <option value="trial">Trial</option>
+          <option value="expired">Expirado</option>
+          <option value="cancelled">Cancelado</option>
+        </select>
+        <select id="sa-contract-filter-plan" onchange="saRenderContracts()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <option value="">Todos os planos</option>
+          <option value="starter">Starter</option>
+          <option value="professional">Professional</option>
+          <option value="enterprise">Enterprise</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sa-ct-search').value='';document.getElementById('sa-contract-filter-status').value='';document.getElementById('sa-contract-filter-plan').value='';saRenderContracts()">✕ Limpar</button>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="saLoadContracts()">↻ Atualizar</button>
+          <button class="btn btn-primary btn-sm" onclick="saOpenNewContract()">+ Novo Contrato</button>
+        </div>
+      </div>
+      <div id="sa-contracts-kpis" class="grid g4" style="margin-bottom:20px"></div>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="sa-contracts-table">
+            <thead><tr><th>Marina</th><th>Plano</th><th>Início</th><th>Término</th><th>Valor/Mês</th><th>Parcelas</th><th>Recebido</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody id="sa-contracts-tbody"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:40px">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: FINANCEIRO ═══ -->
+    <div id="sa-tab-financeiro" style="display:none;padding:28px">
+      <!-- Filtro sempre visível -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <select id="sa-fin-filter-tenant" onchange="saLoadFinanceiro()" style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <option value="">Todas as marinas</option>
+        </select>
+        <select id="sa-fin-filter-status" onchange="saLoadFinanceiro()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <option value="">Todos os status</option>
+          <option value="pending">Pendente</option>
+          <option value="paid">Pago</option>
+          <option value="overdue">Vencido</option>
+          <option value="cancelled">Cancelado</option>
+        </select>
+        <input type="month" id="sa-fin-filter-month" onchange="saLoadFinanceiro()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px" title="Mês de vencimento">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sa-fin-filter-status').value='';document.getElementById('sa-fin-filter-tenant').value='';document.getElementById('sa-fin-filter-month').value='';saLoadFinanceiro()">✕ Limpar</button>
+        <button class="btn btn-ghost btn-sm" onclick="saLoadFinanceiro()">↻ Atualizar</button>
+      </div>
+      <div id="sa-fin-kpis" class="grid g4" style="margin-bottom:20px"></div>
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📊 Receita Coletada por Mês (12m)</div></div>
+          <div class="card-body"><canvas id="sa-rev-chart" height="160"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🥧 Status das Cobranças</div></div>
+          <div class="card-body" style="display:flex;align-items:center;justify-content:center"><canvas id="sa-status-chart" height="160"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">💳 Cobranças</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Marina</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Dt. Pagamento</th><th>Método</th><th>Ações</th></tr></thead>
+            <tbody id="sa-charges-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text3);padding:40px">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: ANALYTICS ═══ -->
+    <div id="sa-tab-analytics" style="display:none;padding:28px">
+      <!-- Filtro sempre visível -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:13px;font-weight:600;color:var(--text3)">Período de análise:</span>
+        <select id="sa-anl-period" onchange="saLoadAnalytics()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <option value="6">Últimos 6 meses</option>
+          <option value="12" selected>Últimos 12 meses</option>
+          <option value="24">Últimos 24 meses</option>
+        </select>
+        <select id="sa-anl-plan" onchange="saLoadAnalytics()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <option value="">Todos os planos</option>
+          <option value="starter">Starter</option>
+          <option value="professional">Professional</option>
+          <option value="enterprise">Enterprise</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sa-anl-plan').value='';saLoadAnalytics()">✕ Limpar</button>
+        <button class="btn btn-ghost btn-sm" onclick="saLoadAnalytics()">↻ Atualizar</button>
+      </div>
+
+      <!-- KPIs negócio -->
+      <div id="sa-anl-kpis" class="grid g4" style="margin-bottom:20px"></div>
+
+      <!-- Linha 1: tendência receita + novos/churn -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📈 Tendência de Receita Coletada</div></div>
+          <div class="card-body"><canvas id="sa-anl-trend" height="160"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🏗️ Novos Tenants por Mês</div></div>
+          <div class="card-body"><canvas id="sa-anl-new" height="160"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Linha 2: distribuição planos + aging inadimplência -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📋 Distribuição por Plano</div></div>
+          <div class="card-body" style="display:flex;align-items:center;justify-content:center"><canvas id="sa-anl-plans" height="180"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚠️ Aging de Inadimplência</div></div>
+          <div class="card-body"><canvas id="sa-anl-aging" height="180"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Linha 3: tabelas de gestão -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🏆 Top Tenants por Receita</div></div>
+          <div class="table-wrap"><table><thead><tr><th>#</th><th>Marina</th><th>Plano</th><th>Recebido</th><th>Pendente</th></tr></thead>
+            <tbody id="sa-anl-top-tbody"></tbody></table></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🚨 Tenants em Risco (inadimplentes)</div></div>
+          <div class="table-wrap"><table><thead><tr><th>Marina</th><th>Vencido</th><th>Parcelas</th><th>Dias</th></tr></thead>
+            <tbody id="sa-anl-risk-tbody"></tbody></table></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">📅 Contratos Expirando em 60 Dias</div></div>
+        <div class="table-wrap"><table><thead><tr><th>Marina</th><th>Plano</th><th>Expira em</th><th>Valor/Mês</th><th>Status</th></tr></thead>
+          <tbody id="sa-anl-exp-tbody"></tbody></table></div>
+      </div>
+
+      <!-- ── ANÁLISE PREDITIVA ── -->
+      <div style="margin:28px 0 12px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:13px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase">🔮 Análise Preditiva</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+
+      <!-- KPIs preditivos -->
+      <div id="sa-pred-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:20px">
+        <div style="text-align:center;color:var(--text3);padding:20px;grid-column:1/-1">Carregando previsões...</div>
+      </div>
+
+      <!-- Charts preditivos -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">💰 Receita Futura Concreta (12 meses)</div></div>
+          <div class="card-body"><canvas id="sa-pred-future" height="180"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📈 Projeção MRR (Regressão Linear)</div></div>
+          <div class="card-body"><canvas id="sa-pred-mrr" height="180"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Tabela: Score de risco por tenant -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">🎯 Score de Risco por Tenant</div></div>
+        <div class="table-wrap"><table><thead><tr>
+          <th>Marina</th><th>Plano</th><th>Score</th><th>Nível</th>
+          <th>Inadimplente</th><th>Dias Atraso</th><th>Contrato Expira</th><th>Último Pgto</th>
+        </tr></thead>
+          <tbody id="sa-pred-risk-tbody"></tbody></table></div>
+      </div>
+
+      <!-- Tabela: Fluxo de caixa previsto -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">💸 Fluxo de Caixa Previsto — Próximos 12 Meses</div></div>
+        <div class="table-wrap"><table><thead><tr>
+          <th>Mês</th><th>Previsto (Confirmado)</th><th>Em Risco (Inadimplentes)</th><th>Total Esperado</th>
+        </tr></thead>
+          <tbody id="sa-pred-cashflow-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: CONFIGURAÇÕES ═══ -->
+    <div id="sa-tab-configuracoes" style="display:none;padding:28px;max-width:900px">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+        <div>
+          <div style="font-size:18px;font-weight:700">⚙️ Configurações do SaaS</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">Configurações globais aplicadas a todos os tenants</div>
+        </div>
+        <button class="btn btn-primary" onclick="saSaveSettings()">💾 Salvar Todas as Configurações</button>
+      </div>
+
+      <div id="sa-cfg-msg" style="display:none;margin-bottom:16px"></div>
+
+      <!-- DADOS DA EMPRESA (CONTRATANTE) -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">🏛️ Dados da Empresa (Contratante — aparece no contrato)</div></div>
+        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="form-group" style="margin:0;grid-column:1/-1">
+            <label>Razão Social *</label>
+            <input id="cfg-company_legal_name" type="text" class="form-control" placeholder="Marina One Tecnologia Ltda.">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>CNPJ</label>
+            <input id="cfg-company_cnpj" type="text" class="form-control" placeholder="00.000.000/0001-00">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>E-mail de Suporte</label>
+            <input id="cfg-general_support_email" type="email" class="form-control" placeholder="suporte@marinaone.com.br">
+          </div>
+          <div class="form-group" style="margin:0;grid-column:1/-1">
+            <label>Endereço</label>
+            <input id="cfg-company_address" type="text" class="form-control" placeholder="Rua Exemplo, 123 — Sala 10">
+          </div>
+          <div class="form-group" style="margin:0;grid-column:1/-1">
+            <label>Cidade / Estado / CEP</label>
+            <input id="cfg-company_city_state" type="text" class="form-control" placeholder="São Paulo/SP — 01310-100">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Nome do Representante Legal</label>
+            <input id="cfg-company_representative_name" type="text" class="form-control" placeholder="João da Silva">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Cargo do Representante</label>
+            <input id="cfg-company_representative_role" type="text" class="form-control" placeholder="Sócio-Administrador">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>CPF do Representante</label>
+            <input id="cfg-company_representative_cpf" type="text" class="form-control" placeholder="000.000.000-00">
+          </div>
+        </div>
+      </div>
+
+      <!-- GERAL -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">🏢 Configurações Gerais do Sistema</div></div>
+        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="form-group" style="margin:0">
+            <label>Nome do Sistema</label>
+            <input id="cfg-general_system_name" type="text" class="form-control" placeholder="Marina One">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Plano Padrão para Novos Tenants</label>
+            <select id="cfg-general_default_plan" class="form-control">
+              <option value="starter">Starter</option>
+              <option value="professional">Professional</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- PREÇOS DOS PLANOS -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">💳 Preços dos Planos (R$/mês)</div></div>
+        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+          <div class="form-group" style="margin:0">
+            <label>Starter</label>
+            <input id="cfg-plan_price_starter" type="number" min="0" step="0.01" class="form-control" placeholder="299.00">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Professional</label>
+            <input id="cfg-plan_price_professional" type="number" min="0" step="0.01" class="form-control" placeholder="599.00">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Enterprise</label>
+            <input id="cfg-plan_price_enterprise" type="number" min="0" step="0.01" class="form-control" placeholder="1299.00">
+          </div>
+        </div>
+      </div>
+
+      <!-- INTEGRAÇÃO PREVISÃO DO TEMPO -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="card-title">🌤️ Integração — Previsão do Tempo</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
+            A API de clima é usada pelos tenants para exibir a previsão do tempo na marina. A chave é armazenada com segurança no servidor e nunca exposta ao navegador.
+          </div>
+          <div style="display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:end">
+            <div class="form-group" style="margin:0">
+              <label>Provedor</label>
+              <select id="cfg-weather_provider" class="form-control">
+                <option value="openweathermap">OpenWeatherMap</option>
+                <option value="weatherapi">WeatherAPI.com</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>API Key</label>
+              <div style="display:flex;gap:8px">
+                <input id="cfg-weather_api_key" type="password" class="form-control" placeholder="Cole sua chave de API aqui" style="flex:1">
+                <button class="btn btn-ghost btn-sm" type="button"
+                  onclick="document.getElementById('cfg-weather_api_key').type=document.getElementById('cfg-weather_api_key').type==='password'?'text':'password'">👁</button>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:14px;display:flex;align-items:center;gap:12px">
+            <button class="btn btn-ghost btn-sm" onclick="saTestWeatherApi()">🧪 Testar conexão (São Paulo)</button>
+            <span id="sa-weather-test-result" style="font-size:12px;color:var(--text3)"></span>
+          </div>
+          <div style="margin-top:14px;padding:12px;background:rgba(99,102,241,.07);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.7">
+            <strong>Como obter a chave:</strong><br>
+            • <strong>OpenWeatherMap:</strong> <span style="font-family:monospace">openweathermap.org/api</span> → plano gratuito permite 1.000 chamadas/dia<br>
+            • <strong>WeatherAPI.com:</strong> <span style="font-family:monospace">weatherapi.com</span> → plano gratuito permite 1.000.000 chamadas/mês<br>
+            • Endpoint de uso nos tenants: <span style="font-family:monospace">GET /api/weather?lat=X&amp;lon=Y</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SMTP -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">📧 SMTP — Envio de E-mails</div></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px">
+            Configuração do servidor de e-mail para notificações automáticas (cobranças, alertas, etc.)
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 120px;gap:16px;margin-bottom:12px">
+            <div class="form-group" style="margin:0">
+              <label>Servidor SMTP</label>
+              <input id="cfg-smtp_host" type="text" class="form-control" placeholder="smtp.gmail.com">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Porta</label>
+              <input id="cfg-smtp_port" type="number" class="form-control" placeholder="587">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px">
+            <div class="form-group" style="margin:0">
+              <label>Usuário SMTP</label>
+              <input id="cfg-smtp_user" type="text" class="form-control" placeholder="usuario@gmail.com">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Senha SMTP</label>
+              <div style="display:flex;gap:8px">
+                <input id="cfg-smtp_pass" type="password" class="form-control" placeholder="Senha ou App Password" style="flex:1">
+                <button class="btn btn-ghost btn-sm" type="button"
+                  onclick="document.getElementById('cfg-smtp_pass').type=document.getElementById('cfg-smtp_pass').type==='password'?'text':'password'">👁</button>
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="form-group" style="margin:0">
+              <label>E-mail Remetente</label>
+              <input id="cfg-smtp_from_email" type="email" class="form-control" placeholder="noreply@marinaone.com.br">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Nome Remetente</label>
+              <input id="cfg-smtp_from_name" type="text" class="form-control" placeholder="Marina One">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botão inferior -->
+      <div style="display:flex;justify-content:flex-end;padding-top:8px">
+        <button class="btn btn-primary" onclick="saSaveSettings()">💾 Salvar Todas as Configurações</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -7241,9 +7617,14 @@ function saShowPanel() {
   const sa = document.getElementById('sa-app');
   sa.style.display = 'flex';
   document.getElementById('sa-user-name').textContent = window.saUser?.name || window.saUser?.email || '';
-  // Versão no header do super-admin
   const vb = document.getElementById('sa-version-badge');
   if (vb && window.APP_VERSION) vb.textContent = 'v' + window.APP_VERSION;
+  // Reseta tabs ao (re)abrir painel
+  window._saContractsLoaded = false;
+  window._saFinLoaded       = false;
+  window._saAnlLoaded       = false;
+  window._saCfgLoaded       = false;
+  saTab('operacional');
   saLoadTenants();
 }
 
@@ -7329,8 +7710,16 @@ function saRenderTable() {
     return `<span class="badge ${m[p]||'badge-gray'}">${p||'—'}</span>`;
   };
 
-  // Mescla tenant + stats para ordenação
-  const rows = tenants.map((t, i) => ({ t, st: statsAll[i] || {}, origIdx: i }));
+  // Filtros
+  const search   = (document.getElementById('sa-op-search')?.value  || '').toLowerCase();
+  const planF    =  document.getElementById('sa-op-plan')?.value    || '';
+  const statusF  =  document.getElementById('sa-op-status')?.value  || '';
+
+  // Mescla tenant + stats, aplica filtros
+  let rows = tenants.map((t, i) => ({ t, st: statsAll[i] || {}, origIdx: i }));
+  if (search)  rows = rows.filter(({t}) => t.name?.toLowerCase().includes(search) || t.slug?.toLowerCase().includes(search));
+  if (planF)   rows = rows.filter(({t}) => t.plan === planF);
+  if (statusF) rows = rows.filter(({t}) => statusF === 'active' ? t.active : !t.active);
 
   const getVal = ({ t, st }) => {
     if (col === 'name')    return (t.name    || '').toLowerCase();
@@ -7663,6 +8052,38 @@ function saEditTenant(idx) {
         <p style="font-size:11px;color:var(--text3);margin-top:6px">PNG, JPG ou SVG — máx. 500 KB. A logomarca será exibida imediatamente na marina após salvar.</p>
       </div>
 
+      <details style="margin-bottom:8px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);padding:8px 0;user-select:none">
+          📋 Dados para Contrato (CNPJ, Representante, Endereço)
+        </summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding:14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+          <div class="form-group" style="margin:0;grid-column:1/-1">
+            <label style="font-size:11px">CNPJ / CPF</label>
+            <input id="se-cnpj" value="${t.cnpj||''}" placeholder="00.000.000/0001-00" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          </div>
+          <div class="form-group" style="margin:0;grid-column:1/-1">
+            <label style="font-size:11px">Endereço</label>
+            <input id="se-address" value="${t.address||''}" placeholder="Rua, número, bairro" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          </div>
+          <div class="form-group" style="margin:0;grid-column:1/-1">
+            <label style="font-size:11px">Cidade / Estado / CEP</label>
+            <input id="se-city-state" value="${t.city_state||''}" placeholder="Rio de Janeiro/RJ — 20040-020" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px">Nome do Responsável</label>
+            <input id="se-rep-name" value="${t.representative_name||''}" placeholder="João da Silva" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px">Cargo</label>
+            <input id="se-rep-role" value="${t.representative_role||''}" placeholder="Sócio-Administrador" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px">CPF do Responsável</label>
+            <input id="se-rep-cpf" value="${t.representative_cpf||''}" placeholder="000.000.000-00" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          </div>
+        </div>
+      </details>
+
       <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text3);margin-bottom:4px">
         ⚠️ O slug (<code>${t.slug}</code>), banco de dados e estrutura da marina <strong>não são alterados</strong> aqui.
       </div>
@@ -7685,7 +8106,17 @@ async function saSaveEdit(slug, idx) {
   btn.disabled = true; btn.textContent = '⏳ Salvando...';
 
   // 1. Salva dados básicos
-  const res = await saApi('PUT', `/superadmin/tenants/${slug}`, { name, plan, active });
+  const cnpj              = document.getElementById('se-cnpj')?.value.trim()     || null;
+  const address           = document.getElementById('se-address')?.value.trim()  || null;
+  const city_state        = document.getElementById('se-city-state')?.value.trim()|| null;
+  const representative_name = document.getElementById('se-rep-name')?.value.trim()|| null;
+  const representative_role = document.getElementById('se-rep-role')?.value.trim()|| null;
+  const representative_cpf  = document.getElementById('se-rep-cpf')?.value.trim() || null;
+  const res = await saApi('PUT', `/superadmin/tenants/${slug}`, {
+    name, plan, active,
+    cnpj, address, city_state,
+    representative_name, representative_role, representative_cpf,
+  });
   if (!res || (!res.ok && res.error)) {
     btn.disabled = false; btn.textContent = '💾 Salvar';
     errEl.textContent = res?.error || 'Erro ao salvar.'; errEl.style.display='block'; return;
@@ -7947,6 +8378,875 @@ async function saCreateTenant() {
   t.textContent = `✅ Marina "${name}" criada com sucesso!${vagasMsg}`;
   document.body.appendChild(t);
   setTimeout(()=>t.remove(), 4000);
+}
+
+// ════════════════════════════════════════════════════════════
+//  SA — TABS
+// ════════════════════════════════════════════════════════════
+window._saActiveTab = 'operacional';
+
+function saTab(tab) {
+  window._saActiveTab = tab;
+  ['operacional','contratos','financeiro','analytics','configuracoes'].forEach(t => {
+    const el = document.getElementById('sa-tab-' + t);
+    if (el) el.style.display = t === tab ? '' : 'none';
+    const btn = document.getElementById('sa-tab-btn-' + t);
+    if (btn) {
+      btn.style.color        = t === tab ? 'var(--accent)' : 'var(--text3)';
+      btn.style.borderBottom = t === tab ? '2px solid var(--accent)' : '2px solid transparent';
+    }
+  });
+  if (tab === 'contratos'     && !window._saContractsLoaded) saLoadContracts();
+  if (tab === 'financeiro'    && !window._saFinLoaded)       saLoadFinanceiro();
+  if (tab === 'analytics'     && !window._saAnlLoaded)       saLoadAnalytics();
+  if (tab === 'configuracoes' && !window._saCfgLoaded)       saLoadSettings();
+}
+
+// ════════════════════════════════════════════════════════════
+//  SA — CONTRATOS
+// ════════════════════════════════════════════════════════════
+window._saContracts = [];
+window._saContractsLoaded = false;
+
+const SA_PLAN_PRICES = { starter: 299, professional: 599, enterprise: 1299 };
+const SA_PLAN_LABELS = { starter: 'Starter', professional: 'Professional', enterprise: 'Enterprise' };
+
+function saContractStatusBadge(s) {
+  const m = { active:'badge-success', trial:'badge-warning', expired:'badge-gray', cancelled:'badge-danger' };
+  const l = { active:'Ativo', trial:'Trial', expired:'Expirado', cancelled:'Cancelado' };
+  return `<span class="badge ${m[s]||'badge-gray'}">${l[s]||s}</span>`;
+}
+
+async function saLoadContracts() {
+  window._saContractsLoaded = true;
+  document.getElementById('sa-contracts-tbody').innerHTML =
+    '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Carregando...</td></tr>';
+  const rows = await saApi('GET', '/superadmin/contracts');
+  if (!rows || !Array.isArray(rows)) {
+    document.getElementById('sa-contracts-tbody').innerHTML =
+      '<tr><td colspan="9" style="text-align:center;color:var(--danger);padding:24px">Erro ao carregar contratos.</td></tr>';
+    return;
+  }
+  window._saContracts = rows;
+  // KPIs
+  const active   = rows.filter(r => r.status === 'active');
+  const mrr      = active.reduce((s, r) => s + Number(r.monthly_value || 0), 0);
+  const total    = rows.length;
+  const fmtBRL   = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  document.getElementById('sa-contracts-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Total de Contratos</div><div class="kpi-value">${total}</div><div class="kpi-icon">📄</div></div>
+    <div class="kpi green"><div class="kpi-label">Contratos Ativos</div><div class="kpi-value">${active.length}</div><div class="kpi-icon">✅</div></div>
+    <div class="kpi purple"><div class="kpi-label">MRR</div><div class="kpi-value" style="font-size:18px">${fmtBRL(mrr)}</div><div class="kpi-icon">💰</div></div>
+    <div class="kpi"><div class="kpi-label">ARR</div><div class="kpi-value" style="font-size:18px">${fmtBRL(mrr*12)}</div><div class="kpi-icon">📈</div></div>`;
+  saRenderContracts();
+}
+
+function saRenderContracts() {
+  const fmtBRL   = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const fmtDate  = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+  const filterStatus = document.getElementById('sa-contract-filter-status')?.value || '';
+  const filterPlan   = document.getElementById('sa-contract-filter-plan')?.value   || '';
+  const search       = (document.getElementById('sa-ct-search')?.value || '').toLowerCase();
+  let rows = window._saContracts || [];
+  if (filterStatus) rows = rows.filter(r => r.status === filterStatus);
+  if (filterPlan)   rows = rows.filter(r => r.plan   === filterPlan);
+  if (search)       rows = rows.filter(r => (r.tenant_name||r.tenant_slug).toLowerCase().includes(search));
+  const tbody = document.getElementById('sa-contracts-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhum contrato encontrado.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(c => `<tr class="row-link" onclick="saViewContract(${c.id})" title="Clique para ver detalhes">
+    <td><span style="font-weight:600">${c.tenant_name || c.tenant_slug}</span></td>
+    <td><span class="badge ${c.plan==='enterprise'?'badge-success':c.plan==='professional'?'badge-info':'badge-gray'}">${SA_PLAN_LABELS[c.plan]||c.plan}</span></td>
+    <td style="font-size:12px;color:var(--text3)">${fmtDate(c.start_date)}</td>
+    <td style="font-size:12px;color:var(--text3)">${fmtDate(c.end_date)}</td>
+    <td style="font-weight:600;font-size:13px">${fmtBRL(c.monthly_value)}</td>
+    <td style="font-size:12px"><div>${c.paid_charges}/${c.total_charges} pagas</div><div style="font-size:10px;color:var(--text3)">${fmtBRL(c.total_paid)} recebido</div></td>
+    <td style="font-size:12px">${fmtBRL(c.total_paid)}</td>
+    <td>${saContractStatusBadge(c.status)}</td>
+    <td onclick="event.stopPropagation()">
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-ghost btn-sm" onclick="saViewContract(${c.id})" title="Ver detalhes">👁️</button>
+        <button class="btn btn-ghost btn-sm" onclick="saEditContract(${c.id})" title="Editar">✏️</button>
+        <button class="btn btn-ghost btn-sm" onclick="saGenerateContract(${c.id})" title="Gerar contrato PDF">📋</button>
+        ${c.status!=='cancelled'?`<button class="btn btn-danger btn-sm" onclick="saCancelContract(${c.id},'${(c.tenant_name||c.tenant_slug).replace(/'/g,"\\'")}',event)" title="Cancelar contrato">🚫</button>`:''}
+      </div>
+    </td>
+  </tr>`).join('');
+}
+
+function saGenerateContract(contractId) {
+  const url = API + '/superadmin/contracts/' + contractId + '/preview?token=' + encodeURIComponent(window.saToken || '');
+  window.open(url, '_blank');
+}
+
+function saOpenNewContract() {
+  const tenants = (window._saTenants || []).filter(t => t.active);
+  const tenantOpts = tenants.map(t => `<option value="${t.slug}">${t.name}</option>`).join('');
+  const planOpts = Object.entries(SA_PLAN_LABELS).map(([v,l]) =>
+    `<option value="${v}">${l} — R$ ${SA_PLAN_PRICES[v].toLocaleString('pt-BR')}/mês</option>`).join('');
+  modal(`
+    <div class="modal-title" style="margin-bottom:16px">📄 Novo Contrato de Licença</div>
+    <div style="display:grid;gap:12px">
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">MARINA *</label>
+        <select id="sc-tenant" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"
+          onchange="document.getElementById('sc-value').value=SA_PLAN_PRICES[document.getElementById('sc-plan').value]||''">
+          <option value="">Selecione...</option>${tenantOpts}
+        </select></div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">PLANO *</label>
+        <select id="sc-plan" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"
+          onchange="document.getElementById('sc-value').value=SA_PLAN_PRICES[this.value]||''">
+          <option value="">Selecione...</option>${planOpts}
+        </select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">VALOR MENSAL (R$) *</label>
+          <input id="sc-value" type="number" min="0" step="0.01" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">STATUS</label>
+          <select id="sc-status" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+            <option value="active">Ativo</option><option value="trial">Trial</option>
+          </select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">DATA INÍCIO *</label>
+          <input id="sc-start" type="date" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">DATA TÉRMINO</label>
+          <input id="sc-end" type="date" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center">
+        <label style="font-size:12px;color:var(--text3)">📋 Gerar parcelas mensais automaticamente</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="sc-gen" checked style="width:16px;height:16px">
+          <span style="font-size:12px">Sim</span>
+        </label>
+      </div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">ANEXO CONTRATO (PDF)</label>
+        <input type="file" id="sc-file" accept=".pdf,.doc,.docx,.png,.jpg" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px"></div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">OBSERVAÇÕES</label>
+        <textarea id="sc-notes" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;font-size:13px"></textarea></div>
+      <div id="sc-err" style="display:none;color:var(--danger);font-size:12px;background:rgba(239,68,68,.08);padding:8px;border-radius:6px"></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saSaveNewContract()">✅ Criar Contrato</button>
+    </div>`);
+  // Preenche data início com hoje
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('sc-start').value = today;
+}
+
+async function saSaveNewContract() {
+  const tenant_slug  = document.getElementById('sc-tenant').value;
+  const plan         = document.getElementById('sc-plan').value;
+  const monthly_value= parseFloat(document.getElementById('sc-value').value);
+  const start_date   = document.getElementById('sc-start').value;
+  const end_date     = document.getElementById('sc-end').value || null;
+  const status       = document.getElementById('sc-status').value;
+  const notes        = document.getElementById('sc-notes').value.trim();
+  const genCharges   = document.getElementById('sc-gen').checked;
+  const errEl        = document.getElementById('sc-err');
+  errEl.style.display = 'none';
+  if (!tenant_slug) { errEl.textContent='Selecione a marina.';       errEl.style.display='block'; return; }
+  if (!plan)        { errEl.textContent='Selecione o plano.';        errEl.style.display='block'; return; }
+  if (!monthly_value|| isNaN(monthly_value)) { errEl.textContent='Informe o valor mensal.'; errEl.style.display='block'; return; }
+  if (!start_date)  { errEl.textContent='Informe a data de início.'; errEl.style.display='block'; return; }
+  // Lê arquivo como base64
+  let contract_file_data = null, contract_file_name = null;
+  const f = document.getElementById('sc-file')?.files[0];
+  if (f) {
+    contract_file_data = await new Promise((resolve, reject) => {
+      const fr = new FileReader(); fr.onload = e => resolve(e.target.result); fr.onerror = reject;
+      fr.readAsDataURL(f);
+    });
+    contract_file_name = f.name;
+  }
+  const r = await saApi('POST', '/superadmin/contracts', {
+    tenant_slug, plan, monthly_value, start_date, end_date, status, notes,
+    contract_file_data, contract_file_name, generate_charges: genCharges,
+  });
+  if (!r || r.error) { errEl.textContent = r?.error||'Erro ao criar contrato.'; errEl.style.display='block'; return; }
+  closeModal();
+  toast(`Contrato criado${genCharges ? ` — ${r.charges_created} parcelas geradas` : ''}!`);
+  window._saFinLoaded = false;
+  saLoadContracts();
+}
+
+async function saViewContract(id) {
+  const c = window._saContracts.find(x => x.id == id);
+  if (!c) return;
+  const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+  modal(`
+    <div class="modal-title" style="margin-bottom:4px">📄 Contrato — ${c.tenant_name||c.tenant_slug}</div>
+    <div style="margin-bottom:16px">${saContractStatusBadge(c.status)}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div class="settings-info-box" style="margin:0">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Plano</div>
+        <div style="font-weight:700;color:var(--accent)">${SA_PLAN_LABELS[c.plan]||c.plan}</div>
+      </div>
+      <div class="settings-info-box" style="margin:0">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Valor/Mês</div>
+        <div style="font-weight:700">${fmtBRL(c.monthly_value)}</div>
+      </div>
+      <div class="settings-info-box" style="margin:0">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Início</div>
+        <div>${fmtDate(c.start_date)}</div>
+      </div>
+      <div class="settings-info-box" style="margin:0">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Término</div>
+        <div>${fmtDate(c.end_date)}</div>
+      </div>
+      <div class="settings-info-box" style="margin:0">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Parcelas pagas</div>
+        <div>${c.paid_charges} / ${c.total_charges}</div>
+      </div>
+      <div class="settings-info-box" style="margin:0">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Total recebido</div>
+        <div style="font-weight:700;color:var(--success)">${fmtBRL(c.total_paid)}</div>
+      </div>
+    </div>
+    ${c.notes ? `<div class="settings-info-box" style="margin-bottom:12px"><strong>Obs:</strong> ${c.notes}</div>` : ''}
+    ${c.contract_file_name ? `<div class="settings-info-box" style="margin-bottom:12px">
+      📎 <a href="${c.contract_file_data}" download="${c.contract_file_name}" style="color:var(--accent)">${c.contract_file_name}</a>
+    </div>` : ''}
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
+      ${c.status!=='cancelled'?`<button class="btn btn-danger btn-sm" onclick="closeModal();saCancelContract(${c.id},'${(c.tenant_name||c.tenant_slug).replace(/'/g,"\\'")}')">🚫 Cancelar</button>`:''}
+      <button class="btn btn-primary" onclick="closeModal();saEditContract(${c.id})">✏️ Editar</button>
+    </div>`);
+}
+
+function saEditContract(id) {
+  const c = window._saContracts.find(x => x.id == id);
+  if (!c) return;
+  modal(`
+    <div class="modal-title" style="margin-bottom:16px">✏️ Editar Contrato — ${c.tenant_name||c.tenant_slug}</div>
+    <div style="display:grid;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">PLANO</label>
+          <select id="sec-plan" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+            ${Object.entries(SA_PLAN_LABELS).map(([v,l])=>`<option value="${v}"${c.plan===v?' selected':''}>${l}</option>`).join('')}
+          </select></div>
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">VALOR MENSAL (R$)</label>
+          <input id="sec-value" type="number" min="0" step="0.01" value="${c.monthly_value}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">DATA INÍCIO</label>
+          <input id="sec-start" type="date" value="${c.start_date||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">DATA TÉRMINO</label>
+          <input id="sec-end" type="date" value="${c.end_date||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+      </div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">STATUS</label>
+        <select id="sec-status" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+          ${['active','trial','expired','cancelled'].map(s=>`<option value="${s}"${c.status===s?' selected':''}>${s}</option>`).join('')}
+        </select></div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">OBSERVAÇÕES</label>
+        <textarea id="sec-notes" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;font-size:13px">${c.notes||''}</textarea></div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">NOVO ANEXO (substitui atual)</label>
+        <input type="file" id="sec-file" accept=".pdf,.doc,.docx,.png,.jpg" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px"></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saSaveEditContract(${id})">💾 Salvar</button>
+    </div>`);
+}
+
+async function saSaveEditContract(id) {
+  const plan         = document.getElementById('sec-plan').value;
+  const monthly_value= parseFloat(document.getElementById('sec-value').value);
+  const start_date   = document.getElementById('sec-start').value;
+  const end_date     = document.getElementById('sec-end').value || null;
+  const status       = document.getElementById('sec-status').value;
+  const notes        = document.getElementById('sec-notes').value.trim();
+  let contract_file_data = null, contract_file_name = null;
+  const f = document.getElementById('sec-file')?.files[0];
+  if (f) {
+    contract_file_data = await new Promise((resolve, reject) => {
+      const fr = new FileReader(); fr.onload = e => resolve(e.target.result); fr.onerror = reject;
+      fr.readAsDataURL(f);
+    });
+    contract_file_name = f.name;
+  }
+  const r = await saApi('PUT', `/superadmin/contracts/${id}`, {
+    plan, monthly_value, start_date, end_date, status, notes, contract_file_data, contract_file_name,
+  });
+  if (!r || r.error) { toast(r?.error||'Erro ao salvar.', 'error'); return; }
+  closeModal();
+  toast('Contrato atualizado!');
+  window._saFinLoaded = false;
+  saLoadContracts();
+}
+
+async function saCancelContract(id, name, e) {
+  if (e) e.stopPropagation();
+  if (!confirm(`Cancelar contrato da marina "${name}"?\nParcelas pendentes também serão canceladas.`)) return;
+  const r = await saApi('DELETE', `/superadmin/contracts/${id}`);
+  if (!r || r.error) { toast(r?.error||'Erro.', 'error'); return; }
+  toast('Contrato cancelado.');
+  window._saFinLoaded = false;
+  saLoadContracts();
+}
+
+// ════════════════════════════════════════════════════════════
+//  SA — FINANCEIRO
+// ════════════════════════════════════════════════════════════
+window._saFinLoaded = false;
+let _saRevChart = null, _saStatusChart = null;
+
+async function saLoadFinanceiro() {
+  window._saFinLoaded = true;
+  const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const fmtPct  = v => Number(v||0).toFixed(1) + '%';
+
+  // Popula filtro de tenant
+  const selTenant = document.getElementById('sa-fin-filter-tenant');
+  if (selTenant && selTenant.options.length <= 1 && window._saTenants?.length) {
+    window._saTenants.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.slug; opt.textContent = t.name;
+      selTenant.appendChild(opt);
+    });
+  }
+
+  // Filtros
+  const statusF = document.getElementById('sa-fin-filter-status')?.value  || '';
+  const tenantF = document.getElementById('sa-fin-filter-tenant')?.value  || '';
+  const monthF  = document.getElementById('sa-fin-filter-month')?.value   || '';
+  const params  = new URLSearchParams();
+  if (statusF) params.set('status', statusF);
+  if (tenantF) params.set('tenant', tenantF);
+  if (monthF)  { params.set('from', monthF + '-01'); params.set('to', monthF + '-31'); }
+  const qs = params.toString() ? '?' + params.toString() : '';
+
+  const [summary, charges] = await Promise.all([
+    saApi('GET', '/superadmin/financial/summary'),
+    saApi('GET', '/superadmin/charges' + qs),
+  ]);
+
+  if (!summary) return;
+
+  // KPIs
+  const collColor = summary.collection_rate >= 90 ? 'green' : summary.collection_rate >= 70 ? '' : 'red';
+  document.getElementById('sa-fin-kpis').innerHTML = `
+    <div class="kpi purple"><div class="kpi-label">MRR</div><div class="kpi-value" style="font-size:17px">${fmtBRL(summary.mrr)}</div><div class="kpi-icon">📈</div></div>
+    <div class="kpi purple"><div class="kpi-label">ARR</div><div class="kpi-value" style="font-size:17px">${fmtBRL(summary.arr)}</div><div class="kpi-icon">🚀</div></div>
+    <div class="kpi green"><div class="kpi-label">Receita do Mês</div><div class="kpi-value" style="font-size:17px">${fmtBRL(summary.revenue_month)}</div><div class="kpi-icon">💵</div></div>
+    <div class="kpi green"><div class="kpi-label">Receita Total</div><div class="kpi-value" style="font-size:17px">${fmtBRL(summary.revenue_total)}</div><div class="kpi-icon">💰</div></div>
+    <div class="kpi"><div class="kpi-label">A Receber</div><div class="kpi-value" style="font-size:17px">${fmtBRL(summary.pending)}</div><div class="kpi-icon">⏳</div></div>
+    <div class="kpi red"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:17px">${fmtBRL(summary.overdue)}</div><div class="kpi-icon">⚠️</div></div>
+    <div class="kpi ${collColor}"><div class="kpi-label">Adimplência</div><div class="kpi-value">${fmtPct(summary.collection_rate)}</div><div class="kpi-icon">🏆</div></div>
+    <div class="kpi"><div class="kpi-label">Contratos Ativos</div><div class="kpi-value">${summary.active_contracts}</div><div class="kpi-icon">📄</div></div>`;
+
+  // Gráfico receita mensal
+  const revChart = summary.revenue_chart || [];
+  const revCtx = document.getElementById('sa-rev-chart');
+  if (revCtx && typeof Chart !== 'undefined') {
+    if (_saRevChart) { _saRevChart.destroy(); _saRevChart = null; }
+    _saRevChart = new Chart(revCtx, {
+      type: 'bar',
+      data: {
+        labels: revChart.map(r => r.month),
+        datasets: [{ label: 'Receita (R$)', data: revChart.map(r => r.total),
+          backgroundColor: 'rgba(99,102,241,.7)', borderColor: 'rgba(99,102,241,1)',
+          borderWidth: 1, borderRadius: 4 }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { y: { ticks: { callback: v => 'R$ ' + v.toLocaleString('pt-BR') } } } }
+    });
+  }
+
+  // Gráfico status
+  const statusData = summary.status_breakdown || [];
+  const statusLabels = { paid:'Pago', pending:'Pendente', overdue:'Vencido', cancelled:'Cancelado' };
+  const statusColors = { paid:'#10b981', pending:'#f59e0b', overdue:'#ef4444', cancelled:'#94a3b8' };
+  const stCtx = document.getElementById('sa-status-chart');
+  if (stCtx && typeof Chart !== 'undefined' && statusData.length) {
+    if (_saStatusChart) { _saStatusChart.destroy(); _saStatusChart = null; }
+    _saStatusChart = new Chart(stCtx, {
+      type: 'doughnut',
+      data: {
+        labels: statusData.map(s => statusLabels[s.status]||s.status),
+        datasets: [{ data: statusData.map(s => s.total),
+          backgroundColor: statusData.map(s => statusColors[s.status]||'#94a3b8'), borderWidth: 0 }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'right' } }, cutout: '60%' }
+    });
+  }
+
+  // Tabela de cobranças
+  saRenderCharges(charges || []);
+}
+
+function saRenderCharges(charges) {
+  const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+  const stBadge = s => {
+    const m = { paid:'badge-success', pending:'badge-warning', overdue:'badge-danger', cancelled:'badge-gray' };
+    const l = { paid:'Pago', pending:'Pendente', overdue:'Vencido', cancelled:'Cancelado' };
+    return `<span class="badge ${m[s]||'badge-gray'}">${l[s]||s}</span>`;
+  };
+  window._saCharges = charges;
+  const tbody = document.getElementById('sa-charges-tbody');
+  if (!charges.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhuma cobrança encontrada.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = charges.map(c => `<tr>
+    <td style="font-size:12px;font-weight:600">${c.tenant_name||c.tenant_slug}</td>
+    <td style="font-size:12px;max-width:200px">${c.description||'—'}</td>
+    <td style="font-size:12px;white-space:nowrap;${c.status==='overdue'?'color:var(--danger);font-weight:600':''}">${fmtDate(c.due_date)}</td>
+    <td style="font-size:12px;font-weight:600">${fmtBRL(c.amount)}</td>
+    <td>${stBadge(c.status)}</td>
+    <td style="font-size:12px;color:var(--text3)">${fmtDate(c.paid_date)}</td>
+    <td style="font-size:12px;color:var(--text3)">${c.payment_method||'—'}</td>
+    <td>
+      <div style="display:flex;gap:4px">
+        ${c.status!=='paid'&&c.status!=='cancelled'?`<button class="btn btn-ghost btn-sm" onclick="saMarkPaid(${c.id})" title="Marcar como pago">✅</button>`:''}
+        <button class="btn btn-ghost btn-sm" onclick="saEditCharge(${c.id})" title="Editar">✏️</button>
+        ${c.status!=='cancelled'&&c.status!=='paid'?`<button class="btn btn-danger btn-sm" onclick="saCancelCharge(${c.id})" title="Cancelar">🚫</button>`:''}
+      </div>
+    </td>
+  </tr>`).join('');
+}
+
+async function saMarkPaid(id) {
+  const methods = ['pix','transferência','boleto','cartão','dinheiro','outro'];
+  const method = prompt('Método de pagamento:\n' + methods.join(', ')) || 'pix';
+  const r = await saApi('PUT', `/superadmin/charges/${id}`, { status: 'paid', payment_method: method });
+  if (!r || r.error) { toast(r?.error||'Erro.', 'error'); return; }
+  toast('Parcela marcada como paga!');
+  window._saFinLoaded = false;
+  saLoadFinanceiro();
+}
+
+function saEditCharge(id) {
+  const c = (window._saCharges || []).find(x => x.id == id);
+  if (!c) return;
+  const fmtDate = d => d ? d.slice(0,10) : '';
+  modal(`
+    <div class="modal-title" style="margin-bottom:16px">✏️ Editar Cobrança</div>
+    <div style="display:grid;gap:12px">
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">DESCRIÇÃO</label>
+        <input id="sch-desc" value="${(c.description||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">VALOR (R$)</label>
+          <input id="sch-amount" type="number" min="0" step="0.01" value="${c.amount}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">VENCIMENTO</label>
+          <input id="sch-due" type="date" value="${fmtDate(c.due_date)}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">STATUS</label>
+          <select id="sch-status" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+            ${['pending','paid','overdue','cancelled'].map(s=>`<option value="${s}"${c.status===s?' selected':''}>${{pending:'Pendente',paid:'Pago',overdue:'Vencido',cancelled:'Cancelado'}[s]}</option>`).join('')}
+          </select></div>
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">DT. PAGAMENTO</label>
+          <input id="sch-paid" type="date" value="${fmtDate(c.paid_date)}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+      </div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">MÉTODO PAGAMENTO</label>
+        <select id="sch-method" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+          <option value="">—</option>
+          ${['pix','transferência','boleto','cartão','dinheiro','outro'].map(m=>`<option value="${m}"${c.payment_method===m?' selected':''}>${m}</option>`).join('')}
+        </select></div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">OBSERVAÇÕES</label>
+        <input id="sch-notes" value="${(c.notes||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saSaveCharge(${id})">💾 Salvar</button>
+    </div>`);
+}
+
+async function saSaveCharge(id) {
+  const r = await saApi('PUT', `/superadmin/charges/${id}`, {
+    status:         document.getElementById('sch-status').value,
+    paid_date:      document.getElementById('sch-paid').value   || null,
+    payment_method: document.getElementById('sch-method').value || null,
+    amount:         parseFloat(document.getElementById('sch-amount').value) || null,
+    notes:          document.getElementById('sch-notes').value  || null,
+  });
+  if (!r || r.error) { toast(r?.error||'Erro.', 'error'); return; }
+  closeModal();
+  toast('Cobrança atualizada!');
+  window._saFinLoaded = false;
+  saLoadFinanceiro();
+}
+
+async function saCancelCharge(id) {
+  if (!confirm('Cancelar esta cobrança?')) return;
+  const r = await saApi('PUT', `/superadmin/charges/${id}`, { status: 'cancelled' });
+  if (!r || r.error) { toast(r?.error||'Erro.', 'error'); return; }
+  toast('Cobrança cancelada.');
+  window._saFinLoaded = false;
+  saLoadFinanceiro();
+}
+
+// ════════════════════════════════════════════════════════════
+//  SA — ANALYTICS
+// ════════════════════════════════════════════════════════════
+window._saAnlLoaded = false;
+let _anlCharts = {};
+
+async function saLoadAnalytics() {
+  window._saAnlLoaded = true;
+  const months = document.getElementById('sa-anl-period')?.value || '12';
+  const plan   = document.getElementById('sa-anl-plan')?.value   || '';
+  const qs     = `?months=${months}${plan ? '&plan=' + plan : ''}`;
+
+  document.getElementById('sa-anl-kpis').innerHTML =
+    '<div style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px">Carregando analytics...</div>';
+
+  const d = await saApi('GET', '/superadmin/analytics' + qs);
+  if (!d || d.error) {
+    document.getElementById('sa-anl-kpis').innerHTML =
+      '<div style="grid-column:1/-1;text-align:center;color:var(--danger);padding:20px">Erro ao carregar analytics.</div>';
+    return;
+  }
+
+  const fmtBRL = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const fmtPct = v => (v == null ? '—' : (v > 0 ? '+' : '') + v + '%');
+  const k = d.kpis;
+
+  // KPIs
+  const momColor  = k.mom_growth == null ? '' : k.mom_growth >= 0 ? 'green' : 'red';
+  const collColor = k.collection_rate >= 90 ? 'green' : k.collection_rate >= 70 ? '' : 'red';
+  document.getElementById('sa-anl-kpis').innerHTML = `
+    <div class="kpi purple"><div class="kpi-label">MRR</div><div class="kpi-value" style="font-size:16px">${fmtBRL(k.mrr)}</div><div class="kpi-icon">📈</div></div>
+    <div class="kpi purple"><div class="kpi-label">ARR</div><div class="kpi-value" style="font-size:16px">${fmtBRL(k.arr)}</div><div class="kpi-icon">🚀</div></div>
+    <div class="kpi"><div class="kpi-label">ARPU</div><div class="kpi-value" style="font-size:16px">${fmtBRL(k.arpu)}</div><div class="kpi-icon">👤</div></div>
+    <div class="kpi"><div class="kpi-label">LTV Médio</div><div class="kpi-value" style="font-size:16px">${fmtBRL(k.avg_ltv)}</div><div class="kpi-icon">💎</div></div>
+    <div class="kpi green"><div class="kpi-label">Receita Total</div><div class="kpi-value" style="font-size:16px">${fmtBRL(k.total_revenue)}</div><div class="kpi-icon">💰</div></div>
+    <div class="kpi ${momColor}"><div class="kpi-label">Crescimento MoM</div><div class="kpi-value">${fmtPct(k.mom_growth)}</div><div class="kpi-icon">📊</div></div>
+    <div class="kpi ${collColor}"><div class="kpi-label">Adimplência</div><div class="kpi-value">${k.collection_rate}%</div><div class="kpi-icon">🏆</div></div>
+    <div class="kpi red"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:16px">${fmtBRL(k.overdue)}</div><div class="kpi-icon">⚠️</div></div>`;
+
+  // Destrói charts antigos
+  Object.values(_anlCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  _anlCharts = {};
+
+  // Chart: Tendência receita
+  const trendCtx = document.getElementById('sa-anl-trend');
+  if (trendCtx && d.rev_trend?.length) {
+    _anlCharts.trend = new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels: d.rev_trend.map(r => r.month),
+        datasets: [{
+          label: 'Receita Coletada',
+          data: d.rev_trend.map(r => r.total),
+          borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,.15)',
+          borderWidth: 2, fill: true, tension: 0.3, pointRadius: 4,
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { y: { ticks: { callback: v => 'R$' + (v/1000).toFixed(0) + 'k' } } } }
+    });
+  }
+
+  // Chart: Novos tenants por mês
+  const newCtx = document.getElementById('sa-anl-new');
+  if (newCtx && d.new_tenants?.length) {
+    _anlCharts.newT = new Chart(newCtx, {
+      type: 'bar',
+      data: {
+        labels: d.new_tenants.map(r => r.month),
+        datasets: [{ label: 'Novos', data: d.new_tenants.map(r => r.count),
+          backgroundColor: '#10b981', borderRadius: 4 }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { y: { ticks: { stepSize: 1 }, beginAtZero: true } } }
+    });
+  }
+
+  // Chart: Distribuição por plano
+  const planColors = { starter: '#94a3b8', professional: '#6366f1', enterprise: '#10b981' };
+  const planCtx = document.getElementById('sa-anl-plans');
+  if (planCtx && d.plan_dist?.length) {
+    _anlCharts.plans = new Chart(planCtx, {
+      type: 'doughnut',
+      data: {
+        labels: d.plan_dist.map(r => (SA_PLAN_LABELS[r.plan]||r.plan) + ' (' + r.count + ')'),
+        datasets: [{ data: d.plan_dist.map(r => r.mrr),
+          backgroundColor: d.plan_dist.map(r => planColors[r.plan]||'#94a3b8'), borderWidth: 0 }]
+      },
+      options: { responsive: true, cutout: '60%',
+        plugins: { legend: { position: 'right' },
+          tooltip: { callbacks: { label: ctx => ` ${fmtBRL(ctx.raw)}/mês` } } } }
+    });
+  }
+
+  // Chart: Aging inadimplência
+  const agingCtx = document.getElementById('sa-anl-aging');
+  if (agingCtx && d.aging?.length) {
+    _anlCharts.aging = new Chart(agingCtx, {
+      type: 'bar',
+      data: {
+        labels: d.aging.map(a => a.label),
+        datasets: [{ label: 'Valor Vencido',
+          data: d.aging.map(a => a.value),
+          backgroundColor: ['#f59e0b','#f97316','#ef4444','#991b1b'], borderRadius: 4 }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { y: { ticks: { callback: v => 'R$' + v.toLocaleString('pt-BR') } } } }
+    });
+  }
+
+  // Tabela: Top tenants
+  const topBody = document.getElementById('sa-anl-top-tbody');
+  if (topBody) {
+    topBody.innerHTML = d.top_tenants?.length
+      ? d.top_tenants.map((r, i) => `<tr>
+          <td style="font-size:12px;color:var(--text3);text-align:center">${i+1}</td>
+          <td style="font-weight:600;font-size:13px">${r.tenant_name||r.tenant_slug}</td>
+          <td><span class="badge ${r.active_plan==='enterprise'?'badge-success':r.active_plan==='professional'?'badge-info':'badge-gray'}">${SA_PLAN_LABELS[r.active_plan]||r.active_plan||'—'}</span></td>
+          <td style="font-size:13px;font-weight:600;color:var(--success)">${fmtBRL(r.paid_total)}</td>
+          <td style="font-size:12px;color:var(--text3)">${fmtBRL(r.pending_total)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sem dados</td></tr>';
+  }
+
+  // Tabela: Tenants em risco
+  const riskBody = document.getElementById('sa-anl-risk-tbody');
+  if (riskBody) {
+    riskBody.innerHTML = d.at_risk?.length
+      ? d.at_risk.map(r => {
+          const days = r.oldest_due
+            ? Math.floor((Date.now() - new Date(r.oldest_due).getTime()) / 86400000)
+            : 0;
+          const color = days > 60 ? 'var(--danger)' : days > 30 ? 'var(--warning,#f59e0b)' : 'var(--text)';
+          return `<tr>
+            <td style="font-weight:600;font-size:13px">${r.tenant_name||r.tenant_slug}</td>
+            <td style="font-weight:600;color:var(--danger)">${fmtBRL(r.overdue_total)}</td>
+            <td style="font-size:12px;color:var(--text3)">${r.overdue_count} parc.</td>
+            <td style="font-size:12px;font-weight:600;color:${color}">${days}d</td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="4" style="text-align:center;color:var(--success);padding:20px">✅ Sem inadimplentes</td></tr>';
+  }
+
+  // Tabela: Contratos expirando
+  const expBody = document.getElementById('sa-anl-exp-tbody');
+  if (expBody) {
+    const fmtDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString('pt-BR') : '—';
+    expBody.innerHTML = d.expiring?.length
+      ? d.expiring.map(c => {
+          const daysLeft = c.end_date
+            ? Math.ceil((new Date(c.end_date).getTime() - Date.now()) / 86400000)
+            : null;
+          const urgColor = daysLeft != null && daysLeft <= 15 ? 'var(--danger)' : daysLeft <= 30 ? 'var(--warning,#f59e0b)' : 'var(--text3)';
+          return `<tr>
+            <td style="font-weight:600">${c.tenant_name||c.tenant_slug}</td>
+            <td><span class="badge ${c.plan==='enterprise'?'badge-success':c.plan==='professional'?'badge-info':'badge-gray'}">${SA_PLAN_LABELS[c.plan]||c.plan}</span></td>
+            <td style="font-size:12px;font-weight:600;color:${urgColor}">${fmtDate(c.end_date)}${daysLeft!=null?' ('+daysLeft+'d)':''}</td>
+            <td style="font-size:13px">${fmtBRL(c.monthly_value)}</td>
+            <td>${saContractStatusBadge(c.status)}</td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Nenhum contrato expirando nos próximos 60 dias</td></tr>';
+  }
+
+  // ── ANÁLISE PREDITIVA ──────────────────────────────────────
+  const pred = await saApi('GET', '/superadmin/analytics/predict');
+  if (!pred || pred.error) {
+    document.getElementById('sa-pred-kpis').innerHTML =
+      '<div style="grid-column:1/-1;text-align:center;color:var(--danger);padding:20px">Erro ao carregar previsões.</div>';
+    return;
+  }
+
+  // KPIs preditivos
+  const totalFutureExpected = (pred.future_rev||[]).reduce((s,r) => s + Number(r.expected||0), 0);
+  const totalFutureAtRisk   = (pred.future_rev||[]).reduce((s,r) => s + Number(r.at_risk||0), 0);
+  const churnColor  = pred.monthly_churn_rate > 5 ? 'red' : pred.monthly_churn_rate > 2 ? '' : 'green';
+  const onTimeColor = pred.on_time_rate >= 90 ? 'green' : pred.on_time_rate >= 70 ? '' : 'red';
+  document.getElementById('sa-pred-kpis').innerHTML = `
+    <div class="kpi green"><div class="kpi-label">Receita Futura (12m)</div><div class="kpi-value" style="font-size:15px">${fmtBRL(totalFutureExpected)}</div><div class="kpi-icon">📅</div></div>
+    <div class="kpi red"><div class="kpi-label">Em Risco (12m)</div><div class="kpi-value" style="font-size:15px">${fmtBRL(totalFutureAtRisk)}</div><div class="kpi-icon">⚠️</div></div>
+    <div class="kpi ${churnColor}"><div class="kpi-label">Churn Mensal Médio</div><div class="kpi-value">${Number(pred.monthly_churn_rate||0).toFixed(1)}%</div><div class="kpi-icon">📉</div></div>
+    <div class="kpi ${onTimeColor}"><div class="kpi-label">Pontualidade</div><div class="kpi-value">${Number(pred.on_time_rate||0).toFixed(1)}%</div><div class="kpi-icon">⏱️</div></div>`;
+
+  // Chart: Receita Futura Concreta (barras empilhadas: confirmado + at_risk)
+  const futureCtx = document.getElementById('sa-pred-future');
+  if (futureCtx && pred.future_rev?.length) {
+    if (_anlCharts.future) { try { _anlCharts.future.destroy(); } catch(e){} }
+    _anlCharts.future = new Chart(futureCtx, {
+      type: 'bar',
+      data: {
+        labels: pred.future_rev.map(r => r.month),
+        datasets: [
+          { label: 'Confirmado', data: pred.future_rev.map(r => Number(r.expected||0) - Number(r.at_risk||0)),
+            backgroundColor: '#10b981', borderRadius: 0 },
+          { label: 'Em Risco', data: pred.future_rev.map(r => Number(r.at_risk||0)),
+            backgroundColor: '#ef4444', borderRadius: 4 }
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'top' } },
+        scales: { x: { stacked: true }, y: { stacked: true,
+          ticks: { callback: v => 'R$' + (v/1000).toFixed(0) + 'k' } } } }
+    });
+  }
+
+  // Chart: Projeção MRR (regressão linear em JS)
+  const mrrCtx = document.getElementById('sa-pred-mrr');
+  if (mrrCtx && pred.hist_monthly?.length) {
+    if (_anlCharts.mrrProj) { try { _anlCharts.mrrProj.destroy(); } catch(e){} }
+    const hist = pred.hist_monthly.map(r => Number(r.total||0));
+    const n = hist.length;
+    // linear regression y = a + b*x
+    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+    for (let i = 0; i < n; i++) { sumX += i; sumY += hist[i]; sumXY += i*hist[i]; sumXX += i*i; }
+    const denom = n*sumXX - sumX*sumX;
+    const b = denom ? (n*sumXY - sumX*sumY) / denom : 0;
+    const a = (sumY - b*sumX) / n;
+    // 6 months projection
+    const projLabels = [];
+    const projData   = [];
+    const lastDate = pred.hist_monthly.length ? new Date(pred.hist_monthly[n-1].month + '-01') : new Date();
+    for (let i = 1; i <= 6; i++) {
+      const d2 = new Date(lastDate); d2.setMonth(d2.getMonth() + i);
+      projLabels.push(d2.toISOString().slice(0,7));
+      projData.push(Math.max(0, Math.round(a + b*(n - 1 + i))));
+    }
+    _anlCharts.mrrProj = new Chart(mrrCtx, {
+      type: 'line',
+      data: {
+        labels: [...pred.hist_monthly.map(r => r.month), ...projLabels],
+        datasets: [
+          { label: 'Histórico', data: [...hist, ...Array(6).fill(null)],
+            borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,.12)',
+            borderWidth: 2, fill: true, tension: 0.3, pointRadius: 3 },
+          { label: 'Projeção', data: [...Array(n).fill(null), ...projData],
+            borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.1)',
+            borderWidth: 2, borderDash: [6,4], fill: false, tension: 0.3, pointRadius: 3 }
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'top' } },
+        scales: { y: { ticks: { callback: v => 'R$' + (v/1000).toFixed(0) + 'k' } } } }
+    });
+  }
+
+  // Tabela: Score de risco por tenant
+  const predRiskBody = document.getElementById('sa-pred-risk-tbody');
+  if (predRiskBody) {
+    const fmtDate2 = v => v ? new Date(v+'T12:00:00').toLocaleDateString('pt-BR') : '—';
+    const scoreBg = s => s >= 60 ? '#ef4444' : s >= 30 ? '#f59e0b' : '#10b981';
+    predRiskBody.innerHTML = pred.risk_scores?.length
+      ? pred.risk_scores.map(r => {
+          const lvlBadge = r.level === 'critical' ? 'badge-danger' : r.level === 'warning' ? 'badge-warning' : 'badge-success';
+          const lvlLabel = r.level === 'critical' ? 'Crítico' : r.level === 'warning' ? 'Atenção' : 'OK';
+          return `<tr>
+            <td style="font-weight:600">${r.name||r.slug}</td>
+            <td><span class="badge ${r.plan==='enterprise'?'badge-success':r.plan==='professional'?'badge-info':'badge-gray'}">${SA_PLAN_LABELS[r.plan]||r.plan||'—'}</span></td>
+            <td><div style="display:flex;align-items:center;gap:8px">
+              <div style="width:48px;height:8px;border-radius:4px;background:var(--border);overflow:hidden">
+                <div style="width:${r.score}%;height:100%;background:${scoreBg(r.score)};transition:width .3s"></div>
+              </div>
+              <span style="font-size:13px;font-weight:700;color:${scoreBg(r.score)}">${r.score}</span>
+            </div></td>
+            <td><span class="badge ${lvlBadge}">${lvlLabel}</span></td>
+            <td style="font-size:13px;color:var(--danger)">${Number(r.overdue_amt||0) > 0 ? fmtBRL(r.overdue_amt) : '—'}</td>
+            <td style="font-size:13px;color:${Number(r.days_overdue||0)>30?'var(--danger)':Number(r.days_overdue||0)>0?'var(--warning,#f59e0b)':'var(--text3)'}">${Number(r.days_overdue||0) > 0 ? r.days_overdue+'d' : '—'}</td>
+            <td style="font-size:12px;color:var(--text3)">${fmtDate2(r.contract_expires)}</td>
+            <td style="font-size:12px;color:var(--text3)">${fmtDate2(r.last_payment)}</td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="8" style="text-align:center;color:var(--success);padding:20px">✅ Nenhum tenant em risco</td></tr>';
+  }
+
+  // Tabela: Fluxo de caixa previsto
+  const cashflowBody = document.getElementById('sa-pred-cashflow-tbody');
+  if (cashflowBody) {
+    cashflowBody.innerHTML = pred.future_rev?.length
+      ? pred.future_rev.map(r => {
+          const confirmed = Number(r.expected||0) - Number(r.at_risk||0);
+          const atRisk    = Number(r.at_risk||0);
+          const total     = Number(r.expected||0);
+          return `<tr>
+            <td style="font-weight:600">${r.month}</td>
+            <td style="color:var(--success);font-weight:600">${fmtBRL(confirmed)}</td>
+            <td style="color:var(--danger)">${atRisk > 0 ? fmtBRL(atRisk) : '<span style="color:var(--text3)">—</span>'}</td>
+            <td style="font-weight:700">${fmtBRL(total)}</td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sem cobranças futuras cadastradas</td></tr>';
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  SA — CONFIGURAÇÕES
+// ════════════════════════════════════════════════════════════
+window._saCfgLoaded = false;
+
+const SA_CFG_FIELDS = [
+  'company_legal_name','company_cnpj','company_address','company_city_state',
+  'company_representative_name','company_representative_role','company_representative_cpf',
+  'general_system_name','general_support_email','general_default_plan',
+  'plan_price_starter','plan_price_professional','plan_price_enterprise',
+  'weather_provider','weather_api_key',
+  'smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_email','smtp_from_name'
+];
+
+async function saLoadSettings() {
+  window._saCfgLoaded = true;
+  const d = await saApi('GET', '/superadmin/settings');
+  if (!d || d.error) {
+    const msg = document.getElementById('sa-cfg-msg');
+    if (msg) { msg.innerHTML = '<div style="color:var(--danger);padding:12px">Erro ao carregar configurações.</div>'; msg.style.display=''; }
+    return;
+  }
+  SA_CFG_FIELDS.forEach(key => {
+    const el = document.getElementById('cfg-' + key);
+    if (!el) return;
+    if (el.tagName === 'SELECT') {
+      el.value = d[key] ?? el.options[0]?.value;
+    } else {
+      el.value = d[key] ?? '';
+    }
+  });
+}
+
+async function saSaveSettings() {
+  const payload = {};
+  SA_CFG_FIELDS.forEach(key => {
+    const el = document.getElementById('cfg-' + key);
+    if (el) payload[key] = el.value;
+  });
+  const msg = document.getElementById('sa-cfg-msg');
+  if (msg) { msg.innerHTML = '<div style="color:var(--text3);padding:10px">Salvando...</div>'; msg.style.display=''; }
+  const r = await saApi('PUT', '/superadmin/settings', payload);
+  if (!r || r.error) {
+    if (msg) msg.innerHTML = `<div style="color:var(--danger);background:rgba(239,68,68,.1);padding:12px;border-radius:8px">❌ ${r?.error||'Erro ao salvar.'}</div>`;
+    return;
+  }
+  if (msg) {
+    msg.innerHTML = '<div style="color:var(--success);background:rgba(16,185,129,.1);padding:12px;border-radius:8px">✅ Configurações salvas com sucesso!</div>';
+    setTimeout(() => { msg.style.display='none'; }, 3500);
+  }
+}
+
+async function saTestWeatherApi() {
+  const resultEl = document.getElementById('sa-weather-test-result');
+  if (resultEl) resultEl.textContent = 'Testando...';
+  // Salva key/provider primeiro para testar o que está no formulário
+  const keyEl      = document.getElementById('cfg-weather_api_key');
+  const provEl     = document.getElementById('cfg-weather_provider');
+  await saApi('PUT', '/superadmin/settings', {
+    weather_api_key: keyEl?.value || '',
+    weather_provider: provEl?.value || 'openweathermap',
+  });
+  const r = await saApi('GET', '/superadmin/settings/test-weather');
+  if (!resultEl) return;
+  if (r?.ok) {
+    let desc = '';
+    if (r.sample?.weather?.[0]?.description) {
+      desc = ` — ${r.sample.weather[0].description}, ${Math.round(r.sample.main?.temp||0)}°C`;
+    } else if (r.sample?.current?.condition?.text) {
+      desc = ` — ${r.sample.current.condition.text}, ${r.sample.current.temp_c}°C`;
+    }
+    resultEl.textContent = `✅ Conexão OK${desc}`;
+    resultEl.style.color = 'var(--success)';
+  } else {
+    resultEl.textContent = `❌ ${r?.error || 'Falha na conexão'}`;
+    resultEl.style.color = 'var(--danger)';
+  }
 }
 
 // Auto-login super-admin se token existir
