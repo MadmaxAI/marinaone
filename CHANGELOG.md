@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.62] -- 2026-05-07
+- fila: manobra apos conclusao, nao regressao de cursor; controle de acesso: submódulos alertas e perfis
+
 ## [2.3.60] -- 2026-05-07
 - gestao de roles: CRUD completo, correcao controle de acesso com roles dinamicas
 
@@ -222,6 +225,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

@@ -95,12 +95,14 @@ const SUBMODULES = {
     { key: 'clientes',     label: 'Clientes',          actions: ['view'] },
   ],
   settings: [
-    { key: 'marina',       label: 'Marina',            actions: ['view','edit'] },
-    { key: 'financeiro',   label: 'Financeiro',        actions: ['view','edit'] },
-    { key: 'notificacoes', label: 'Notificações',      actions: ['view','edit'] },
-    { key: 'operacoes',    label: 'Operações',         actions: ['view','edit'] },
-    { key: 'logs',         label: 'Logs do Sistema',   actions: ['view'] },
-    { key: 'licenca',      label: 'Licença',           actions: ['view'] },
+    { key: 'marina',       label: 'Marina',                  actions: ['view','edit'] },
+    { key: 'financeiro',   label: 'Financeiro',              actions: ['view','edit'] },
+    { key: 'notificacoes', label: 'Notificações',            actions: ['view','edit'] },
+    { key: 'operacoes',    label: 'Operações',               actions: ['view','edit'] },
+    { key: 'alertas',      label: 'Configuração de Alertas', actions: ['view','edit'] },
+    { key: 'perfis',       label: 'Gestão de Perfis',        actions: ['view','create','edit','delete'] },
+    { key: 'logs',         label: 'Logs do Sistema',         actions: ['view'] },
+    { key: 'licenca',      label: 'Licença',                 actions: ['view'] },
   ],
 };
 // Mapa invertido sub-key → module (para validação)
@@ -372,7 +374,7 @@ async function enrichQueueRow(q, settings, dbGet) {
   const estimated_duration_min = getAvgDurationSync(settings, q.vessel_size, q.operation_type);
   return { ...q, vessel_status: vs, is_inconsistent: inconsistent, estimated_duration_min };
 }
-function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
+function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd, lastCompletedAt) {
   const now = new Date();
 
   // Converte "HH:MM" para minutos desde meia-noite
@@ -399,7 +401,6 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
 
   // Cursor inicial: agora + 1min (buffer mínimo) ou horário de início das operações (o que for maior)
   const nowPlus1 = new Date(now.getTime() + 60000);
-  let cursor = clampToOpsStart(nowPlus1);
 
   const endMin  = hhmm2min(opsEnd);
 
@@ -411,6 +412,16 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
     return date;
   };
 
+  // Piso mínimo considerando última op concluída + manobra (evita regressão e garante intervalo após conclusão)
+  let minCursor = clampToOpsStart(nowPlus1);
+  if (lastCompletedAt) {
+    const lc = lastCompletedAt instanceof Date ? lastCompletedAt : new Date(lastCompletedAt);
+    if (!isNaN(lc)) {
+      const afterLast = clampToOpsStart(new Date(lc.getTime() + maneuver * 60000));
+      if (afterLast > minCursor) minCursor = afterLast;
+    }
+  }
+
   const inProg = enriched.find(r => r.status === 'in_progress');
   if (inProg && inProg.started_at) {
     // started_at vem como ISO Z string do compat.js (ex: "2026-05-05T12:30:00.000Z")
@@ -421,23 +432,23 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
     const endTime = new Date(startedAt.getTime() + (inProg.estimated_duration_min || 0) * 60000);
     const effectiveEnd = isNaN(endTime) || endTime < now ? new Date(now) : endTime;
     inProg.estimated_end_at = clampToOpsEnd(effectiveEnd).toISOString();
-    cursor = new Date(effectiveEnd);
-    cursor.setMinutes(cursor.getMinutes() + maneuver);
-    cursor = clampToOpsStart(clampToOpsEnd(cursor));
+    let cur = new Date(effectiveEnd);
+    cur.setMinutes(cur.getMinutes() + maneuver);
+    cur = clampToOpsStart(clampToOpsEnd(cur));
+    minCursor = cur > minCursor ? cur : minCursor;
   } else {
     // Sem op em andamento: âncora no requested_at da primeira waiting + manobra
-    // → horário fica FIXO enquanto agora < agendado; quando passa, shift 1:1 sem somar manobra novamente
+    // → horário fica FIXO enquanto agora < agendado; quando passa, mantém minCursor (lastCompleted+manobra ou now+1min)
     const firstWaiting = enriched.find(r => r.status === 'waiting');
     if (firstWaiting && firstWaiting.requested_at) {
-      const reqAt   = new Date(firstWaiting.requested_at);
-      const base    = clampToOpsStart(new Date(reqAt.getTime() + 60000)); // reqAt + 1min, clampado ao início
+      const reqAt    = new Date(firstWaiting.requested_at);
+      const base     = clampToOpsStart(new Date(reqAt.getTime() + 60000));
       const anchored = clampToOpsStart(new Date(base.getTime() + maneuver * 60000));
-      // Se o horário agendado ainda está no futuro: mantém fixo. Se já passou: now+1min (sem manobra extra)
-      cursor = anchored > nowPlus1 ? anchored : clampToOpsStart(nowPlus1);
-    } else {
-      cursor = clampToOpsStart(nowPlus1);
+      // Se o agendamento ainda está no futuro: usa âncora fixa; senão mantém minCursor (sem re-somar manobra)
+      if (anchored > minCursor) minCursor = anchored;
     }
   }
+  let cursor = minCursor;
 
   for (const row of enriched) {
     if (row.status === 'in_progress') continue;
@@ -2436,7 +2447,10 @@ addRoute('GET', '/api/queue/calendar', async (req, res, ctx) => {
   const doneEnriched   = await Promise.all(done.map(q => enrichQueueRow(q, settings, tGet)));
   const opsStart = settings['ops_start_time'] || '07:00';
   const opsEnd   = settings['ops_end_time']   || '18:00';
-  applyEstimatedTimes(activeEnriched, getManeuverTime(settings), opsStart, opsEnd);
+  // Última conclusão do dia — garante manobra após op concluída (mesmo sem in_progress ativo)
+  const lastDone = doneEnriched.filter(d => d.status === 'completed' && d.completed_at)
+    .reduce((max, d) => { const t = new Date(d.completed_at); return (!max || t > max) ? t : max; }, null);
+  applyEstimatedTimes(activeEnriched, getManeuverTime(settings), opsStart, opsEnd, lastDone);
   const mtRow = await tGet(`SELECT MAX(COALESCE(completed_at, started_at, requested_at)) as mt FROM queue_operations WHERE DATE(requested_at)=? OR status NOT IN ('completed','cancelled')`, [today]);
   const mtime = mtRow?.mt || today;
   sendJson(res, { today, done: doneEnriched, active: activeEnriched, maneuver_time_min: getManeuverTime(settings), ops_start_time: opsStart, ops_end_time: opsEnd, mtime });
@@ -2470,7 +2484,13 @@ addRoute('GET', '/api/queue', async (req, res, ctx) => {
   const enriched = await Promise.all(rows.map(q => enrichQueueRow(q, settings, tGet)));
   const opsStart = settings['ops_start_time'] || '07:00';
   const opsEnd   = settings['ops_end_time']   || '18:00';
-  applyEstimatedTimes(enriched, getManeuverTime(settings), opsStart, opsEnd);
+  // Última conclusão do dia — garante manobra após op concluída (mesmo sem in_progress ativo)
+  const lastDoneRow = !status ? await tGet(
+    `SELECT MAX(completed_at) as lc FROM queue_operations WHERE status='completed' AND DATE(completed_at)=?`,
+    [todayStr()]
+  ) : null;
+  const lastCompletedAt = lastDoneRow?.lc ? new Date(lastDoneRow.lc) : null;
+  applyEstimatedTimes(enriched, getManeuverTime(settings), opsStart, opsEnd, lastCompletedAt);
   if (!status) await checkQueueAlerts(enriched, settings, tAll, tRun).catch(e => console.error('[alerts]', e.message));
   sendJson(res, enriched);
 });
