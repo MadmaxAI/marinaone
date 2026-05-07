@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.63] -- 2026-05-07
+- sidebar: aumenta logomarca para 160x100px
+
 ## [2.3.62] -- 2026-05-07
 - fila: manobra apos conclusao, nao regressao de cursor; controle de acesso: submódulos alertas e perfis
 
@@ -225,6 +228,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
