@@ -402,8 +402,18 @@ function applyEstimatedTimes(enriched, maneuver, opsStart, opsEnd) {
     cursor.setMinutes(cursor.getMinutes() + maneuver);
     cursor = clampToOpsStart(clampToOpsEnd(cursor));
   } else {
-    cursor.setMinutes(cursor.getMinutes() + maneuver);
-    cursor = clampToOpsStart(cursor);
+    // Sem op em andamento: âncora no requested_at da primeira waiting + manobra
+    // → horário fica FIXO enquanto agora < agendado; quando passa, shift 1:1 sem somar manobra novamente
+    const firstWaiting = enriched.find(r => r.status === 'waiting');
+    if (firstWaiting && firstWaiting.requested_at) {
+      const reqAt   = new Date(firstWaiting.requested_at);
+      const base    = clampToOpsStart(new Date(reqAt.getTime() + 60000)); // reqAt + 1min, clampado ao início
+      const anchored = clampToOpsStart(new Date(base.getTime() + maneuver * 60000));
+      // Se o horário agendado ainda está no futuro: mantém fixo. Se já passou: now+1min (sem manobra extra)
+      cursor = anchored > nowPlus1 ? anchored : clampToOpsStart(nowPlus1);
+    } else {
+      cursor = clampToOpsStart(nowPlus1);
+    }
   }
 
   for (const row of enriched) {
