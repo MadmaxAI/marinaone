@@ -87,6 +87,7 @@ function resetRateLimit(req) {
 const PUBLIC_ROUTES = new Set([
   '/api/auth/login',
   '/api/version',
+  '/api/brand',
   '/api/conveniencia/catalog',
   '/api/conveniencia/order',
 ]);

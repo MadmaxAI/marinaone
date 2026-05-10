@@ -370,8 +370,8 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">
-      <div style="font-size:48px;margin-bottom:8px" id="login-icon">⚓</div>
-      <h1>Marina One</h1>
+      <div id="login-icon" style="margin-bottom:8px;display:flex;justify-content:center;align-items:center;min-height:56px">⚓</div>
+      <h1 id="login-marina-name">Marina One</h1>
       <p id="login-subtitle">Sistema de Gestão de Marina</p>
       <p id="login-version" style="font-size:11px;color:var(--text3);margin-top:4px;letter-spacing:.3px"></p>
     </div>
@@ -8070,12 +8070,12 @@ function toggleSAMode() {
     passEl.placeholder    = 'Senha do super-admin';
     btn.textContent       = '← Voltar ao login da marina';
   } else {
-    icon.textContent      = '⚓';
     subtitle.textContent  = 'Sistema de Gestão de Marina';
     emailEl.value         = 'admin@marina.com';
     passEl.value          = 'marina123';
     passEl.placeholder    = '';
     btn.textContent       = '🔐 Acesso Administrativo (SaaS)';
+    _applyLoginBrand(); // restaura logo da marina
   }
 }
 
@@ -10249,7 +10249,31 @@ function _renderTotem() {
 document.addEventListener('keydown', e => {
   if (e.key==='Escape') closeModalForce();
 });
+/** Aplica logo e nome da marina na tela de login */
+async function _applyLoginBrand() {
+  try {
+    const headers = {'Content-Type':'application/json'};
+    if (window.TENANT_SLUG) headers['X-Tenant-Slug'] = window.TENANT_SLUG;
+    const r = await fetch(API + '/brand', { headers });
+    if (!r.ok) return;
+    const b = await r.json();
+    if (!b || b.error) return;
+    const iconEl = document.getElementById('login-icon');
+    const nameEl = document.getElementById('login-marina-name');
+    if (iconEl) {
+      if (b.logo) {
+        iconEl.innerHTML = `<img src="${b.logo}" alt="${b.name}" style="max-height:110px;max-width:240px;object-fit:contain;border-radius:8px">`;
+      } else {
+        iconEl.innerHTML = `<span style="font-size:52px">⚓</span>`;
+      }
+    }
+    if (nameEl && b.name) nameEl.textContent = b.name;
+  } catch(e) {}
+}
+
 (async () => {
+  // Carrega logo da marina na tela de login (sem auth)
+  _applyLoginBrand();
   // Se a URL tem ?tenant= explícito, forçar modo marina (nunca abrir SA)
   const urlHasTenant = new URLSearchParams(window.location.search).has('tenant');
   if (urlHasTenant) {

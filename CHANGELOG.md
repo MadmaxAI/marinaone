@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.69] -- 2026-05-10
+- exibe logo da marina na tela de login via endpoint publico /api/brand
+
 ## [2.3.66] -- 2026-05-10
 - design system fase 1+2: tokens maritimos, Inter font, sidebar gradient+footer usuario, topbar pill, modal animado, toast slide, tabelas zebra
 
@@ -231,6 +234,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

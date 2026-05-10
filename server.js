@@ -3129,6 +3129,14 @@ addRoute('POST', '/api/store/pix-qrcode', async (req, res, ctx) => {
 // ═════════════════════════════════════════════════════════════════════
 //  ROTAS — CONVENIÊNCIA (auto-atendimento / totem)
 // ═════════════════════════════════════════════════════════════════════
+// Marca da marina — pública, sem auth (usada na tela de login antes de autenticar)
+addRoute('GET', '/api/brand', async (req, res, ctx) => {
+  const { dbGet: tGet } = ctx.db;
+  const name = (await tGet(`SELECT value FROM settings WHERE key='marina_name'`))?.value || 'Marina One';
+  const logo = (await tGet(`SELECT value FROM settings WHERE key='marina_logo'`))?.value || '';
+  sendJson(res, { name, logo });
+});
+
 addRoute('GET', '/api/conveniencia/catalog', async (req, res, ctx) => {
   const items = await ctx.db.dbAll(
     'SELECT id, name, category, price, stock, unit, photo_url FROM store_items WHERE active=1 ORDER BY category, name'
