@@ -82,17 +82,19 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .btn-ghost{background:rgba(255,255,255,.05);color:var(--text2);border:1px solid var(--border)}.btn-ghost:hover{background:rgba(255,255,255,.09);color:var(--text);border-color:var(--border-hover)}
 .btn-outline{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}.btn-outline:hover{background:rgba(26,141,230,.1)}
 .btn-sm{padding:5px 10px;font-size:12px}
-/* CARDS */
+/* CARDS — Fase 4 */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:var(--t-base)}
+.card:hover{border-color:rgba(26,141,230,.3);box-shadow:var(--shadow-2)}
 .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .card-title{font-size:14px;font-weight:600;color:var(--text);letter-spacing:-.1px}
 .grid{display:grid;gap:16px}
 .g2{grid-template-columns:1fr 1fr}
 .g3{grid-template-columns:1fr 1fr 1fr}
 .g4{grid-template-columns:repeat(4,1fr)}
-/* KPI */
+/* KPI — Fase 4 */
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden;transition:var(--t-base)}
 .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.kpi:hover{border-color:rgba(26,141,230,.3);box-shadow:var(--shadow-2);transform:translateY(-1px)}
 .kpi-label{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;font-weight:600}
 .kpi-value{font-size:26px;font-weight:700;color:var(--text);line-height:1;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
 .kpi-sub{font-size:11.5px;color:var(--text3);margin-top:5px}
@@ -102,14 +104,22 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .kpi.red::before{background:linear-gradient(90deg,var(--danger),#f87171)}
 .kpi.purple::before{background:linear-gradient(90deg,var(--accent2),#a78bfa)}
 .kpi-active{box-shadow:0 0 0 2px var(--accent)!important;transform:translateY(-2px)}
-/* TABLE */
+/* KPI Delta — variação percentual */
+.kpi-delta{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:var(--r-full);margin-top:6px;letter-spacing:-.1px}
+.kpi-delta.up{background:rgba(16,185,129,.15);color:#34d399}
+.kpi-delta.down{background:rgba(239,68,68,.15);color:#f87171}
+.kpi-delta.neutral{background:rgba(100,116,139,.1);color:var(--text3)}
+/* TABLE — Fase 5 */
 .table-wrap{overflow-x:auto;border-radius:var(--r-lg);border:1px solid var(--border)}
 table{width:100%;border-collapse:collapse}
-th{background:var(--surface2);padding:10px 14px;text-align:left;font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border)}
+th{background:var(--surface2);padding:10px 14px;text-align:left;font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2}
 td{padding:11px 14px;font-size:13px;border-bottom:1px solid var(--border);color:var(--text2);transition:var(--t-fast);font-variant-numeric:tabular-nums}
 tr:nth-child(even) td{background:rgba(255,255,255,.015)}
 tr:hover td{background:rgba(26,141,230,.07);color:var(--text)}
+tr:hover td:first-child{border-left:2px solid var(--accent)}
 tr:last-child td{border-bottom:none}
+/* Coluna numérica direita */
+.td-num{text-align:right!important;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 /* BADGES */
 .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
 .badge-success{background:rgba(16,185,129,.15);color:#34d399}
@@ -125,17 +135,29 @@ tr:last-child td{border-bottom:none}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:28px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;box-shadow:var(--shadow-3);animation:modal-in .2s var(--t-spring)}
 .modal-lg{max-width:820px}
 .modal-title{font-size:17px;font-weight:700;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border);letter-spacing:-.2px}
-/* FORMS */
+/* FORMS — Fase 3 */
 .form-row{display:grid;gap:14px;margin-bottom:14px}
 .form-row.cols2{grid-template-columns:1fr 1fr}
 .form-row.cols3{grid-template-columns:1fr 1fr 1fr}
 .form-group{display:flex;flex-direction:column;gap:5px}
-label{font-size:12px;font-weight:600;color:var(--text3)}
+label{font-size:12px;font-weight:600;color:var(--text2)}
+label.required::after{content:' *';color:var(--danger);font-weight:700}
 input,select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-md);padding:9px 12px;color:var(--text);font-size:13px;outline:none;transition:var(--t-base);width:100%;font-family:var(--font)}
 input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,141,230,.18)}
-input:disabled,select:disabled,textarea:disabled{opacity:.45;cursor:not-allowed}
+input:disabled,select:disabled,textarea:disabled{opacity:.45;cursor:not-allowed;background:var(--surface)}
+/* Select seta customizada */
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2364748b' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;padding-right:32px}
 select option{background:var(--surface)}
 textarea{resize:vertical;min-height:72px}
+/* Estado de erro */
+input.error,select.error,textarea.error{border-color:var(--danger);box-shadow:0 0 0 3px rgba(239,68,68,.15)}
+input.error:focus,select.error:focus,textarea.error:focus{box-shadow:0 0 0 3px rgba(239,68,68,.22)}
+/* Estado de sucesso */
+input.success,select.success{border-color:var(--success);box-shadow:0 0 0 3px rgba(16,185,129,.12)}
+/* Texto auxiliar abaixo do campo */
+.form-hint{font-size:11px;color:var(--text3);margin-top:2px;line-height:1.5}
+.form-error-msg{font-size:11px;color:var(--danger);margin-top:2px;line-height:1.5;display:flex;align-items:center;gap:3px}
+.form-error-msg::before{content:'⚠';font-size:10px}
 .form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 /* LOGIN */
 #login-screen{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 0%,#0d1e36 0%,var(--bg) 65%);display:flex;align-items:center;justify-content:center;z-index:9999}
@@ -242,9 +264,36 @@ body.totem-mode #content{height:100vh;overflow-y:auto}
 .hidden{display:none!important}
 .flex{display:flex}.items-center{align-items:center}.justify-between{justify-content:space-between}.gap-2{gap:8px}.gap-3{gap:12px}.mt-1{margin-top:4px}.mb-2{margin-bottom:8px}.text-sm{font-size:13px}.text-xs{font-size:11px}.font-bold{font-weight:700}.text-success{color:var(--success)}.text-danger{color:var(--danger)}.text-warning{color:var(--warning)}.text-muted{color:var(--text3)}
 .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin:60px auto}
+.spinner-sm{width:18px;height:18px;border-width:2px;margin:0}
 @keyframes spin{to{transform:rotate(360deg)}}
-.empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
-.empty-state .icon{font-size:48px;margin-bottom:12px}
+/* ── FASE 6: Skeleton Loading ── */
+@keyframes skeleton-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skeleton{background:linear-gradient(90deg,var(--surface2) 25%,var(--surface3) 50%,var(--surface2) 75%);background-size:200% 100%;animation:skeleton-shimmer 1.5s ease-in-out infinite;border-radius:var(--r-sm)}
+.skeleton-line{height:11px;border-radius:var(--r-sm);margin-bottom:8px}
+.skeleton-line.w-full{width:100%}.skeleton-line.w-3q{width:75%}.skeleton-line.w-half{width:50%}.skeleton-line.w-third{width:33%}
+.skeleton-kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden}
+.skeleton-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--surface3)}
+/* Botão com loading inline */
+.btn-loading{position:relative;pointer-events:none;opacity:.8}
+.btn-loading::after{content:'';position:absolute;right:10px;top:50%;margin-top:-7px;width:14px;height:14px;border:2px solid rgba(255,255,255,.25);border-top-color:rgba(255,255,255,.9);border-radius:50%;animation:spin .6s linear infinite}
+.btn-loading>*{opacity:.5}
+/* Empty state — estrutura semântica */
+.empty-state{text-align:center;padding:56px 24px;color:var(--text3)}
+.empty-state .icon{font-size:52px;margin-bottom:14px;display:block;opacity:.65}
+.empty-state .empty-title{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:-.1px}
+.empty-state .empty-subtitle{font-size:13px;color:var(--text3);margin-bottom:20px;line-height:1.6;max-width:320px;margin-left:auto;margin-right:auto}
+/* ── FASE 8: Identidade Náutica ── */
+/* Background oceânico radial no conteúdo */
+#content{background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(13,30,54,.55) 0%,transparent 70%)}
+/* Topbar — linha decorativa náutica */
+#topbar{position:relative}
+#topbar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 0%,var(--accent) 30%,var(--accent2) 70%,transparent 100%);opacity:.25}
+/* Sidebar logo — reflexo sutil no topo */
+.sidebar-logo{box-shadow:0 6px 20px rgba(26,141,230,.08)}
+/* Totem — fundo oceânico profundo com ondas */
+@keyframes wave-drift{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+body.totem-mode #content{background:radial-gradient(ellipse 100% 60% at 50% 10%,rgba(10,35,70,.85) 0%,var(--bg) 70%)!important;position:relative;overflow:hidden}
+body.totem-mode #content::before{content:'';position:absolute;bottom:0;left:0;width:200%;height:160px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 160' preserveAspectRatio='none'%3E%3Cpath fill='rgba(26%2C141%2C230%2C.06)' d='M0,80 C240,120 480,40 720,80 C960,120 1200,40 1440,80 L1440,160 L0,160 Z'/%3E%3Cpath fill='rgba(20%2C184%2C166%2C.04)' d='M0,110 C320,70 640,150 960,110 C1280,70 1440,110 1440,110 L1440,160 L0,160 Z'/%3E%3C/svg%3E") repeat-x bottom;animation:wave-drift 16s linear infinite;pointer-events:none;z-index:0}
 /* ── FINANCIAL TREE ─────────────────────────────────── */
 .fin-year{margin-bottom:10px}
 .fin-year-header{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:.15s;user-select:none}
@@ -389,7 +438,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
                 title="Mostrar/ocultar senha">👁️</button>
       </div>
     </div>
-    <button class="btn btn-primary" style="width:100%;margin-top:8px;padding:11px" onclick="doLogin()">Entrar</button>
+    <button id="login-btn" type="button" class="btn btn-primary" style="width:100%;margin-top:8px;padding:11px" onclick="doLogin()">Entrar</button>
     <div style="margin-top:14px;text-align:center">
       <button onclick="showForgotPassword()"
               style="background:none;border:none;font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline">
@@ -1227,7 +1276,19 @@ async function doLogin() {
   const email = document.getElementById('login-email').value;
   const pass  = document.getElementById('login-pass').value;
   const err   = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
   err.style.display = 'none';
+
+  // ── Feedback visual imediato no botão ────────────────
+  const setLoading = (on) => {
+    if (!btn) return;
+    btn.disabled = on;
+    btn.innerHTML = on
+      ? '<span class="spinner-sm" style="border-color:rgba(255,255,255,.3);border-top-color:#fff;display:inline-block;vertical-align:middle;margin-right:8px"></span>Entrando…'
+      : 'Entrar';
+  };
+
+  setLoading(true);
 
   // ── Modo Super-Admin ──────────────────────────────────
   if (window._saMode) {
@@ -1237,12 +1298,12 @@ async function doLogin() {
         body: JSON.stringify({email, password: pass})
       });
       const d = await r.json();
-      if (!r.ok) { err.textContent = d.error || 'Credenciais inválidas'; err.style.display='block'; return; }
+      if (!r.ok) { err.textContent = d.error || 'Credenciais inválidas'; err.style.display='block'; setLoading(false); return; }
       window.saToken = d.token;
       window.saUser  = d.admin;
       sessionStorage.setItem('mo_sa_token', d.token);
       saShowPanel();
-    } catch(e) { err.textContent = 'Erro de conexão com o servidor'; err.style.display='block'; }
+    } catch(e) { err.textContent = 'Erro de conexão com o servidor'; err.style.display='block'; setLoading(false); }
     return;
   }
 
@@ -1254,16 +1315,17 @@ async function doLogin() {
       body: JSON.stringify({email, password: pass})
     });
     const d = await r.json();
-    if (!r.ok) { err.textContent = d.error||'Erro ao entrar'; err.style.display='block'; return; }
+    if (!r.ok) { err.textContent = d.error||'Erro ao entrar'; err.style.display='block'; setLoading(false); return; }
     token = d.token;
     currentUser = d.user;
     sessionStorage.setItem('mo_token', token);
     if (d.must_change_password) {
+      setLoading(false);
       showChangePasswordModal();
     } else {
       await openApp();
     }
-  } catch(e) { err.textContent = 'Erro de conexão com o servidor'; err.style.display='block'; }
+  } catch(e) { err.textContent = 'Erro de conexão com o servidor'; err.style.display='block'; setLoading(false); }
 }
 
 function logout() {
@@ -1534,15 +1596,33 @@ async function toast(msg, type='success') {
   const colorVar = type==='error'?'danger':type==='warn'?'warning':type==='info'?'info':'success';
   const icons = { success:'✓', error:'✕', warn:'⚠', info:'ℹ', warning:'⚠' };
   const icon = icons[type] || icons.success;
+  // Empilhamento: offset baseado no número de toasts existentes
+  const existing = document.querySelectorAll('.toast-notif');
+  const offsetY = 24 + existing.length * 64;
   const t = document.createElement('div');
-  t.style.cssText = `position:fixed;bottom:24px;right:24px;background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--${colorVar});border-radius:12px;padding:11px 16px;font-size:13px;z-index:9999;box-shadow:var(--shadow-3);color:var(--text);max-width:340px;display:flex;align-items:center;gap:10px;font-family:var(--font);transform:translateX(120%);transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .25s ease`;
-  t.innerHTML = `<span style="font-size:14px;flex-shrink:0;color:var(--${colorVar})">${icon}</span><span>${msg}</span>`;
+  t.className = 'toast-notif';
+  t.style.cssText = `position:fixed;bottom:${offsetY}px;right:24px;background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--${colorVar});border-radius:12px;padding:11px 16px 15px;font-size:13px;z-index:9999;box-shadow:var(--shadow-3);color:var(--text);max-width:340px;display:flex;align-items:center;gap:10px;font-family:var(--font);transform:translateX(120%);transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .25s ease;overflow:hidden`;
+  // Barra de progresso de auto-dismiss
+  t.innerHTML = `<span style="font-size:14px;flex-shrink:0;color:var(--${colorVar})">${icon}</span><span>${msg}</span><div class="toast-prog" style="position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--${colorVar});transform-origin:left;transition:transform 2.9s linear;border-radius:0 0 9px 9px;opacity:.6"></div>`;
   document.body.appendChild(t);
-  requestAnimationFrame(() => { t.style.transform='translateX(0)'; });
+  requestAnimationFrame(() => {
+    t.style.transform = 'translateX(0)';
+    // Inicia contração da barra após render
+    requestAnimationFrame(() => {
+      const prog = t.querySelector('.toast-prog');
+      if (prog) prog.style.transform = 'scaleX(0)';
+    });
+  });
   setTimeout(() => {
-    t.style.transform='translateX(120%)';
-    t.style.opacity='0';
-    setTimeout(()=>t.remove(), 300);
+    t.style.transform = 'translateX(120%)';
+    t.style.opacity = '0';
+    setTimeout(() => {
+      t.remove();
+      // Re-empilha os toasts restantes
+      document.querySelectorAll('.toast-notif').forEach((el, i) => {
+        el.style.bottom = `${24 + i * 64}px`;
+      });
+    }, 300);
   }, 3000);
 }
 

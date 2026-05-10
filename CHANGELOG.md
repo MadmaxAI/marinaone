@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.72] -- 2026-05-10
+- login: feedback visual imediato no botão Entrar (spinner + disabled durante autenticação)
+
 ## [2.3.69] -- 2026-05-10
 - exibe logo da marina na tela de login via endpoint publico /api/brand
 
@@ -234,6 +237,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
