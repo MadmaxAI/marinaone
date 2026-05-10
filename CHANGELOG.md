@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.66] -- 2026-05-10
+- design system fase 1+2: tokens maritimos, Inter font, sidebar gradient+footer usuario, topbar pill, modal animado, toast slide, tabelas zebra
+
 ## [2.3.63] -- 2026-05-07
 - sidebar: aumenta logomarca para 160x100px
 
@@ -228,6 +231,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
