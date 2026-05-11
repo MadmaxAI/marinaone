@@ -7,23 +7,23 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   /* ── Paleta marítima ── */
-  --bg:#03080f;--surface:#091426;--surface2:#0f1e33;--surface3:#162840;--surface4:#1e3350;
+  --bg:#060b14;--surface:#091426;--surface2:#0f1e33;--surface3:#162840;--surface4:#1e3350;
   --border:rgba(255,255,255,.08);--border-hover:rgba(255,255,255,.15);
-  /* ── Accent — azul oceânico + teal ── */
-  --accent:#1a8de6;--accent2:#14b8a6;
+  /* ── Accent — azul naval único ── */
+  --accent:#2563eb;--accent2:#3b82f6;
   /* ── Semântico ── */
   --success:#10b981;--warning:#f59e0b;--danger:#ef4444;--info:#38bdf8;
   /* ── Texto ── */
   --text:#f0f6ff;--text2:#8aa3be;--text3:#4e6580;
   /* ── Elevação ── */
-  --shadow-1:0 1px 4px rgba(0,0,0,.5);
-  --shadow-2:0 4px 24px rgba(0,0,0,.6);
-  --shadow-3:0 8px 40px rgba(0,0,0,.7);
-  --shadow-4:0 24px 80px rgba(0,0,0,.85);
+  --shadow-1:0 1px 4px rgba(0,20,50,.5);
+  --shadow-2:0 4px 24px rgba(0,20,50,.55);
+  --shadow-3:0 8px 40px rgba(0,20,50,.65);
+  --shadow-4:0 24px 80px rgba(0,20,50,.8);
   --shadow:var(--shadow-2);
   /* ── Raio ── */
   --r-sm:6px;--r-md:10px;--r-lg:14px;--r-xl:20px;--r-full:9999px;
@@ -32,10 +32,10 @@
   --t-fast:90ms ease;--t-base:150ms ease;--t-slow:260ms ease;
   --t-spring:220ms cubic-bezier(.34,1.56,.64,1);
   /* ── Tipo ── */
-  --font:Inter,'Segoe UI',system-ui,-apple-system,sans-serif;
+  --font:Outfit,'Segoe UI',system-ui,-apple-system,sans-serif;
   /* ── Glows ── */
-  --glow-blue:rgba(26,141,230,.18);--glow-teal:rgba(20,184,166,.12);
-  --gradient-accent:linear-gradient(90deg,transparent,#1a8de6 35%,#14b8a6 65%,transparent);
+  --glow-blue:rgba(37,99,235,.18);--glow-teal:rgba(59,130,246,.10);
+  --gradient-accent:linear-gradient(90deg,transparent,#2563eb 40%,#3b82f6 60%,transparent);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,8 +57,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .nav-section::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.05)}
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:13px;color:var(--text2);transition:var(--t-base);margin-bottom:1px;border:none;border-left:3px solid transparent;background:none;width:100%;text-align:left}
 .nav-item:hover{background:rgba(255,255,255,.05);color:var(--text);border-left-color:rgba(255,255,255,.12)}
-.nav-item.active{background:linear-gradient(90deg,rgba(26,141,230,.2),rgba(20,184,166,.05) 80%,transparent);color:var(--accent);font-weight:600;border-left-color:var(--accent);box-shadow:inset 0 1px 0 rgba(26,141,230,.06)}
-.nav-item .icon{font-size:15px;width:20px;text-align:center;flex-shrink:0;opacity:.8}
+.nav-item.active{background:rgba(37,99,235,.15);color:var(--text);font-weight:600;border-left-color:var(--accent);box-shadow:none}
+.nav-item .icon{font-size:15px;width:20px;text-align:center;flex-shrink:0;opacity:.8;display:flex;align-items:center;justify-content:center}
+.nav-item .icon svg{width:16px;height:16px;display:block;flex-shrink:0}
 .nav-item.active .icon{opacity:1}
 .nav-badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:var(--r-full);line-height:1.4;box-shadow:0 2px 8px rgba(239,68,68,.4)}
 /* Sidebar footer — usuário logado */
@@ -82,7 +83,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 #topbar-version{font-size:10px;color:var(--text3);letter-spacing:.3px;cursor:default;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);padding:3px 8px;border-radius:var(--r-full)}
 .btn{padding:7px 15px;border-radius:var(--r-md);border:none;cursor:pointer;font-size:13px;font-weight:500;transition:var(--t-base);display:inline-flex;align-items:center;gap:6px;letter-spacing:-.1px}
 .btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
-.btn-primary{background:linear-gradient(135deg,#1a8de6 0%,#1470c2 100%);color:#fff;box-shadow:0 2px 10px rgba(26,141,230,.35),0 1px 0 rgba(255,255,255,.12) inset}.btn-primary:hover{background:linear-gradient(135deg,#1c97f5 0%,#1578cc 100%);box-shadow:0 3px 16px rgba(26,141,230,.5)}
+.btn-primary{background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:#fff;box-shadow:0 2px 10px rgba(37,99,235,.35),0 1px 0 rgba(255,255,255,.12) inset}.btn-primary:hover{background:linear-gradient(135deg,#3b7ff7 0%,#2254d4 100%);box-shadow:0 3px 16px rgba(37,99,235,.5)}
 .btn-success{background:linear-gradient(135deg,#10b981,#059669);color:#fff;box-shadow:0 2px 8px rgba(16,185,129,.3)}.btn-success:hover{background:linear-gradient(135deg,#12c98d,#06a070);box-shadow:0 3px 12px rgba(16,185,129,.45)}
 .btn-warning{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff}.btn-warning:hover{background:linear-gradient(135deg,#faa80d,#e07c06)}
 .btn-danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;box-shadow:0 2px 8px rgba(239,68,68,.25)}.btn-danger:hover{background:linear-gradient(135deg,#f45555,#e02c2c);box-shadow:0 3px 12px rgba(239,68,68,.4)}
@@ -91,7 +92,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .btn-sm{padding:5px 10px;font-size:12px}
 /* CARDS — Fase 4 */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:var(--t-base)}
-.card:hover{border-color:rgba(26,141,230,.25);box-shadow:var(--shadow-2);transform:translateY(-1px)}
+.card:hover{border-color:rgba(37,99,235,.25);box-shadow:var(--shadow-2)}
 .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .card-title{font-size:14px;font-weight:600;color:var(--text);letter-spacing:-.1px}
 .grid{display:grid;gap:16px}
@@ -101,7 +102,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 /* KPI — Fase 4 */
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden;transition:var(--t-base)}
 .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
-.kpi:hover{border-color:rgba(26,141,230,.3);box-shadow:0 8px 28px rgba(26,141,230,.12);transform:translateY(-2px)}
+.kpi:hover{border-color:rgba(37,99,235,.3);box-shadow:0 8px 28px rgba(37,99,235,.12);transform:translateY(-2px)}
 .kpi-label{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;font-weight:600}
 .kpi-value{font-size:28px;font-weight:700;color:var(--text);line-height:1;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
 .kpi-sub{font-size:11.5px;color:var(--text3);margin-top:5px}
@@ -113,7 +114,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .kpi.red::before{background:linear-gradient(90deg,var(--danger),#f87171)}
 .kpi.red:hover{box-shadow:0 8px 28px rgba(239,68,68,.14)!important;border-color:rgba(239,68,68,.3)!important}
 .kpi.purple::before{background:linear-gradient(90deg,var(--accent2),#a78bfa)}
-.kpi.purple:hover{box-shadow:0 8px 28px rgba(20,184,166,.14)!important;border-color:rgba(20,184,166,.3)!important}
+.kpi.purple:hover{box-shadow:0 8px 28px rgba(59,130,246,.14)!important;border-color:rgba(59,130,246,.3)!important}
 .kpi-active{box-shadow:0 0 0 2px var(--accent)!important;transform:translateY(-2px)}
 /* KPI Delta — variação percentual */
 .kpi-delta{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:var(--r-full);margin-top:6px;letter-spacing:-.1px}
@@ -175,10 +176,10 @@ input.success,select.success{border-color:var(--success);box-shadow:0 0 0 3px rg
 /* Login — glows de fundo */
 .login-bg-glow{position:absolute;inset:0;pointer-events:none;z-index:0}
 .login-glow-1{position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,var(--glow-blue) 0%,transparent 70%);top:-200px;left:-200px;filter:blur(60px)}
-.login-glow-2{position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,var(--glow-teal) 0%,transparent 70%);bottom:-150px;right:-150px;filter:blur(80px)}
-.login-glow-3{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,.07) 0%,transparent 70%);top:40%;left:50%;transform:translate(-50%,-50%);filter:blur(60px)}
+.login-glow-2{display:none}
+.login-glow-3{display:none}
 /* Login — grid náutico sutil */
-.login-bg-grid{position:absolute;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(26,141,230,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(26,141,230,.035) 1px,transparent 1px);background-size:44px 44px}
+.login-bg-grid{display:none}
 /* Login — card */
 .login-card{position:relative;z-index:10;background:rgba(9,20,38,.75);border:1px solid rgba(255,255,255,.09);border-radius:24px;padding:44px 40px;width:400px;box-shadow:0 32px 80px rgba(0,0,0,.65),0 0 0 1px rgba(26,141,230,.07) inset;backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px)}
 /* Linha de acento no topo do card */
@@ -195,8 +196,8 @@ input.success,select.success{border-color:var(--success);box-shadow:0 0 0 3px rg
 .login-section-label{font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.28);text-align:center;margin-bottom:20px;display:flex;align-items:center;gap:12px}
 .login-section-label::before,.login-section-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.07)}
 /* Login — botão */
-.login-card .btn-primary{background:linear-gradient(135deg,#1a8de6 0%,#1470c2 100%);box-shadow:0 4px 20px rgba(26,141,230,.4),0 1px 0 rgba(255,255,255,.15) inset;font-weight:600;font-size:14px;letter-spacing:.1px}
-.login-card .btn-primary:hover{background:linear-gradient(135deg,#1c97f5 0%,#1578cc 100%);box-shadow:0 6px 26px rgba(26,141,230,.55)}
+.login-card .btn-primary{background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);box-shadow:0 4px 20px rgba(37,99,235,.4),0 1px 0 rgba(255,255,255,.15) inset;font-weight:600;font-size:14px;letter-spacing:.1px}
+.login-card .btn-primary:hover{background:linear-gradient(135deg,#3b7ff7 0%,#2254d4 100%);box-shadow:0 6px 26px rgba(37,99,235,.55)}
 /* Login — status bar */
 .login-status-bar{margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;gap:6px}
 .login-status-dot{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 8px rgba(16,185,129,.6);animation:login-pulse 2.5s ease-in-out infinite}
@@ -334,11 +335,11 @@ body.totem-mode #content{height:100vh;overflow-y:auto}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:20px}
-::-webkit-scrollbar-thumb:hover{background:rgba(26,141,230,.35)}
+::-webkit-scrollbar-thumb:hover{background:rgba(37,99,235,.35)}
 /* Totem — fundo oceânico profundo com ondas */
 @keyframes wave-drift{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 body.totem-mode #content{background:radial-gradient(ellipse 100% 60% at 50% 10%,rgba(10,35,70,.85) 0%,var(--bg) 70%)!important;position:relative;overflow:hidden}
-body.totem-mode #content::before{content:'';position:absolute;bottom:0;left:0;width:200%;height:160px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 160' preserveAspectRatio='none'%3E%3Cpath fill='rgba(26%2C141%2C230%2C.06)' d='M0,80 C240,120 480,40 720,80 C960,120 1200,40 1440,80 L1440,160 L0,160 Z'/%3E%3Cpath fill='rgba(20%2C184%2C166%2C.04)' d='M0,110 C320,70 640,150 960,110 C1280,70 1440,110 1440,110 L1440,160 L0,160 Z'/%3E%3C/svg%3E") repeat-x bottom;animation:wave-drift 16s linear infinite;pointer-events:none;z-index:0}
+body.totem-mode #content::before{content:'';position:absolute;bottom:0;left:0;width:200%;height:160px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 160' preserveAspectRatio='none'%3E%3Cpath fill='rgba(37%2C99%2C235%2C.06)' d='M0,80 C240,120 480,40 720,80 C960,120 1200,40 1440,80 L1440,160 L0,160 Z'/%3E%3Cpath fill='rgba(59%2C130%2C246%2C.04)' d='M0,110 C320,70 640,150 960,110 C1280,70 1440,110 1440,110 L1440,160 L0,160 Z'/%3E%3C/svg%3E") repeat-x bottom;animation:wave-drift 16s linear infinite;pointer-events:none;z-index:0}
 /* ── FINANCIAL TREE ─────────────────────────────────── */
 .fin-year{margin-bottom:10px}
 .fin-year-header{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:.15s;user-select:none}
@@ -459,6 +460,25 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
 </style>
 </head>
 <body>
+<!-- ICON SPRITE -->
+<svg style="display:none" aria-hidden="true">
+<symbol id="ic-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1v-9.5zM9 21v-8h6v8"/></symbol>
+<symbol id="ic-list" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5c0-1.1.9-2 2-2h2a2 2 0 012 2 2 2 0 01-2 2h-2a2 2 0 01-2-2zM9 12l2 2 4-4"/></symbol>
+<symbol id="ic-user" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></symbol>
+<symbol id="ic-anchor" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 22C6.48 22 2 17.52 2 12S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10zM12 8a2 2 0 100-4 2 2 0 000 4zM12 8v13M5.5 18.5C6.8 16.5 9.2 15 12 15s5.2 1.5 6.5 3.5M2 12h4M18 12h4"/></symbol>
+<symbol id="ic-grid" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></symbol>
+<symbol id="ic-file" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2zM14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+<symbol id="ic-dollar" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></symbol>
+<symbol id="ic-store" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M3 9h18v10a2 2 0 01-2 2H5a2 2 0 01-2-2V9zM3 9l2.45-4.9A2 2 0 017.24 3h9.52a2 2 0 011.8 1.1L21 9M12 3v6"/></symbol>
+<symbol id="ic-bag" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6zM3 6h18M16 10a4 4 0 01-8 0"/></symbol>
+<symbol id="ic-monitor" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M2 3h20a1 1 0 011 1v13a1 1 0 01-1 1H2a1 1 0 01-1-1V4a1 1 0 011-1zM8 21h8M12 17v4"/></symbol>
+<symbol id="ic-wrench" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></symbol>
+<symbol id="ic-chart" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M18 20V10M12 20V4M6 20v-6"/></symbol>
+<symbol id="ic-bell" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></symbol>
+<symbol id="ic-gear" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></symbol>
+<symbol id="ic-users" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></symbol>
+<symbol id="ic-lock" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"/></symbol>
+</svg>
 
 <!-- LOGIN -->
 <div id="login-screen">
@@ -521,26 +541,26 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
     </div>
     <div class="sidebar-nav">
       <div class="nav-section" data-section="Principal">Principal</div>
-      <button class="nav-item active" onclick="nav('dashboard')" data-page="dashboard" data-module="dashboard"><span class="icon">🏠</span>Dashboard</button>
-      <button class="nav-item" onclick="nav('queue')" data-page="queue" data-module="queue"><span class="icon">📋</span>Fila de Operações<span class="nav-badge" id="queue-badge" style="display:none"></span></button>
+      <button class="nav-item active" onclick="nav('dashboard')" data-page="dashboard" data-module="dashboard"><span class="icon"><svg><use href="#ic-home"/></svg></span>Dashboard</button>
+      <button class="nav-item" onclick="nav('queue')" data-page="queue" data-module="queue"><span class="icon"><svg><use href="#ic-list"/></svg></span>Fila de Operações<span class="nav-badge" id="queue-badge" style="display:none"></span></button>
       <div class="nav-section" data-section="Gestão">Gestão</div>
-      <button class="nav-item" onclick="nav('clients')" data-page="clients" data-module="clients"><span class="icon">👤</span>Clientes</button>
-      <button class="nav-item" onclick="nav('vessels')" data-page="vessels" data-module="vessels"><span class="icon">🛥️</span>Embarcações</button>
-      <button class="nav-item" onclick="nav('spots')" data-page="spots" data-module="spots"><span class="icon">🅿️</span>Vagas</button>
-      <button class="nav-item" onclick="nav('contracts')" data-page="contracts" data-module="contracts"><span class="icon">📄</span>Contratos</button>
+      <button class="nav-item" onclick="nav('clients')" data-page="clients" data-module="clients"><span class="icon"><svg><use href="#ic-user"/></svg></span>Clientes</button>
+      <button class="nav-item" onclick="nav('vessels')" data-page="vessels" data-module="vessels"><span class="icon"><svg><use href="#ic-anchor"/></svg></span>Embarcações</button>
+      <button class="nav-item" onclick="nav('spots')" data-page="spots" data-module="spots"><span class="icon"><svg><use href="#ic-grid"/></svg></span>Vagas</button>
+      <button class="nav-item" onclick="nav('contracts')" data-page="contracts" data-module="contracts"><span class="icon"><svg><use href="#ic-file"/></svg></span>Contratos</button>
       <div class="nav-section" data-section="Operações">Operações</div>
-      <button class="nav-item" onclick="nav('financial')" data-page="financial" data-module="financial"><span class="icon">💰</span>Financeiro</button>
-      <button class="nav-item" onclick="nav('store')" data-page="store" data-module="store"><span class="icon">🏪</span>Loja / PDV</button>
-      <button class="nav-item" onclick="nav('conveniencia')" data-page="conveniencia" data-module="conveniencia"><span class="icon">🛍️</span>Conveniência</button>
-      <button class="nav-item" onclick="nav('totem')" data-page="totem" data-module="_admin"><span class="icon">📟</span>Totem</button>
-      <button class="nav-item" onclick="nav('maintenance')" data-page="maintenance" data-module="maintenance"><span class="icon">🔧</span>Manutenção</button>
+      <button class="nav-item" onclick="nav('financial')" data-page="financial" data-module="financial"><span class="icon"><svg><use href="#ic-dollar"/></svg></span>Financeiro</button>
+      <button class="nav-item" onclick="nav('store')" data-page="store" data-module="store"><span class="icon"><svg><use href="#ic-store"/></svg></span>Loja / PDV</button>
+      <button class="nav-item" onclick="nav('conveniencia')" data-page="conveniencia" data-module="conveniencia"><span class="icon"><svg><use href="#ic-bag"/></svg></span>Conveniência</button>
+      <button class="nav-item" onclick="nav('totem')" data-page="totem" data-module="_admin"><span class="icon"><svg><use href="#ic-monitor"/></svg></span>Totem</button>
+      <button class="nav-item" onclick="nav('maintenance')" data-page="maintenance" data-module="maintenance"><span class="icon"><svg><use href="#ic-wrench"/></svg></span>Manutenção</button>
       <div class="nav-section" data-section="Análise">Análise</div>
-      <button class="nav-item" onclick="nav('analytics')" data-page="analytics" data-module="analytics"><span class="icon">📊</span>Analytics</button>
-      <button class="nav-item" onclick="nav('alerts')" data-page="alerts" data-module="alerts"><span class="icon">🔔</span>Alertas<span class="nav-badge" id="alerts-badge" style="display:none"></span></button>
+      <button class="nav-item" onclick="nav('analytics')" data-page="analytics" data-module="analytics"><span class="icon"><svg><use href="#ic-chart"/></svg></span>Analytics</button>
+      <button class="nav-item" onclick="nav('alerts')" data-page="alerts" data-module="alerts"><span class="icon"><svg><use href="#ic-bell"/></svg></span>Alertas<span class="nav-badge" id="alerts-badge" style="display:none"></span></button>
       <div class="nav-section" data-section="Sistema">Sistema</div>
-      <button class="nav-item" onclick="nav('settings')" data-page="settings" data-module="settings"><span class="icon">⚙️</span>Configurações</button>
-      <button class="nav-item" onclick="nav('users')" data-page="users" data-module="_admin"><span class="icon">👥</span>Usuários</button>
-      <button class="nav-item" onclick="nav('access')" data-page="access" data-module="_admin"><span class="icon">🔐</span>Controle de Acesso</button>
+      <button class="nav-item" onclick="nav('settings')" data-page="settings" data-module="settings"><span class="icon"><svg><use href="#ic-gear"/></svg></span>Configurações</button>
+      <button class="nav-item" onclick="nav('users')" data-page="users" data-module="_admin"><span class="icon"><svg><use href="#ic-users"/></svg></span>Usuários</button>
+      <button class="nav-item" onclick="nav('access')" data-page="access" data-module="_admin"><span class="icon"><svg><use href="#ic-lock"/></svg></span>Controle de Acesso</button>
     </div>
     <div class="sidebar-footer" id="sidebar-footer" style="display:none">
       <div class="sidebar-user">

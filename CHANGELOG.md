@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.84] -- 2026-05-11
+- redesign visual: fonte Outfit, paleta azul naval unica, icones SVG sidebar, login simplificado, sombras tintadas
+
 ## [2.3.83] -- 2026-05-11
 - Configuracoes: remove max-width 740px, abas alinhadas com largura total igual as demais telas
 
@@ -252,6 +255,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
