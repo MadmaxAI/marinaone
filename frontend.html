@@ -79,7 +79,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .topbar-user-pill{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 6px;border-radius:var(--r-full);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);cursor:default;transition:var(--t-base)}
 .topbar-user-pill:hover{background:rgba(255,255,255,.08);border-color:var(--border-hover)}
 /* Version badge */
-#topbar-version{display:none;font-size:10px;color:var(--text3);letter-spacing:.3px;cursor:default;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);padding:3px 8px;border-radius:var(--r-full)}
+#topbar-version{font-size:10px;color:var(--text3);letter-spacing:.3px;cursor:default;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);padding:3px 8px;border-radius:var(--r-full)}
 .btn{padding:7px 15px;border-radius:var(--r-md);border:none;cursor:pointer;font-size:13px;font-weight:500;transition:var(--t-base);display:inline-flex;align-items:center;gap:6px;letter-spacing:-.1px}
 .btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
 .btn-primary{background:linear-gradient(135deg,#1a8de6 0%,#1470c2 100%);color:#fff;box-shadow:0 2px 10px rgba(26,141,230,.35),0 1px 0 rgba(255,255,255,.12) inset}.btn-primary:hover{background:linear-gradient(135deg,#1c97f5 0%,#1578cc 100%);box-shadow:0 3px 16px rgba(26,141,230,.5)}
@@ -1922,7 +1922,23 @@ pages.dashboard = async () => {
   const queue = await api('GET', '/queue');
   if (!kpis) return;
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const firstName = (currentUser?.name || '').split(' ')[0];
+  const queueAlert = kpis.queue_aguardando > 0
+    ? `<span style="font-size:13px;color:var(--warning);display:flex;align-items:center;gap:5px"><span>📋</span>${kpis.queue_aguardando} operaç${kpis.queue_aguardando===1?'ão':'ões'} aguardando na fila</span>`
+    : `<span style="font-size:13px;color:var(--success);display:flex;align-items:center;gap:5px"><span>✅</span>Fila de operações vazia</span>`;
+
   setContent(`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding:16px 20px;background:rgba(26,141,230,.07);border:1px solid rgba(26,141,230,.15);border-radius:var(--r-lg);border-left:3px solid var(--accent)">
+    <div>
+      <div style="font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.3px">${greeting}, ${esc(firstName)} 👋</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:3px">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      ${queueAlert}
+    </div>
+  </div>
   <div class="grid g4 mb-2">
     <div class="kpi green clickable" onclick="nav('spots')" title="Ver vagas"><div class="kpi-label">Ocupação Total</div><div class="kpi-value">${kpis.ocupacao_total}%</div><div class="kpi-sub">${kpis.vagas_ocupadas}/${kpis.vagas_total} vagas</div><span class="kpi-icon">🅿️</span></div>
     <div class="kpi clickable" onclick="goToFinancial('')" title="Ver financeiro"><div class="kpi-label">Receita do Mês</div><div class="kpi-value" style="font-size:20px">${fmt(kpis.receita_mes)}</div><div class="kpi-sub">Loja: ${fmt(kpis.receita_loja)}</div><span class="kpi-icon">💰</span></div>

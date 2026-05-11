@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.75] -- 2026-05-11
+- Fix badge de versao no topbar + saudacao dinamica no Dashboard (Bom dia/tarde/noite + nome do usuario + status da fila)
+
 ## [2.3.73] -- 2026-05-11
 - Redesign completo do sistema: novo design premium dark SaaS em todas as telas (login glassmorphism, sidebar refinada, KPIs com glow por categoria, modais, fila com color-coding por status, topbar, botoes gradiente)
 
@@ -240,6 +243,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
