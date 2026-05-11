@@ -3307,8 +3307,24 @@ addRoute('GET', '/api/analytics/kpis', async (req, res, ctx) => {
 });
 
 addRoute('GET', '/api/analytics/revenue-chart', async (req, res, ctx) => {
-  const rows = await ctx.db.dbAll(`SELECT TO_CHAR(paid_date,'YYYY-MM') as month, COALESCE(SUM(amount),0) as total FROM financial_charges WHERE status='paid' AND paid_date IS NOT NULL GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY TO_CHAR(paid_date,'YYYY-MM') DESC LIMIT 12`);
-  sendJson(res, rows.reverse().map(r => ({ ...r, total: Number(r.total) })));
+  const year = new Date().getFullYear();
+  const rows = await ctx.db.dbAll(
+    `SELECT TO_CHAR(paid_date,'YYYY-MM') as month, COALESCE(SUM(amount),0) as total
+     FROM financial_charges
+     WHERE status='paid' AND paid_date IS NOT NULL
+       AND EXTRACT(YEAR FROM paid_date) = $1
+     GROUP BY TO_CHAR(paid_date,'YYYY-MM')`,
+    [year]
+  );
+  // Garante os 12 meses do ano corrente, com zero nos meses sem receita
+  const dataMap = {};
+  rows.forEach(r => { dataMap[r.month] = Number(r.total); });
+  const result = Array.from({ length: 12 }, (_, i) => {
+    const m = String(i + 1).padStart(2, '0');
+    const key = `${year}-${m}`;
+    return { month: key, total: dataMap[key] || 0 };
+  });
+  sendJson(res, result);
 });
 
 addRoute('GET', '/api/analytics/top-clients', async (req, res, ctx) => {

@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.76] -- 2026-05-11
+- Grafico receita mensal: 12 meses Jan-Dez com zeros, mes atual em destaque, tooltip em R$
+
 ## [2.3.75] -- 2026-05-11
 - Fix badge de versao no topbar + saudacao dinamica no Dashboard (Bom dia/tarde/noite + nome do usuario + status da fila)
 
@@ -243,6 +246,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

@@ -1998,13 +1998,50 @@ pages.dashboard = async () => {
   </div>`);
 
   if (rev && rev.length) {
+    const MONTH_ABBR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const revLabels = rev.map(r => MONTH_ABBR[parseInt(r.month.split('-')[1], 10) - 1] || r.month);
+    const revData   = rev.map(r => r.total);
+    const maxRev    = Math.max(...revData, 1);
+    // Barra do mês atual em destaque
+    const curMonth  = new Date().getMonth(); // 0-based
+    const bgColors  = revData.map((_, i) => i === curMonth ? 'rgba(26,141,230,.85)' : 'rgba(26,141,230,.35)');
+    const bdColors  = revData.map((_, i) => i === curMonth ? '#1a8de6' : 'rgba(26,141,230,.5)');
     pageCharts.rev = new Chart(document.getElementById('rev-chart'), {
       type: 'bar',
       data: {
-        labels: rev.map(r => r.month),
-        datasets: [{label:'Receita',data:rev.map(r=>r.total),backgroundColor:'rgba(59,130,246,.6)',borderColor:'#3b82f6',borderWidth:2,borderRadius:6}]
+        labels: revLabels,
+        datasets: [{
+          label: 'Receita',
+          data: revData,
+          backgroundColor: bgColors,
+          borderColor: bdColors,
+          borderWidth: 1.5,
+          borderRadius: 5,
+          borderSkipped: false
+        }]
       },
-      options: {responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'R$'+fmtNum(v)},grid:{color:'rgba(42,58,85,.5)'}},x:{grid:{display:false}}}}
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ' ' + fmt(ctx.parsed.y)
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { callback: v => v === 0 ? 'R$0' : 'R$' + fmtNum(v), color: '#4e6580', font: { size: 10 } },
+            grid: { color: 'rgba(255,255,255,.05)' }
+          },
+          x: {
+            ticks: { color: '#4e6580', font: { size: 11 } },
+            grid: { display: false }
+          }
+        }
+      }
     });
   }
 };
