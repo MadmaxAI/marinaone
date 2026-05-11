@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.83] -- 2026-05-11
+- Configuracoes: remove max-width 740px, abas alinhadas com largura total igual as demais telas
+
 ## [2.3.79] -- 2026-05-11
 - Logs do Sistema: drilldown ano/mes, busca, filtro por acao e modal de detalhe completo
 
@@ -249,6 +252,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

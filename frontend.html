@@ -390,8 +390,8 @@ body.totem-mode #content::before{content:'';position:absolute;bottom:0;left:0;wi
 .btn-export{background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.3);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-weight:600;transition:.15s}
 .btn-export:hover{background:rgba(34,197,94,.22);border-color:#22c55e}
 /* SETTINGS PAGE */
-.settings-tab-bar{display:flex;gap:4px;margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px}
-.settings-tab{flex:1;padding:8px 12px;border-radius:7px;border:none;background:none;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;transition:.15s;text-align:center}
+.settings-tab-bar{display:flex;gap:4px;margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;align-items:stretch}
+.settings-tab{flex:1;padding:8px 12px;border-radius:7px;border:none;background:none;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;transition:.15s;white-space:nowrap;display:flex;align-items:center;justify-content:center;line-height:1}
 .settings-tab.active{background:var(--accent);color:#fff}
 .settings-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
 .settings-card-title{font-size:14px;font-weight:700;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
@@ -8485,7 +8485,7 @@ async function renderSettings(tab) {
   }
 
   setContent(`
-    <div style="max-width:740px">
+    <div>
       <div class="settings-tab-bar">${tabBar}</div>
       ${content}
     </div>`);
