@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.79] -- 2026-05-11
+- Logs do Sistema: drilldown ano/mes, busca, filtro por acao e modal de detalhe completo
+
 ## [2.3.76] -- 2026-05-11
 - Grafico receita mensal: 12 meses Jan-Dez com zeros, mes atual em destaque, tooltip em R$
 
@@ -246,6 +249,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

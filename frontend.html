@@ -8167,41 +8167,292 @@ async function renderSettings(tab) {
     </div>`;
 
   } else if (_settingsTab === 'logs') {
-    const logs = await api('GET','/system-logs?limit=200') || [];
-    const actionLabels = {
-      queue_reorder:      '🔀 Reordenação de Fila',
-      contract_cancelled: '❌ Cancelamento de Contrato',
-      create_user:        '👤 Novo Usuário',
-      update_user:        '✏️ Edição de Usuário',
+    const logs = await api('GET','/system-logs?limit=500') || [];
+
+    // ── Metadados de ação ─────────────────────────────────────────────
+    const _logsMeta = {
+      queue_reorder:      { label: 'Reordenação de Fila',            icon: '🔀', color: 'var(--accent)'  },
+      contract_cancelled: { label: 'Cancelamento de Contrato',       icon: '🚫', color: 'var(--danger)'  },
+      create_user:        { label: 'Novo Usuário',                   icon: '👤', color: 'var(--success)' },
+      update_user:        { label: 'Edição de Usuário',              icon: '✏️', color: 'var(--warning)' },
+      delete_user:        { label: 'Exclusão de Usuário',            icon: '🗑️', color: 'var(--danger)'  },
+      auto_create_user:   { label: 'Usuário Criado Automaticamente', icon: '🤖', color: 'var(--success)' },
+      update_permissions: { label: 'Permissões Atualizadas',         icon: '🔐', color: 'var(--info)'    },
     };
-    const logsHtml = logs.length ? logs.map(l => {
-      let details = '';
+
+    // ── Formata detalhes resumidos ────────────────────────────────────
+    function _fmtLogDetails(l) {
       try {
-        const d = JSON.parse(l.details||'{}');
-        if (l.action === 'queue_reorder') {
-          details = `Embarcação <strong>${d.vessel||''}</strong> movida ${d.direction==='up'?'para frente':'para trás'} (posição ${d.moved_from}→${d.moved_to} de ${d.total}). Justificativa: <em>"${d.justification}"</em>`;
-        } else if (l.action === 'contract_cancelled') {
-          details = `Contrato #${d.contract_id||''} cancelado por <strong>${d.cancelled_by||'—'}</strong>. Justificativa: <em>"${d.justification||'—'}"</em>`;
-        } else {
-          details = l.details || '';
+        const d = JSON.parse(l.details || '{}');
+        if (l.action === 'queue_reorder')
+          return `Embarcação <strong>${esc(d.vessel||'')}</strong> movida ${d.direction==='up'?'para frente':'para trás'}${d.justification?` — <em>"${esc(d.justification)}"</em>`:''}`;
+        if (l.action === 'contract_cancelled')
+          return `Contrato #${d.contract_id||''} cancelado por <strong>${esc(d.cancelled_by||'—')}</strong>${d.justification?` — <em>"${esc(d.justification)}"</em>`:''}`;
+        return esc(l.details || '');
+      } catch(e) { return esc(l.details || ''); }
+    }
+
+    // ── Globais ───────────────────────────────────────────────────────
+    window._allSystemLogs = logs;
+    window._logsMeta      = _logsMeta;
+    window._fmtLogDetails = _fmtLogDetails;
+
+    // Estado de expansão (mesmo padrão do Financeiro)
+    const _nowY = String(new Date().getFullYear());
+    const _nowM = `${_nowY}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+    window._logsExpYears  = {};
+    window._logsExpMonths = {};
+    window._logsExpYears[_nowY]  = true;
+    window._logsExpMonths[_nowM] = true;
+
+    // ── Toggles rápidos (show/hide DOM, sem re-render) ────────────────
+    window._logsToggleYear = function(year) {
+      const body = document.getElementById('log-y-' + year);
+      const hdr  = body?.previousElementSibling;
+      window._logsExpYears[year] = !window._logsExpYears[year];
+      if (body) body.style.display = window._logsExpYears[year] ? 'block' : 'none';
+      if (hdr)  hdr.querySelector('.fin-expand').textContent = window._logsExpYears[year] ? '▼' : '▶';
+    };
+    window._logsToggleMonth = function(key) {
+      const body = document.getElementById('log-m-' + key);
+      const hdr  = body?.previousElementSibling;
+      window._logsExpMonths[key] = !window._logsExpMonths[key];
+      if (body) body.style.display = window._logsExpMonths[key] ? 'block' : 'none';
+      if (hdr)  hdr.querySelector('.fin-expand').textContent = window._logsExpMonths[key] ? '▼' : '▶';
+    };
+
+    // ── Modal de detalhe completo ─────────────────────────────────────
+    window._showLogDetail = function(id) {
+      const l = (window._allSystemLogs || []).find(x => x.id == id);
+      if (!l) return;
+      const meta     = window._logsMeta[l.action] || { label: l.action, icon: '📝', color: 'var(--text3)' };
+      const initials = (l.user_name||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || '?';
+      const dt       = (l.created_at||'').replace('T',' ').slice(0,19);
+      let parsedObj  = null;
+      let rawJson    = l.details || '—';
+      try { parsedObj = JSON.parse(l.details||'{}'); rawJson = JSON.stringify(parsedObj, null, 2); } catch(e) {}
+      const labelMap = {
+        contract_id:'Contrato', vessel:'Embarcação', direction:'Direção',
+        moved_from:'Posição anterior', moved_to:'Nova posição', total:'Total na fila',
+        justification:'Justificativa', public_justification:'Justificativa pública',
+        cancelled_by:'Cancelado por', op_id:'ID da Operação',
+      };
+      let kvHtml = '';
+      if (parsedObj && typeof parsedObj === 'object') {
+        kvHtml = Object.entries(parsedObj).filter(([,v])=>v!=null&&v!=='').map(([k,v])=>`
+          <div style="display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;min-width:130px;flex-shrink:0;padding-top:2px">${labelMap[k]||k}</div>
+            <div style="font-size:13px;color:var(--text);word-break:break-word">${esc(String(v))}</div>
+          </div>`).join('');
+      } else {
+        kvHtml = `<div style="font-size:13px;color:var(--text2);padding:10px;background:var(--surface3);border-radius:8px;font-family:monospace;word-break:break-all">${esc(l.details||'—')}</div>`;
+      }
+      const modalHtml = `
+        <div style="width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border);
+             border-radius:16px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.65);
+             max-height:90vh;display:flex;flex-direction:column">
+          <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">
+            <div style="width:42px;height:42px;border-radius:12px;background:${meta.color}18;border:1px solid ${meta.color}30;
+                 display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${meta.icon}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;color:var(--text);font-size:15px">${meta.label}</div>
+              <div style="font-size:12px;color:var(--text3)">${dt}</div>
+            </div>
+            <button onclick="document.getElementById('log-detail-overlay').remove()"
+              style="width:30px;height:30px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);
+                     color:var(--text3);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0"
+              onmouseenter="this.style.background='var(--surface3)'" onmouseleave="this.style.background='var(--surface2)'">✕</button>
+          </div>
+          <div style="padding:20px 22px;overflow-y:auto;flex:1">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);margin-bottom:18px">
+              <div style="width:36px;height:36px;border-radius:50%;background:var(--surface3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text2);flex-shrink:0">${initials}</div>
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(l.user_name||'Sistema')}</div>
+                <div style="font-size:11px;color:var(--text3)">ID do usuário: #${l.user_id||'—'}</div>
+              </div>
+              <div style="margin-left:auto"><span style="font-size:11px;padding:3px 10px;border-radius:20px;background:${meta.color}18;color:${meta.color};font-weight:600;border:1px solid ${meta.color}28">${meta.icon} ${meta.label}</span></div>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Detalhes da ação</div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:0 12px;margin-bottom:18px">
+              ${kvHtml||`<div style="padding:12px 0;font-size:13px;color:var(--text3)">Sem detalhes adicionais.</div>`}
+            </div>
+            ${parsedObj?`<details style="margin-bottom:4px">
+              <summary style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;cursor:pointer;user-select:none;margin-bottom:8px;outline:none">JSON bruto ▸</summary>
+              <pre style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;line-height:1.6;font-family:monospace;white-space:pre-wrap;word-break:break-all;margin-top:8px">${esc(rawJson)}</pre>
+            </details>`:''}
+          </div>
+          <div style="padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;flex-shrink:0">
+            <button onclick="document.getElementById('log-detail-overlay').remove()" class="btn-primary btn-sm">Fechar</button>
+          </div>
+        </div>`;
+      let ov = document.getElementById('log-detail-overlay');
+      if (ov) ov.remove();
+      ov = document.createElement('div');
+      ov.id = 'log-detail-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)';
+      ov.onclick = e => { if (e.target===ov) ov.remove(); };
+      ov.innerHTML = modalHtml;
+      document.body.appendChild(ov);
+    };
+
+    // ── Constrói tabela de registros de um mês ────────────────────────
+    function _buildLogsTable(arr) {
+      if (!arr.length) return '<thead><tr><th colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sem registros</th></tr></thead><tbody></tbody>';
+      const rows = arr.map(l => {
+        const meta    = window._logsMeta[l.action] || { label: l.action, icon: '📝', color: 'var(--text3)' };
+        const details = window._fmtLogDetails(l);
+        const time    = (l.created_at||'').replace('T',' ').slice(0,16);
+        return `<tr onclick="window._showLogDetail(${l.id})" style="cursor:pointer" title="Clique para ver o log completo">
+          <td style="white-space:nowrap;font-size:12px;color:var(--text3)">${time}</td>
+          <td style="font-weight:600">${esc(l.user_name||'—')}</td>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:${meta.color}18;color:${meta.color};font-weight:600;border:1px solid ${meta.color}28;white-space:nowrap">${meta.icon} ${meta.label}</span></td>
+          <td style="font-size:12px;color:var(--text2)">${details}</td>
+        </tr>`;
+      }).join('');
+      return `<thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Detalhes</th></tr></thead><tbody>${rows}</tbody>`;
+    }
+
+    // ── Renderização da árvore (mesmo padrão do Financeiro) ───────────
+    window._renderLogsFiltered = function() {
+      const search       = (document.getElementById('logs-search')?.value || '').toLowerCase().trim();
+      const actionFilter = document.getElementById('logs-filter-action')?.value || '';
+      const filtered     = (window._allSystemLogs||[]).filter(l => {
+        if (actionFilter && l.action !== actionFilter) return false;
+        if (search) {
+          const hay = [(l.user_name||''),(l.action||''),(l.details||'')].join(' ').toLowerCase();
+          if (!hay.includes(search)) return false;
         }
-      } catch(e) { details = l.details || ''; }
-      return `<tr>
-        <td style="white-space:nowrap">${fmtDT(l.created_at)}</td>
-        <td>${l.user_name||'—'}</td>
-        <td>${actionLabels[l.action]||l.action}</td>
-        <td style="font-size:12px">${details}</td>
-      </tr>`;
-    }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:24px">Nenhum log registrado</td></tr>';
+        return true;
+      });
+
+      const countEl = document.getElementById('logs-count');
+      if (countEl) countEl.textContent = `${filtered.length} registro${filtered.length!==1?'s':''}`;
+
+      const treeEl = document.getElementById('logs-tree');
+      if (!treeEl) return;
+
+      if (!filtered.length) {
+        treeEl.innerHTML = `<div style="text-align:center;padding:48px 24px;color:var(--text3)"><div style="font-size:32px;margin-bottom:8px">🔍</div><div style="font-size:14px">Nenhum log encontrado</div></div>`;
+        return;
+      }
+
+      // Agrupa: { year: { month: [logs] } }
+      const tree = {}, yearOrder = [], monthOrder = {};
+      filtered.forEach(l => {
+        const ds = (l.created_at||'').slice(0,10);
+        const [y,m] = ds.split('-');
+        if (!tree[y])   { tree[y] = {}; yearOrder.push(y); }
+        if (!tree[y][m]){ tree[y][m] = []; (monthOrder[y]=monthOrder[y]||[]).push(m); }
+        tree[y][m].push(l);
+      });
+      yearOrder.sort((a,b)=>b-a);
+      Object.keys(monthOrder).forEach(y => monthOrder[y].sort((a,b)=>b-a));
+
+      const curYear  = String(new Date().getFullYear());
+      const curMonth = String(new Date().getMonth()+1).padStart(2,'0');
+      const MONTH_PT_L = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+      let html = '';
+
+      yearOrder.forEach(year => {
+        const exp    = !!window._logsExpYears[year];
+        const yTotal = Object.values(tree[year]).reduce((s,a)=>s+a.length,0);
+        const isCur  = year === curYear;
+
+        // Estatísticas por tipo de ação no ano
+        const yCounts = {};
+        Object.values(tree[year]).flat().forEach(l => { yCounts[l.action]=(yCounts[l.action]||0)+1; });
+        let stats = '';
+        if (yCounts['queue_reorder'])      stats += `<span class="fin-stat" style="background:rgba(26,141,230,.15);color:var(--accent)">🔀 ${yCounts['queue_reorder']}</span>`;
+        if (yCounts['contract_cancelled']) stats += `<span class="fin-stat red">🚫 ${yCounts['contract_cancelled']}</span>`;
+        if ((yCounts['create_user']||0)+(yCounts['auto_create_user']||0)+(yCounts['delete_user']||0) > 0) {
+          const uCount = (yCounts['create_user']||0)+(yCounts['auto_create_user']||0)+(yCounts['delete_user']||0);
+          stats += `<span class="fin-stat green">👤 ${uCount}</span>`;
+        }
+        stats += `<span class="fin-stat total">${yTotal} registro${yTotal!==1?'s':''}</span>`;
+
+        html += `
+        <div class="fin-year">
+          <div class="fin-year-header" onclick="window._logsToggleYear('${year}')">
+            <span class="fin-expand">${exp?'▼':'▶'}</span>
+            <span class="fin-year-title">${year}${isCur?' <span class="badge badge-info" style="font-size:10px;margin-left:6px">Ano Atual</span>':''}</span>
+            <div class="fin-year-stats">${stats}</div>
+          </div>
+          <div id="log-y-${year}" class="fin-year-body" style="display:${exp?'block':'none'}">`;
+
+        (monthOrder[year]||[]).forEach(month => {
+          const key   = `${year}-${month}`;
+          const arr   = tree[year][month];
+          const mExp  = window._logsExpMonths[key] !== false && (year===curYear && month===curMonth || !!window._logsExpMonths[key]);
+          const mName = MONTH_PT_L[parseInt(month,10)-1] || month;
+
+          // Estatísticas do mês
+          const mCounts = {};
+          arr.forEach(l => { mCounts[l.action]=(mCounts[l.action]||0)+1; });
+          let mStats = `<span style="font-size:11px;color:var(--text3)">${arr.length} registro${arr.length!==1?'s':''}</span>`;
+          if (mCounts['queue_reorder'])      mStats += `<span class="badge badge-info"    style="font-size:11px">🔀 ${mCounts['queue_reorder']}</span>`;
+          if (mCounts['contract_cancelled']) mStats += `<span class="badge badge-danger"  style="font-size:11px">🚫 ${mCounts['contract_cancelled']}</span>`;
+          if (mCounts['create_user']||mCounts['auto_create_user']) mStats += `<span class="badge badge-success" style="font-size:11px">👤 ${(mCounts['create_user']||0)+(mCounts['auto_create_user']||0)}</span>`;
+
+          html += `
+          <div class="fin-month">
+            <div class="fin-month-header" onclick="window._logsToggleMonth('${key}')">
+              <span class="fin-expand">${mExp?'▼':'▶'}</span>
+              <span class="fin-month-title">📅 ${mName} ${year}</span>
+              <div class="fin-month-stats">${mStats}</div>
+            </div>
+            <div id="log-m-${key}" style="display:${mExp?'block':'none'}">
+              <div class="card" style="margin-top:6px;padding:0;overflow:hidden">
+                <div class="table-wrap"><table>${_buildLogsTable(arr)}</table></div>
+              </div>
+            </div>
+          </div>`;
+        });
+
+        html += `</div></div>`;
+      });
+
+      treeEl.innerHTML = html;
+    };
+
+    // Opções do filtro de ação
+    const uniqueActions = [...new Set(logs.map(l=>l.action))].sort();
+    const actionOptions = uniqueActions.map(a => {
+      const m = _logsMeta[a] || { label: a, icon: '📝' };
+      return `<option value="${a}">${m.icon} ${m.label}</option>`;
+    }).join('');
+
     content = `
     <div class="settings-card">
       <div class="settings-card-title">📋 Logs do Sistema</div>
-      <div class="settings-info-box">Registro de ações administrativas: reordenações de fila e outras operações com justificativa.</div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Detalhes</th></tr></thead>
-        <tbody>${logsHtml}</tbody>
-      </table></div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+        <div style="position:relative;flex:1;min-width:200px">
+          <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.35;pointer-events:none">🔍</span>
+          <input id="logs-search" type="text" placeholder="Buscar por usuário ou detalhes…"
+            oninput="window._renderLogsFiltered()"
+            style="width:100%;padding:9px 12px 9px 36px;background:var(--surface2);border:1px solid var(--border);
+                   border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;
+                   transition:border-color .2s,box-shadow .2s"
+            onfocus="this.style.borderColor='rgba(26,141,230,.5)';this.style.boxShadow='0 0 0 3px rgba(26,141,230,.1)'"
+            onblur="this.style.borderColor='';this.style.boxShadow=''">
+        </div>
+        <select id="logs-filter-action" onchange="window._renderLogsFiltered()"
+          style="padding:9px 12px;background:var(--surface2);border:1px solid var(--border);
+                 border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;
+                 outline:none;cursor:pointer;min-width:180px">
+          <option value="">Todas as ações</option>
+          ${actionOptions}
+        </select>
+        <span id="logs-count" style="font-size:12px;color:var(--text3);white-space:nowrap;
+             padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+          ${logs.length} registros
+        </span>
+      </div>
+
+      <div id="logs-tree"></div>
     </div>`;
+
+    setTimeout(() => window._renderLogsFiltered(), 0);
 
   } else if (_settingsTab === 'licenca') {
     const valid = s.license_valid_until || '—';

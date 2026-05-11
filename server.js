@@ -3582,12 +3582,16 @@ addRoute('PUT', '/api/settings', async (req, res, ctx) => {
 
 addRoute('GET', '/api/system-logs', async (req, res, ctx) => {
   if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
-  const { limit: lim = '100', action = '' } = ctx.qs;
+  const { limit: lim = '500', action = '', search = '' } = ctx.qs;
   const { dbAll: tAll } = ctx.db;
   let sql = 'SELECT * FROM system_logs WHERE 1=1';
   const a = [];
-  if (action) { sql += ' AND action=?'; a.push(action); }
-  sql += ` ORDER BY created_at DESC LIMIT ${Math.min(parseInt(lim)||100, 500)}`;
+  if (action) { sql += ' AND action=$' + (a.length+1); a.push(action); }
+  if (search) {
+    sql += ` AND (user_name ILIKE $${a.length+1} OR details ILIKE $${a.length+2})`;
+    a.push(`%${search}%`, `%${search}%`);
+  }
+  sql += ` ORDER BY created_at DESC LIMIT ${Math.min(parseInt(lim)||500, 1000)}`;
   sendJson(res, await tAll(sql, a));
 });
 
