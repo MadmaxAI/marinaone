@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marina One — Design Proposal: Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#03080f;color:#e8f0fe;overflow:hidden;height:100vh;display:flex}
+
+/* SIDEBAR */
+.sidebar{
+  width:220px;flex-shrink:0;
+  background:linear-gradient(180deg,#070f1c 0%,#050b17 100%);
+  border-right:1px solid rgba(255,255,255,.05);
+  display:flex;flex-direction:column;
+  position:relative;overflow:hidden;
+}
+.sidebar::after{
+  content:'';position:absolute;top:0;right:0;width:1px;height:100%;
+  background:linear-gradient(180deg,transparent,rgba(26,141,230,.3) 30%,rgba(20,184,166,.3) 70%,transparent);
+}
+.sb-logo{
+  padding:22px 18px 18px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+}
+.sb-logo-icon{
+  width:42px;height:42px;border-radius:12px;
+  background:linear-gradient(135deg,rgba(26,141,230,.25),rgba(20,184,166,.15));
+  border:1px solid rgba(26,141,230,.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;margin-bottom:8px;
+}
+.sb-logo-name{font-size:15px;font-weight:700;color:#f0f6ff;letter-spacing:-.3px}
+.sb-logo-marina{font-size:10.5px;color:rgba(255,255,255,.3);font-weight:400}
+
+.sb-nav{padding:12px 8px;flex:1;overflow-y:auto}
+.sb-section{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.2);padding:14px 10px 5px}
+
+.sb-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 11px;border-radius:10px;
+  cursor:pointer;font-size:12.5px;color:rgba(255,255,255,.4);
+  transition:all .15s;margin-bottom:1px;
+  font-weight:500;position:relative;
+}
+.sb-item:hover{color:rgba(255,255,255,.7);background:rgba(255,255,255,.04)}
+.sb-item.active{
+  color:#fff;background:rgba(26,141,230,.12);
+  border:1px solid rgba(26,141,230,.15);
+}
+.sb-item.active::before{
+  content:'';position:absolute;left:-8px;top:50%;transform:translateY(-50%);
+  width:3px;height:20px;border-radius:0 3px 3px 0;
+  background:linear-gradient(180deg,#1a8de6,#14b8a6);
+}
+.sb-ico{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.sb-badge{margin-left:auto;background:rgba(239,68,68,.9);color:#fff;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:20px}
+
+.sb-footer{
+  padding:12px;border-top:1px solid rgba(255,255,255,.04);
+}
+.sb-user{
+  display:flex;align-items:center;gap:9px;padding:9px 10px;
+  border-radius:10px;background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.05);
+  cursor:pointer;transition:.15s;
+}
+.sb-user:hover{background:rgba(255,255,255,.06)}
+.sb-avatar{
+  width:30px;height:30px;border-radius:9px;
+  background:linear-gradient(135deg,#1a8de6,#14b8a6);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:#fff;flex-shrink:0;
+}
+.sb-uname{font-size:11.5px;font-weight:600;color:rgba(255,255,255,.8);line-height:1.2}
+.sb-urole{font-size:9.5px;color:rgba(255,255,255,.3);margin-top:1px}
+
+/* MAIN */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* TOPBAR */
+.topbar{
+  height:58px;
+  background:rgba(7,15,28,.95);
+  border-bottom:1px solid rgba(255,255,255,.04);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;flex-shrink:0;
+  backdrop-filter:blur(12px);
+  position:relative;
+}
+.topbar::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(26,141,230,.4) 30%,rgba(20,184,166,.4) 70%,transparent);
+}
+.tb-left{display:flex;align-items:center;gap:12px}
+.tb-breadcrumb{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,.3)}
+.tb-breadcrumb .sep{opacity:.3}
+.tb-title{font-size:15px;font-weight:700;color:#f0f6ff;letter-spacing:-.2px}
+.tb-right{display:flex;align-items:center;gap:8px}
+.tb-btn{
+  padding:7px 12px;border-radius:9px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);
+  color:rgba(255,255,255,.6);font-size:12px;font-family:'Inter',sans-serif;
+  cursor:pointer;display:flex;align-items:center;gap:5px;font-weight:500;
+}
+.tb-pill{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 12px 6px 8px;border-radius:20px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  cursor:pointer;
+}
+.tb-avatar{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#1a8de6,#14b8a6);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
+.tb-uinfo{font-size:11.5px;font-weight:600;color:rgba(255,255,255,.7)}
+.notif-btn{
+  position:relative;width:34px;height:34px;border-radius:9px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:14px;
+}
+.notif-dot{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:#ef4444;border:2px solid #070f1c}
+
+/* CONTENT */
+.content{flex:1;overflow-y:auto;padding:24px;background:radial-gradient(ellipse 70% 40% at 50% 0%,rgba(13,30,54,.4) 0%,transparent 70%)}
+
+/* Welcome bar */
+.welcome-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:22px;
+}
+.welcome-text h2{font-size:19px;font-weight:700;color:#f0f6ff;letter-spacing:-.3px}
+.welcome-text p{font-size:12px;color:rgba(255,255,255,.35);margin-top:2px}
+.welcome-cta{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 16px;border-radius:10px;
+  background:linear-gradient(135deg,rgba(26,141,230,.15),rgba(20,184,166,.08));
+  border:1px solid rgba(26,141,230,.2);
+  font-size:12px;font-weight:600;color:#1a8de6;cursor:pointer;
+}
+
+/* KPI Grid */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.kpi{
+  background:rgba(10,22,40,.7);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:16px;padding:20px;position:relative;overflow:hidden;
+  backdrop-filter:blur(8px);
+  transition:all .2s;
+}
+.kpi:hover{border-color:rgba(26,141,230,.2);transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.3)}
+.kpi-accent{position:absolute;top:0;left:0;right:0;height:2px}
+.kpi-accent.blue{background:linear-gradient(90deg,#1a8de6,#38bdf8)}
+.kpi-accent.teal{background:linear-gradient(90deg,#14b8a6,#34d399)}
+.kpi-accent.amber{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+.kpi-accent.red{background:linear-gradient(90deg,#ef4444,#f87171)}
+
+.kpi-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.kpi-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.35)}
+.kpi-icon{
+  width:32px;height:32px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+}
+.kpi-icon.blue{background:rgba(26,141,230,.15)}
+.kpi-icon.teal{background:rgba(20,184,166,.15)}
+.kpi-icon.amber{background:rgba(245,158,11,.15)}
+.kpi-icon.red{background:rgba(239,68,68,.15)}
+
+.kpi-value{font-size:28px;font-weight:800;color:#f0f6ff;letter-spacing:-.8px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi-delta{
+  display:inline-flex;align-items:center;gap:3px;
+  font-size:11px;font-weight:600;margin-top:6px;
+  padding:3px 8px;border-radius:20px;
+}
+.kpi-delta.up{background:rgba(16,185,129,.12);color:#34d399}
+.kpi-delta.down{background:rgba(239,68,68,.12);color:#f87171}
+.kpi-sub{font-size:11px;color:rgba(255,255,255,.3);margin-top:2px}
+
+/* Two-col layout */
+.grid2{display:grid;grid-template-columns:1fr 380px;gap:16px;margin-bottom:16px}
+
+/* Card */
+.card{
+  background:rgba(10,22,40,.7);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:16px;padding:20px;
+  backdrop-filter:blur(8px);
+}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.card-title{font-size:13.5px;font-weight:700;color:#f0f6ff;letter-spacing:-.1px;display:flex;align-items:center;gap:8px}
+.card-ico{
+  width:28px;height:28px;border-radius:8px;
+  background:rgba(26,141,230,.12);
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+}
+.card-link{font-size:11px;color:rgba(26,141,230,.7);font-weight:600;cursor:pointer}
+
+/* Mini chart placeholder */
+.chart-area{
+  height:140px;
+  background:linear-gradient(180deg,rgba(26,141,230,.08) 0%,transparent 100%);
+  border-radius:10px;
+  position:relative;
+  overflow:hidden;
+  border:1px solid rgba(26,141,230,.08);
+}
+.chart-line{
+  position:absolute;bottom:0;left:0;right:0;
+  height:85%;
+}
+.chart-labels{display:flex;justify-content:space-between;padding:8px 0 0;font-size:10px;color:rgba(255,255,255,.2)}
+
+/* Occupation bar */
+.occ-item{margin-bottom:12px}
+.occ-top{display:flex;justify-content:space-between;margin-bottom:5px}
+.occ-label{font-size:12px;color:rgba(255,255,255,.6);font-weight:500}
+.occ-val{font-size:12px;color:rgba(255,255,255,.4);font-weight:600}
+.occ-bar{height:6px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.occ-fill{height:100%;border-radius:4px}
+.occ-fill.blue{background:linear-gradient(90deg,#1a8de6,#38bdf8)}
+.occ-fill.teal{background:linear-gradient(90deg,#14b8a6,#34d399)}
+.occ-fill.amber{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse}
+.tbl thead th{
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;
+  color:rgba(255,255,255,.25);padding:0 14px 10px;text-align:left;
+  border-bottom:1px solid rgba(255,255,255,.05);
+}
+.tbl tbody tr{border-bottom:1px solid rgba(255,255,255,.04);transition:.15s;cursor:pointer}
+.tbl tbody tr:hover{background:rgba(26,141,230,.05)}
+.tbl tbody tr:last-child{border-bottom:none}
+.tbl td{padding:11px 14px;font-size:12.5px;color:rgba(255,255,255,.55)}
+.vessel-name{font-weight:600;color:rgba(255,255,255,.85);font-size:13px}
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:600}
+.badge-ok{background:rgba(16,185,129,.12);color:#34d399}
+.badge-warn{background:rgba(245,158,11,.12);color:#fbbf24}
+.badge-pending{background:rgba(26,141,230,.12);color:#60a5fa}
+
+/* Activity feed */
+.feed-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);
+}
+.feed-item:last-child{border-bottom:none}
+.feed-dot{
+  width:28px;height:28px;border-radius:9px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:12px;margin-top:1px;
+}
+.feed-dot.green{background:rgba(16,185,129,.15)}
+.feed-dot.blue{background:rgba(26,141,230,.15)}
+.feed-dot.amber{background:rgba(245,158,11,.15)}
+.feed-text{font-size:12px;color:rgba(255,255,255,.55);line-height:1.5}
+.feed-text strong{color:rgba(255,255,255,.8);font-weight:600}
+.feed-time{font-size:10px;color:rgba(255,255,255,.25);margin-top:3px}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-icon">⚓</div>
+    <div class="sb-logo-name">Marina One</div>
+    <div class="sb-logo-marina">Marina Azul do Sul</div>
+  </div>
+
+  <div class="sb-nav">
+    <div class="sb-section">Principal</div>
+    <div class="sb-item active"><span class="sb-ico">📊</span> Dashboard</div>
+    <div class="sb-item"><span class="sb-ico">⚡</span> Fila de Operações <span class="sb-badge">3</span></div>
+
+    <div class="sb-section">Frota</div>
+    <div class="sb-item"><span class="sb-ico">🚢</span> Embarcações</div>
+    <div class="sb-item"><span class="sb-ico">🅿️</span> Vagas</div>
+    <div class="sb-item"><span class="sb-ico">📋</span> Contratos</div>
+    <div class="sb-item"><span class="sb-ico">👤</span> Clientes</div>
+
+    <div class="sb-section">Financeiro</div>
+    <div class="sb-item"><span class="sb-ico">💰</span> Financeiro</div>
+    <div class="sb-item"><span class="sb-ico">📈</span> Analytics</div>
+
+    <div class="sb-section">Operações</div>
+    <div class="sb-item"><span class="sb-ico">🛒</span> Loja / PDV</div>
+    <div class="sb-item"><span class="sb-ico">🍽️</span> Conveniência</div>
+    <div class="sb-item"><span class="sb-ico">🔧</span> Manutenção</div>
+
+    <div class="sb-section">Sistema</div>
+    <div class="sb-item"><span class="sb-ico">⚙️</span> Configurações</div>
+  </div>
+
+  <div class="sb-footer">
+    <div class="sb-user">
+      <div class="sb-avatar">AR</div>
+      <div>
+        <div class="sb-uname">Arthur Noli</div>
+        <div class="sb-urole">Administrador</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="tb-left">
+      <div class="tb-breadcrumb">
+        <span>Marina Azul do Sul</span>
+        <span class="sep">›</span>
+      </div>
+      <div class="tb-title">Dashboard</div>
+    </div>
+    <div class="tb-right">
+      <div class="tb-btn">📅 Maio 2026</div>
+      <div class="notif-btn">🔔<div class="notif-dot"></div></div>
+      <div class="tb-pill">
+        <div class="tb-avatar">AR</div>
+        <div class="tb-uinfo">Arthur Noli</div>
+      </div>
+      <div class="tb-btn" style="color:rgba(239,68,68,.7)">⏻</div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- Welcome -->
+    <div class="welcome-bar">
+      <div class="welcome-text">
+        <h2>Bom dia, Arthur 👋</h2>
+        <p>Domingo, 10 de maio de 2026 · 3 operações aguardando na fila</p>
+      </div>
+      <div class="welcome-cta">⚡ Ver fila de operações →</div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-accent blue"></div>
+        <div class="kpi-top">
+          <div class="kpi-label">Embarcações</div>
+          <div class="kpi-icon blue">🚢</div>
+        </div>
+        <div class="kpi-value">47</div>
+        <div class="kpi-delta up">↑ +3 este mês</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent teal"></div>
+        <div class="kpi-top">
+          <div class="kpi-label">Ocupação</div>
+          <div class="kpi-icon teal">🅿️</div>
+        </div>
+        <div class="kpi-value">78<span style="font-size:16px;opacity:.5">%</span></div>
+        <div class="kpi-delta up">↑ +5% vs mês anterior</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent amber"></div>
+        <div class="kpi-top">
+          <div class="kpi-label">Receita Mensal</div>
+          <div class="kpi-icon amber">💰</div>
+        </div>
+        <div class="kpi-value" style="font-size:21px">R$ 42.800</div>
+        <div class="kpi-delta up">↑ +12% vs abril</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent red"></div>
+        <div class="kpi-top">
+          <div class="kpi-label">Inadimplentes</div>
+          <div class="kpi-icon red">⚠️</div>
+        </div>
+        <div class="kpi-value">3</div>
+        <div class="kpi-delta down">↓ 2 pendentes há +30d</div>
+      </div>
+    </div>
+
+    <!-- Two-col -->
+    <div class="grid2">
+      <!-- Embarcações recentes -->
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">
+            <div class="card-ico">🚢</div>
+            Últimas Operações
+          </div>
+          <div class="card-link">Ver todas →</div>
+        </div>
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Embarcação</th>
+              <th>Proprietário</th>
+              <th>Operação</th>
+              <th>Status</th>
+              <th>Hora</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="vessel-name">Mar Azul II</div></td>
+              <td>João Almeida</td>
+              <td>Descida</td>
+              <td><span class="badge badge-ok">✓ Concluído</span></td>
+              <td style="color:rgba(255,255,255,.35)">08:32</td>
+            </tr>
+            <tr>
+              <td><div class="vessel-name">Stella Maris</div></td>
+              <td>Carlos Mendes</td>
+              <td>Subida</td>
+              <td><span class="badge badge-pending">● Em andamento</span></td>
+              <td style="color:rgba(255,255,255,.35)">09:15</td>
+            </tr>
+            <tr>
+              <td><div class="vessel-name">Ventura IV</div></td>
+              <td>Ana Souza</td>
+              <td>Descida</td>
+              <td><span class="badge badge-warn">⏱ Aguardando</span></td>
+              <td style="color:rgba(255,255,255,.35)">09:40</td>
+            </tr>
+            <tr>
+              <td><div class="vessel-name">Blue Dream</div></td>
+              <td>Pedro Lima</td>
+              <td>Subida</td>
+              <td><span class="badge badge-warn">⏱ Aguardando</span></td>
+              <td style="color:rgba(255,255,255,.35)">10:05</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Right panel -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <!-- Ocupação -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">
+              <div class="card-ico">🅿️</div>
+              Vagas
+            </div>
+            <div class="card-link">Ver mapa →</div>
+          </div>
+          <div class="occ-item">
+            <div class="occ-top"><span class="occ-label">🌊 Vagas molhadas</span><span class="occ-val">34 / 40</span></div>
+            <div class="occ-bar"><div class="occ-fill blue" style="width:85%"></div></div>
+          </div>
+          <div class="occ-item">
+            <div class="occ-top"><span class="occ-label">🏗️ Vagas secas</span><span class="occ-val">13 / 20</span></div>
+            <div class="occ-bar"><div class="occ-fill teal" style="width:65%"></div></div>
+          </div>
+          <div class="occ-item" style="margin-bottom:0">
+            <div class="occ-top"><span class="occ-label">🔧 Em manutenção</span><span class="occ-val">2</span></div>
+            <div class="occ-bar"><div class="occ-fill amber" style="width:10%"></div></div>
+          </div>
+        </div>
+
+        <!-- Feed de atividades -->
+        <div class="card" style="flex:1">
+          <div class="card-hdr">
+            <div class="card-title">
+              <div class="card-ico">📡</div>
+              Atividade Recente
+            </div>
+          </div>
+          <div class="feed-item">
+            <div class="feed-dot green">✓</div>
+            <div>
+              <div class="feed-text"><strong>Mar Azul II</strong> concluiu descida com sucesso</div>
+              <div class="feed-time">Há 28 minutos</div>
+            </div>
+          </div>
+          <div class="feed-item">
+            <div class="feed-dot blue">💰</div>
+            <div>
+              <div class="feed-text">Mensalidade de <strong>Carlos Mendes</strong> recebida · R$ 950</div>
+              <div class="feed-time">Há 1 hora</div>
+            </div>
+          </div>
+          <div class="feed-item">
+            <div class="feed-dot amber">⚠️</div>
+            <div>
+              <div class="feed-text">Parcela vencida: <strong>Ana Souza</strong> · R$ 780</div>
+              <div class="feed-time">Há 2 horas</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</body>
+</html>

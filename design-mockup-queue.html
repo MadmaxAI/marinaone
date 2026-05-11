@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marina One — Design Proposal: Fila de Operações</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#03080f;color:#e8f0fe;overflow:hidden;height:100vh;display:flex}
+
+.sidebar{width:220px;flex-shrink:0;background:linear-gradient(180deg,#070f1c 0%,#050b17 100%);border-right:1px solid rgba(255,255,255,.05);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.sidebar::after{content:'';position:absolute;top:0;right:0;width:1px;height:100%;background:linear-gradient(180deg,transparent,rgba(26,141,230,.3) 30%,rgba(20,184,166,.3) 70%,transparent)}
+.sb-logo{padding:22px 18px 18px;border-bottom:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;align-items:center;gap:4px}
+.sb-logo-icon{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,rgba(26,141,230,.25),rgba(20,184,166,.15));border:1px solid rgba(26,141,230,.2);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:8px}
+.sb-logo-name{font-size:15px;font-weight:700;color:#f0f6ff;letter-spacing:-.3px}
+.sb-logo-marina{font-size:10.5px;color:rgba(255,255,255,.3);font-weight:400}
+.sb-nav{padding:12px 8px;flex:1}
+.sb-section{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.2);padding:14px 10px 5px}
+.sb-item{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;cursor:pointer;font-size:12.5px;color:rgba(255,255,255,.4);transition:all .15s;margin-bottom:1px;font-weight:500;position:relative}
+.sb-item:hover{color:rgba(255,255,255,.7);background:rgba(255,255,255,.04)}
+.sb-item.active{color:#fff;background:rgba(26,141,230,.12);border:1px solid rgba(26,141,230,.15)}
+.sb-item.active::before{content:'';position:absolute;left:-8px;top:50%;transform:translateY(-50%);width:3px;height:20px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,#1a8de6,#14b8a6)}
+.sb-ico{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.sb-badge{margin-left:auto;background:rgba(239,68,68,.9);color:#fff;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:20px}
+.sb-footer{padding:12px;border-top:1px solid rgba(255,255,255,.04)}
+.sb-user{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
+.sb-avatar{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#1a8de6,#14b8a6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.sb-uname{font-size:11.5px;font-weight:600;color:rgba(255,255,255,.8);line-height:1.2}
+.sb-urole{font-size:9.5px;color:rgba(255,255,255,.3);margin-top:1px}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{height:58px;background:rgba(7,15,28,.95);border-bottom:1px solid rgba(255,255,255,.04);display:flex;align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0;position:relative}
+.topbar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(26,141,230,.4) 30%,rgba(20,184,166,.4) 70%,transparent)}
+.tb-left{display:flex;align-items:center;gap:12px}
+.tb-breadcrumb{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,.3)}
+.tb-title{font-size:15px;font-weight:700;color:#f0f6ff;letter-spacing:-.2px}
+.tb-right{display:flex;align-items:center;gap:8px}
+.tb-btn{padding:7px 12px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);color:rgba(255,255,255,.6);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;display:flex;align-items:center;gap:5px;font-weight:500}
+.tb-btn-primary{background:linear-gradient(135deg,rgba(26,141,230,.25),rgba(20,184,166,.15));border:1px solid rgba(26,141,230,.3);color:#60b4f6;font-weight:600}
+.tb-pill{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07)}
+.tb-avatar{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#1a8de6,#14b8a6);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
+.tb-uinfo{font-size:11.5px;font-weight:600;color:rgba(255,255,255,.7)}
+.notif-btn{position:relative;width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px}
+.notif-dot{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:#ef4444;border:2px solid #070f1c}
+
+.content{flex:1;overflow-y:auto;padding:24px;background:radial-gradient(ellipse 70% 40% at 50% 0%,rgba(13,30,54,.4) 0%,transparent 70%)}
+
+/* Stats row */
+.stats-row{display:flex;gap:12px;margin-bottom:22px}
+.stat-chip{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;border-radius:12px;
+  background:rgba(10,22,40,.7);border:1px solid rgba(255,255,255,.06);
+  flex:1;
+}
+.stat-ico{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.stat-ico.blue{background:rgba(26,141,230,.15)}
+.stat-ico.amber{background:rgba(245,158,11,.15)}
+.stat-ico.green{background:rgba(16,185,129,.15)}
+.stat-ico.purple{background:rgba(139,92,246,.15)}
+.stat-num{font-size:22px;font-weight:800;color:#f0f6ff;letter-spacing:-.5px;line-height:1}
+.stat-lbl{font-size:10.5px;color:rgba(255,255,255,.3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:1px}
+
+/* Header row */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:13px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.section-dot{width:7px;height:7px;border-radius:50%;background:#f59e0b;box-shadow:0 0 8px rgba(245,158,11,.6)}
+.section-dot.blue{background:#1a8de6;box-shadow:0 0 8px rgba(26,141,230,.6)}
+.section-dot.green{background:#10b981;box-shadow:0 0 8px rgba(16,185,129,.6)}
+
+/* Queue cards */
+.queue-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+
+.q-card{
+  background:rgba(10,22,40,.7);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:14px;
+  padding:16px 18px;
+  display:flex;align-items:center;gap:16px;
+  transition:all .2s;
+  position:relative;overflow:hidden;
+}
+.q-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.q-card.in-progress::before{background:linear-gradient(180deg,#1a8de6,#14b8a6)}
+.q-card.waiting::before{background:rgba(245,158,11,.6)}
+.q-card:hover{border-color:rgba(26,141,230,.2);transform:translateX(3px)}
+
+.q-order{
+  width:34px;height:34px;border-radius:10px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:800;color:rgba(255,255,255,.4);
+  flex-shrink:0;
+}
+.q-order.first{background:rgba(26,141,230,.15);border-color:rgba(26,141,230,.25);color:#60b4f6}
+
+.q-vessel{flex:1;min-width:0}
+.q-vessel-name{font-size:14px;font-weight:700;color:#f0f6ff;letter-spacing:-.1px}
+.q-vessel-owner{font-size:11.5px;color:rgba(255,255,255,.4);margin-top:2px}
+
+.q-op{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 12px;border-radius:8px;
+  font-size:12px;font-weight:600;
+}
+.q-op.descida{background:rgba(26,141,230,.12);color:#60b4f6;border:1px solid rgba(26,141,230,.15)}
+.q-op.subida{background:rgba(20,184,166,.12);color:#34d399;border:1px solid rgba(20,184,166,.15)}
+
+.q-time{
+  display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:80px;
+}
+.q-time-val{font-size:13px;font-weight:700;color:rgba(255,255,255,.7);font-variant-numeric:tabular-nums}
+.q-time-lbl{font-size:10px;color:rgba(255,255,255,.3)}
+
+.q-status{
+  padding:5px 12px;border-radius:8px;
+  font-size:11px;font-weight:700;
+  display:flex;align-items:center;gap:5px;
+}
+.q-status.in-progress{background:rgba(26,141,230,.15);color:#60b4f6;border:1px solid rgba(26,141,230,.2)}
+.q-status.waiting{background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.15)}
+
+.q-actions{display:flex;gap:6px}
+.q-btn{
+  width:30px;height:30px;border-radius:8px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:13px;transition:.15s;
+}
+.q-btn:hover{background:rgba(255,255,255,.1)}
+.q-btn.danger:hover{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.3)}
+.q-btn.success:hover{background:rgba(16,185,129,.15);border-color:rgba(16,185,129,.3)}
+
+/* Progress bar on in-progress card */
+.q-progress{
+  position:absolute;bottom:0;left:3px;right:0;height:2px;
+  background:rgba(255,255,255,.04);
+}
+.q-progress-fill{height:100%;background:linear-gradient(90deg,#1a8de6,#14b8a6);width:62%;border-radius:0 1px 1px 0}
+
+/* Completed section */
+.completed-grid{display:flex;flex-direction:column;gap:8px}
+.q-card.done{opacity:.5}
+.q-card.done::before{background:rgba(16,185,129,.4)}
+.q-card.done:hover{transform:none;border-color:rgba(255,255,255,.06)}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-icon">⚓</div>
+    <div class="sb-logo-name">Marina One</div>
+    <div class="sb-logo-marina">Marina Azul do Sul</div>
+  </div>
+  <div class="sb-nav">
+    <div class="sb-section">Principal</div>
+    <div class="sb-item"><span class="sb-ico">📊</span> Dashboard</div>
+    <div class="sb-item active"><span class="sb-ico">⚡</span> Fila de Operações <span class="sb-badge">3</span></div>
+    <div class="sb-section">Frota</div>
+    <div class="sb-item"><span class="sb-ico">🚢</span> Embarcações</div>
+    <div class="sb-item"><span class="sb-ico">🅿️</span> Vagas</div>
+    <div class="sb-item"><span class="sb-ico">📋</span> Contratos</div>
+    <div class="sb-item"><span class="sb-ico">👤</span> Clientes</div>
+    <div class="sb-section">Financeiro</div>
+    <div class="sb-item"><span class="sb-ico">💰</span> Financeiro</div>
+    <div class="sb-item"><span class="sb-ico">📈</span> Analytics</div>
+    <div class="sb-section">Operações</div>
+    <div class="sb-item"><span class="sb-ico">🛒</span> Loja / PDV</div>
+    <div class="sb-item"><span class="sb-ico">🍽️</span> Conveniência</div>
+    <div class="sb-section">Sistema</div>
+    <div class="sb-item"><span class="sb-ico">⚙️</span> Configurações</div>
+  </div>
+  <div class="sb-footer">
+    <div class="sb-user">
+      <div class="sb-avatar">AR</div>
+      <div>
+        <div class="sb-uname">Arthur Noli</div>
+        <div class="sb-urole">Administrador</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="tb-left">
+      <div class="tb-breadcrumb"><span>Operações</span><span class="tb-breadcrumb" style="margin:0 4px">›</span></div>
+      <div class="tb-title">Fila de Operações</div>
+    </div>
+    <div class="tb-right">
+      <div class="tb-btn">🕐 08:00 – 18:00</div>
+      <div class="tb-btn tb-btn-primary">+ Nova Operação</div>
+      <div class="notif-btn">🔔<div class="notif-dot"></div></div>
+      <div class="tb-pill">
+        <div class="tb-avatar">AR</div>
+        <div class="tb-uinfo">Arthur Noli</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-chip">
+        <div class="stat-ico blue">⚡</div>
+        <div>
+          <div class="stat-num">1</div>
+          <div class="stat-lbl">Em andamento</div>
+        </div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-ico amber">⏳</div>
+        <div>
+          <div class="stat-num">3</div>
+          <div class="stat-lbl">Aguardando</div>
+        </div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-ico green">✓</div>
+        <div>
+          <div class="stat-num">12</div>
+          <div class="stat-lbl">Concluídas hoje</div>
+        </div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-ico purple">⏱️</div>
+        <div>
+          <div class="stat-num">~35<span style="font-size:13px">min</span></div>
+          <div class="stat-lbl">Tempo médio</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Em andamento -->
+    <div class="section-hdr">
+      <div class="section-title"><span class="section-dot blue"></span> Em andamento</div>
+    </div>
+    <div class="queue-grid">
+      <div class="q-card in-progress">
+        <div class="q-order first">1</div>
+        <div class="q-vessel">
+          <div class="q-vessel-name">Stella Maris</div>
+          <div class="q-vessel-owner">Carlos Mendes · Vaga M-14</div>
+        </div>
+        <div class="q-op subida">↑ Subida</div>
+        <div class="q-time">
+          <div class="q-time-val">22 min</div>
+          <div class="q-time-lbl">em andamento</div>
+        </div>
+        <div class="q-status in-progress">● Em andamento</div>
+        <div class="q-actions">
+          <div class="q-btn success">✓</div>
+          <div class="q-btn danger">✕</div>
+        </div>
+        <div class="q-progress"><div class="q-progress-fill"></div></div>
+      </div>
+    </div>
+
+    <!-- Aguardando -->
+    <div class="section-hdr" style="margin-top:20px">
+      <div class="section-title"><span class="section-dot"></span> Aguardando · 3 na fila</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.25)">Previsão próximo: 09:52</div>
+    </div>
+    <div class="queue-grid">
+      <div class="q-card waiting">
+        <div class="q-order">2</div>
+        <div class="q-vessel">
+          <div class="q-vessel-name">Ventura IV</div>
+          <div class="q-vessel-owner">Ana Souza · Vaga S-07</div>
+        </div>
+        <div class="q-op descida">↓ Descida</div>
+        <div class="q-time">
+          <div class="q-time-val">~35 min</div>
+          <div class="q-time-lbl">previsão espera</div>
+        </div>
+        <div class="q-status waiting">⏱ Aguardando</div>
+        <div class="q-actions">
+          <div class="q-btn">✏️</div>
+          <div class="q-btn danger">✕</div>
+        </div>
+      </div>
+      <div class="q-card waiting">
+        <div class="q-order">3</div>
+        <div class="q-vessel">
+          <div class="q-vessel-name">Blue Dream</div>
+          <div class="q-vessel-owner">Pedro Lima · Vaga M-22</div>
+        </div>
+        <div class="q-op subida">↑ Subida</div>
+        <div class="q-time">
+          <div class="q-time-val">~70 min</div>
+          <div class="q-time-lbl">previsão espera</div>
+        </div>
+        <div class="q-status waiting">⏱ Aguardando</div>
+        <div class="q-actions">
+          <div class="q-btn">✏️</div>
+          <div class="q-btn danger">✕</div>
+        </div>
+      </div>
+      <div class="q-card waiting">
+        <div class="q-order">4</div>
+        <div class="q-vessel">
+          <div class="q-vessel-name">Mar do Norte</div>
+          <div class="q-vessel-owner">Roberto Silva · Vaga S-03</div>
+        </div>
+        <div class="q-op descida">↓ Descida</div>
+        <div class="q-time">
+          <div class="q-time-val">~105 min</div>
+          <div class="q-time-lbl">previsão espera</div>
+        </div>
+        <div class="q-status waiting">⏱ Aguardando</div>
+        <div class="q-actions">
+          <div class="q-btn">✏️</div>
+          <div class="q-btn danger">✕</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Concluídas -->
+    <div class="section-hdr" style="margin-top:20px">
+      <div class="section-title" style="color:rgba(255,255,255,.3)"><span class="section-dot green"></span> Concluídas hoje</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.2)">12 operações</div>
+    </div>
+    <div class="completed-grid">
+      <div class="q-card done">
+        <div class="q-order" style="color:rgba(16,185,129,.4)">✓</div>
+        <div class="q-vessel">
+          <div class="q-vessel-name" style="color:rgba(255,255,255,.5)">Mar Azul II</div>
+          <div class="q-vessel-owner">João Almeida</div>
+        </div>
+        <div class="q-op descida" style="opacity:.5">↓ Descida</div>
+        <div class="q-time"><div class="q-time-val" style="color:rgba(255,255,255,.35)">08:32</div><div class="q-time-lbl">concluído</div></div>
+        <div class="q-status" style="background:rgba(16,185,129,.08);color:rgba(52,211,153,.5);border:1px solid rgba(16,185,129,.1)">✓ Concluído</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
