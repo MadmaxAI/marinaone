@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.85] -- 2026-05-11
+- redesign extraordinario fase 1-2-3: ocean depths, sidebar glass island, topbar glassmorphism, KPI bento grid, login cinematic, spring physics, hamburger morph, cascade animations
+
 ## [2.3.84] -- 2026-05-11
 - redesign visual: fonte Outfit, paleta azul naval unica, icones SVG sidebar, login simplificado, sombras tintadas
 
@@ -255,6 +258,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
   /* ── Paleta marítima ── */
@@ -29,24 +29,27 @@
   --r-sm:6px;--r-md:10px;--r-lg:14px;--r-xl:20px;--r-full:9999px;
   --radius:var(--r-lg);
   /* ── Transições ── */
-  --t-fast:90ms ease;--t-base:150ms ease;--t-slow:260ms ease;
-  --t-spring:220ms cubic-bezier(.34,1.56,.64,1);
+  --t-fast:90ms cubic-bezier(0.16,1,0.3,1);--t-base:200ms cubic-bezier(0.16,1,0.3,1);--t-slow:350ms cubic-bezier(0.16,1,0.3,1);
+  --t-spring:400ms cubic-bezier(.34,1.56,.64,1);
+  --ease-expo:cubic-bezier(0.16,1,0.3,1);
   /* ── Tipo ── */
   --font:Outfit,'Segoe UI',system-ui,-apple-system,sans-serif;
+  --font-display:'Plus Jakarta Sans',Outfit,'Segoe UI',system-ui,-apple-system,sans-serif;
   /* ── Glows ── */
   --glow-blue:rgba(37,99,235,.18);--glow-teal:rgba(59,130,246,.10);
   --gradient-accent:linear-gradient(90deg,transparent,#2563eb 40%,#3b82f6 60%,transparent);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;position:relative}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 80% 50% at 15% 20%,rgba(37,99,235,.07) 0%,transparent 60%),radial-gradient(ellipse 60% 40% at 85% 80%,rgba(14,165,233,.05) 0%,transparent 55%),radial-gradient(ellipse 40% 30% at 50% 50%,rgba(15,35,75,.1) 0%,transparent 70%)}
 /* LAYOUT */
-#app{display:flex;height:100vh}
-#sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:.3s;flex-shrink:0;overflow-y:auto}
-#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#app{display:flex;height:100vh;padding:8px;gap:8px;position:relative;z-index:1}
+#sidebar{width:240px;display:flex;flex-direction:column;transition:width .3s var(--ease-expo),opacity .3s var(--ease-expo);flex-shrink:0;overflow-y:auto;border-radius:16px}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;border-radius:12px;background:rgba(6,11,20,.55)}
+#topbar{background:rgba(9,20,38,.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,.05);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:relative;z-index:5}
 #content{flex:1;overflow-y:auto;padding:24px}
 /* SIDEBAR */
-#sidebar{background:linear-gradient(180deg,#0a1628 0%,#060e1c 100%);border-right:1px solid rgba(26,141,230,.1)}
+#sidebar{background:rgba(9,20,38,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 4px 32px rgba(0,20,50,.4)}
 .sidebar-logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;box-shadow:0 8px 24px rgba(26,141,230,.08)}
 .sidebar-logo img{max-width:160px;max-height:100px;object-fit:contain;border-radius:var(--r-sm)}
 .sidebar-logo h1{font-size:17px;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.3px}
@@ -57,10 +60,17 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .nav-section::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.05)}
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:13px;color:var(--text2);transition:var(--t-base);margin-bottom:1px;border:none;border-left:3px solid transparent;background:none;width:100%;text-align:left}
 .nav-item:hover{background:rgba(255,255,255,.05);color:var(--text);border-left-color:rgba(255,255,255,.12)}
-.nav-item.active{background:rgba(37,99,235,.15);color:var(--text);font-weight:600;border-left-color:var(--accent);box-shadow:none}
+.nav-item.active{background:rgba(37,99,235,.12);color:var(--text);font-weight:600;border-left-color:var(--accent);border:1px solid rgba(37,99,235,.22);box-shadow:0 0 12px rgba(37,99,235,.1),inset 0 1px 0 rgba(255,255,255,.06);padding:8px 11px}
+/* Hamburger morph */
+.menu-icon{display:flex;flex-direction:column;gap:5px;width:18px;cursor:pointer}
+.menu-icon span{display:block;width:18px;height:1.5px;background:currentColor;border-radius:2px;transition:transform 300ms var(--t-spring),opacity 200ms var(--t-base),width 200ms var(--t-base)}
+#app.sidebar-collapsed .menu-icon span:first-child{transform:translateY(6.5px) rotate(45deg)}
+#app.sidebar-collapsed .menu-icon span:last-child{transform:translateY(-6.5px) rotate(-45deg)}
 .nav-item .icon{font-size:15px;width:20px;text-align:center;flex-shrink:0;opacity:.8;display:flex;align-items:center;justify-content:center}
-.nav-item .icon svg{width:16px;height:16px;display:block;flex-shrink:0}
+.nav-item .icon svg{width:16px;height:16px;display:block;flex-shrink:0;transition:transform var(--t-spring)}
+.nav-item:hover .icon svg{transform:scale(1.15) translateX(1px)}
 .nav-item.active .icon{opacity:1}
+.nav-item.active .icon svg{transform:scale(1.1)}
 .nav-badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:var(--r-full);line-height:1.4;box-shadow:0 2px 8px rgba(239,68,68,.4)}
 /* Sidebar footer — usuário logado */
 .sidebar-footer{padding:12px;border-top:1px solid var(--border);flex-shrink:0}
@@ -70,7 +80,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .sidebar-user-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .sidebar-user-role{font-size:10px;color:var(--text3);margin-top:1px;text-transform:capitalize;letter-spacing:.2px}
 /* TOPBAR */
-#topbar{background:linear-gradient(180deg,#0c1829,rgba(9,20,38,.98));border-bottom:1px solid var(--border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+#topbar{border-bottom:1px solid rgba(255,255,255,.05)}
 .topbar-title{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.2px}
 .topbar-right{display:flex;align-items:center;gap:10px}
 /* User avatar */
@@ -83,6 +93,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 #topbar-version{font-size:10px;color:var(--text3);letter-spacing:.3px;cursor:default;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);padding:3px 8px;border-radius:var(--r-full)}
 .btn{padding:7px 15px;border-radius:var(--r-md);border:none;cursor:pointer;font-size:13px;font-weight:500;transition:var(--t-base);display:inline-flex;align-items:center;gap:6px;letter-spacing:-.1px}
 .btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+.btn:active{transform:scale(0.97);transition:transform 80ms cubic-bezier(0.16,1,0.3,1)}
 .btn-primary{background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:#fff;box-shadow:0 2px 10px rgba(37,99,235,.35),0 1px 0 rgba(255,255,255,.12) inset}.btn-primary:hover{background:linear-gradient(135deg,#3b7ff7 0%,#2254d4 100%);box-shadow:0 3px 16px rgba(37,99,235,.5)}
 .btn-success{background:linear-gradient(135deg,#10b981,#059669);color:#fff;box-shadow:0 2px 8px rgba(16,185,129,.3)}.btn-success:hover{background:linear-gradient(135deg,#12c98d,#06a070);box-shadow:0 3px 12px rgba(16,185,129,.45)}
 .btn-warning{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff}.btn-warning:hover{background:linear-gradient(135deg,#faa80d,#e07c06)}
@@ -99,12 +110,22 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .g2{grid-template-columns:1fr 1fr}
 .g3{grid-template-columns:1fr 1fr 1fr}
 .g4{grid-template-columns:repeat(4,1fr)}
+/* KPI Bento Grid */
+.kpi-bento{display:grid;grid-template-columns:repeat(6,1fr);grid-auto-rows:auto;gap:12px;margin-bottom:16px}
+.kpi-hero{grid-column:span 2;grid-row:span 2;min-height:160px}
+.kpi-wide{grid-column:span 2}
+.kpi-hero .kpi-value{font-size:44px;letter-spacing:-2px;margin-top:6px}
+.kpi-arc-wrap{position:absolute;right:14px;top:50%;transform:translateY(-50%)}
+.kpi-arc{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.kpi-arc-inner{width:56px;height:56px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;flex-direction:column;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+@media(max-width:900px){.kpi-bento{grid-template-columns:repeat(4,1fr)}.kpi-hero{grid-column:span 2;grid-row:span 1;min-height:auto}.kpi-wide{grid-column:span 2}}
+@media(max-width:600px){.kpi-bento{grid-template-columns:1fr 1fr}.kpi-hero{grid-column:span 2}.kpi-wide{grid-column:span 2}}
 /* KPI — Fase 4 */
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden;transition:var(--t-base)}
+.kpi{background:var(--surface);border:1px solid rgba(255,255,255,.055);border-radius:18px;padding:18px;position:relative;overflow:hidden;transition:var(--t-base);box-shadow:0 0 0 1px rgba(255,255,255,.025),inset 0 1px 0 rgba(255,255,255,.07)}
 .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
 .kpi:hover{border-color:rgba(37,99,235,.3);box-shadow:0 8px 28px rgba(37,99,235,.12);transform:translateY(-2px)}
-.kpi-label{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;font-weight:600}
-.kpi-value{font-size:28px;font-weight:700;color:var(--text);line-height:1;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.kpi-label{font-size:9px;font-weight:700;color:var(--text3);letter-spacing:1.4px;text-transform:uppercase;margin-bottom:10px;display:inline-block;padding:3px 8px;background:rgba(255,255,255,.04);border-radius:20px}
+.kpi-value{font-size:32px;font-weight:700;font-family:var(--font-display);color:var(--text);line-height:1;letter-spacing:-.8px;font-variant-numeric:tabular-nums}
 .kpi-sub{font-size:11.5px;color:var(--text3);margin-top:5px}
 .kpi-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:40px;opacity:.15;pointer-events:none}
 .kpi.green::before{background:linear-gradient(90deg,var(--success),#34d399)}
@@ -173,23 +194,25 @@ input.success,select.success{border-color:var(--success);box-shadow:0 0 0 3px rg
 .form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 /* LOGIN */
 #login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;overflow:hidden}
+#login-screen::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 120% 80% at 30% 40%,rgba(37,99,235,.1) 0%,transparent 55%),radial-gradient(ellipse 80% 60% at 75% 70%,rgba(14,165,233,.06) 0%,transparent 50%);animation:login-breathe 8s ease-in-out infinite alternate}
+@keyframes login-breathe{from{opacity:.7;transform:scale(1)}to{opacity:1;transform:scale(1.03)}}
 /* Login — glows de fundo */
-.login-bg-glow{position:absolute;inset:0;pointer-events:none;z-index:0}
-.login-glow-1{position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,var(--glow-blue) 0%,transparent 70%);top:-200px;left:-200px;filter:blur(60px)}
-.login-glow-2{display:none}
-.login-glow-3{display:none}
-/* Login — grid náutico sutil */
+.login-bg-glow{display:none}
 .login-bg-grid{display:none}
+/* Login — outer shell (double-bezel) */
+.login-outer{position:relative;z-index:10;padding:2px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:28px;box-shadow:0 32px 80px rgba(0,20,50,.7),inset 0 1px 0 rgba(255,255,255,.06)}
 /* Login — card */
-.login-card{position:relative;z-index:10;background:rgba(9,20,38,.75);border:1px solid rgba(255,255,255,.09);border-radius:24px;padding:44px 40px;width:400px;box-shadow:0 32px 80px rgba(0,0,0,.65),0 0 0 1px rgba(26,141,230,.07) inset;backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px)}
+.login-card{position:relative;background:rgba(9,20,38,.92);border-radius:26px;padding:44px 40px;width:400px;backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px)}
 /* Linha de acento no topo do card */
-.login-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:24px 24px 0 0;background:var(--gradient-accent);opacity:.85}
+.login-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:26px 26px 0 0;background:var(--gradient-accent);opacity:.85}
+/* Marina name reveal */
+@keyframes name-reveal{from{opacity:0;letter-spacing:8px;filter:blur(4px)}to{opacity:1;letter-spacing:-.3px;filter:blur(0)}}
 /* Badge "Powered by" */
 .login-powered-badge{position:absolute;top:18px;right:18px;font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.22);display:flex;align-items:center;gap:4px}
 .login-powered-dot{width:5px;height:5px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
 /* Login logo */
 .login-logo{text-align:center;margin-bottom:34px}
-.login-logo h1{font-size:26px;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.3px}
+.login-logo h1{font-size:26px;font-weight:800;font-family:var(--font-display);background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.3px;animation:name-reveal .9s cubic-bezier(0.16,1,0.3,1) both}
 .login-logo p{color:var(--text3);font-size:13px;margin-top:4px}
 .login-card .form-group{margin-bottom:16px}
 /* Login — label de seção */
@@ -205,19 +228,19 @@ input.success,select.success{border-color:var(--success);box-shadow:0 0 0 3px rg
 .login-status-text{font-size:11px;color:rgba(255,255,255,.25);letter-spacing:.2px}
 .login-error{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:10px 14px;font-size:13px;color:#f87171;margin-bottom:16px;display:none}
 /* QUEUE */
-.queue-card{background:var(--surface2);border:1px solid var(--border);border-left:3px solid transparent;border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:14px;transition:var(--t-base)}
-.queue-card:hover{border-color:rgba(26,141,230,.3);background:var(--surface3);transform:translateX(2px)}
+.queue-card{background:var(--surface2);border:1px solid rgba(255,255,255,.055);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:14px;transition:var(--t-base);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.queue-card:hover{border-color:rgba(37,99,235,.25);background:var(--surface3);transform:translateX(2px)}
 /* Color coding por status */
-.queue-card[data-status="in_progress"]{border-left-color:var(--accent);background:rgba(26,141,230,.05)}
-.queue-card[data-status="in_progress"]:hover{background:rgba(26,141,230,.09);border-color:rgba(26,141,230,.4)}
-.queue-card[data-status="waiting"]{border-left-color:var(--warning)}
-.queue-card[data-status="waiting"]:hover{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.35)}
+.queue-card[data-status="in_progress"]{background:rgba(37,99,235,.04);border-color:rgba(37,99,235,.2);box-shadow:0 0 0 1px rgba(37,99,235,.12),0 4px 20px rgba(37,99,235,.08),inset 0 1px 0 rgba(255,255,255,.05)}
+.queue-card[data-status="in_progress"]:hover{background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.35);box-shadow:0 0 0 1px rgba(37,99,235,.2),0 6px 24px rgba(37,99,235,.12),inset 0 1px 0 rgba(255,255,255,.07)}
+.queue-card[data-status="waiting"]{border-color:rgba(245,158,11,.2);box-shadow:0 0 0 1px rgba(245,158,11,.08),inset 0 1px 0 rgba(255,255,255,.04)}
+.queue-card[data-status="waiting"]:hover{background:rgba(245,158,11,.05);border-color:rgba(245,158,11,.32)}
 .queue-card[data-status="completed"],.queue-card[data-status="cancelled"]{border-left-color:var(--text3);opacity:.65}
 .queue-card[data-status="completed"]:hover,.queue-card[data-status="cancelled"]:hover{opacity:.85;transform:none}
 /* Operação atrasada */
-.queue-card.overdue{background:rgba(239,68,68,.08);border-color:var(--danger);border-left-color:var(--danger)}
-.queue-card.overdue:hover{background:rgba(239,68,68,.13)}
-@keyframes overdue-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{box-shadow:0 0 0 5px rgba(239,68,68,0)}}
+.queue-card.overdue{background:rgba(239,68,68,.06);border-color:rgba(239,68,68,.28);box-shadow:0 0 0 1px rgba(239,68,68,.18),0 4px 20px rgba(239,68,68,.1),inset 0 1px 0 rgba(255,255,255,.04)}
+.queue-card.overdue:hover{background:rgba(239,68,68,.1);box-shadow:0 0 0 1px rgba(239,68,68,.3),0 6px 28px rgba(239,68,68,.16)}
+@keyframes overdue-pulse{0%,100%{box-shadow:0 0 0 1px rgba(239,68,68,.2),0 4px 20px rgba(239,68,68,.1)}50%{box-shadow:0 0 0 1px rgba(239,68,68,.4),0 4px 28px rgba(239,68,68,.22)}}
 @keyframes tractor-roll{0%,100%{transform:translateX(-50%) scaleX(-1) translateY(0) rotate(-2deg)}50%{transform:translateX(-50%) scaleX(-1) translateY(-3px) rotate(2deg)}}
 .queue-card.overdue{animation:overdue-pulse 2s ease-in-out infinite}
 .badge-overdue{display:inline-flex;align-items:center;gap:4px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px;animation:overdue-pulse 1.5s ease-in-out infinite}
@@ -288,7 +311,7 @@ input.success,select.success{border-color:var(--success);box-shadow:0 0 0 3px rg
 /* RESPONSIVE — sidebar toggle */
 /* Desktop: sidebar collapses to 0 when .sidebar-collapsed is on #app */
 @media(min-width:769px){
-  #app.sidebar-collapsed #sidebar{width:0;border:none;overflow:hidden;padding:0}
+  #app.sidebar-collapsed #sidebar{width:0;border:none;overflow:hidden;padding:0;opacity:0}
 }
 /* TOTEM MODE — sem sidebar, sem topbar */
 body.totem-mode #sidebar{display:none!important}
@@ -297,8 +320,8 @@ body.totem-mode #main{padding:0}
 body.totem-mode #content{height:100vh;overflow-y:auto}
 /* Mobile: sidebar hidden off-screen by default; .sidebar-open slides it in */
 @media(max-width:768px){
-  #sidebar{position:fixed;z-index:100;left:-240px;height:100%}
-  .sidebar-open #sidebar{left:0}
+  #sidebar{position:fixed;z-index:100;left:-260px;height:calc(100% - 16px);top:8px;margin:0 0 0 8px}
+  .sidebar-open #sidebar{left:0;margin-left:0}
   /* overlay behind sidebar on mobile */
   .sidebar-open::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
   .g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}
@@ -482,12 +505,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
 
 <!-- LOGIN -->
 <div id="login-screen">
-  <div class="login-bg-glow">
-    <div class="login-glow-1"></div>
-    <div class="login-glow-2"></div>
-    <div class="login-glow-3"></div>
-  </div>
-  <div class="login-bg-grid"></div>
+  <div class="login-outer">
   <div class="login-card">
     <div class="login-powered-badge">
       <div class="login-powered-dot"></div>
@@ -528,6 +546,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <div class="login-status-dot"></div>
       <span class="login-status-text" id="login-status-txt">Servidor online · Conexão segura</span>
     </div>
+  </div>
   </div>
 </div>
 
@@ -577,7 +596,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
   <div id="main">
     <div id="topbar">
       <div class="flex items-center gap-2">
-        <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()" title="Menu">☰</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()" title="Menu" style="padding:8px 10px"><span class="menu-icon"><span></span><span></span></span></button>
         <span class="topbar-title" id="page-title">Dashboard</span>
       </div>
       <div class="topbar-right">
@@ -1949,27 +1968,59 @@ pages.dashboard = async () => {
     ? `<span style="font-size:13px;color:var(--warning);display:flex;align-items:center;gap:5px"><span>📋</span>${kpis.queue_aguardando} operaç${kpis.queue_aguardando===1?'ão':'ões'} aguardando na fila</span>`
     : `<span style="font-size:13px;color:var(--success);display:flex;align-items:center;gap:5px"><span>✅</span>Fila de operações vazia</span>`;
 
+  const arcPct = kpis.ocupacao_total || 0;
+  const arcClr = arcPct > 85 ? 'var(--danger)' : arcPct > 60 ? 'var(--warning)' : 'var(--success)';
+  const arcDeg = arcPct * 3.6;
   setContent(`
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding:16px 20px;background:rgba(26,141,230,.07);border:1px solid rgba(26,141,230,.15);border-radius:var(--r-lg);border-left:3px solid var(--accent)">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding:16px 20px;background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.12);border-radius:var(--r-lg);border-left:3px solid var(--accent)">
     <div>
-      <div style="font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.3px">${greeting}, ${esc(firstName)} 👋</div>
+      <div style="font-size:20px;font-weight:800;font-family:var(--font-display);color:var(--text);letter-spacing:-.3px">${greeting}, ${esc(firstName)} 👋</div>
       <div style="font-size:12px;color:var(--text3);margin-top:3px">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
     </div>
-    <div style="display:flex;align-items:center;gap:16px">
-      ${queueAlert}
+    <div style="display:flex;align-items:center;gap:16px">${queueAlert}</div>
+  </div>
+  <div class="kpi-bento">
+    <div class="kpi green clickable kpi-hero" onclick="nav('spots')" title="Ver vagas">
+      <div class="kpi-label">Ocupação Total</div>
+      <div class="kpi-value kpi-hero-val">${kpis.vagas_ocupadas}<span style="font-size:20px;opacity:.55;font-weight:600">/${kpis.vagas_total}</span></div>
+      <div class="kpi-sub">vagas ocupadas</div>
+      <div class="kpi-arc-wrap"><div class="kpi-arc" style="background:conic-gradient(${arcClr} ${arcDeg}deg,rgba(255,255,255,.07) 0)"><div class="kpi-arc-inner"><span style="font-size:15px;font-weight:700;color:${arcClr};font-family:var(--font-display)">${arcPct}%</span></div></div></div>
     </div>
-  </div>
-  <div class="grid g4 mb-2">
-    <div class="kpi green clickable" onclick="nav('spots')" title="Ver vagas"><div class="kpi-label">Ocupação Total</div><div class="kpi-value">${kpis.ocupacao_total}%</div><div class="kpi-sub">${kpis.vagas_ocupadas}/${kpis.vagas_total} vagas</div><span class="kpi-icon">🅿️</span></div>
-    <div class="kpi clickable" onclick="goToFinancial('')" title="Ver financeiro"><div class="kpi-label">Receita do Mês</div><div class="kpi-value" style="font-size:20px">${fmt(kpis.receita_mes)}</div><div class="kpi-sub">Loja: ${fmt(kpis.receita_loja)}</div><span class="kpi-icon">💰</span></div>
-    <div class="kpi red clickable" onclick="goToFinancial('overdue')" title="Ver inadimplentes"><div class="kpi-label">Inadimplência</div><div class="kpi-value" style="font-size:20px">${fmt(kpis.inadimplencia)}</div><div class="kpi-sub">${kpis.taxa_inadimplencia}% da carteira</div><span class="kpi-icon">⚠️</span></div>
-    <div class="kpi yellow clickable" onclick="nav('queue')" title="Ver fila"><div class="kpi-label">Fila Aguardando</div><div class="kpi-value">${kpis.queue_aguardando}</div><div class="kpi-sub">${kpis.queue_hoje} operações hoje</div><span class="kpi-icon">📋</span></div>
-  </div>
-  <div class="grid g4 mb-2">
-    <div class="kpi purple clickable" onclick="nav('clients')" title="Ver clientes"><div class="kpi-label">Clientes Ativos</div><div class="kpi-value">${kpis.total_clientes}</div><div class="kpi-sub">${kpis.vip_count} VIP/Gold</div><span class="kpi-icon">👤</span></div>
-    <div class="kpi clickable" onclick="nav('vessels')" title="Ver embarcações"><div class="kpi-label">Embarcações</div><div class="kpi-value">${kpis.total_vessels}</div><div class="kpi-sub">${kpis.contratos_ativos} contratos ativos</div><span class="kpi-icon">🛥️</span></div>
-    <div class="kpi yellow clickable" onclick="nav('maintenance')" title="Ver manutenção"><div class="kpi-label">OS em Aberto</div><div class="kpi-value">${kpis.os_abertas}</div><div class="kpi-sub">${kpis.os_urgentes} urgentes</div><span class="kpi-icon">🔧</span></div>
-    <div class="kpi clickable" onclick="nav('queue')" title="Ver fila de operações"><div class="kpi-label">SLA Médio (min)</div><div class="kpi-value">${kpis.sla_avg_min}</div><div class="kpi-sub">Tempo médio atendimento</div><span class="kpi-icon">⏱️</span></div>
+    <div class="kpi clickable kpi-wide" onclick="goToFinancial('')" title="Ver financeiro">
+      <div class="kpi-label">Receita do Mês</div>
+      <div class="kpi-value" style="font-size:26px">${fmt(kpis.receita_mes)}</div>
+      <div class="kpi-sub">Loja: ${fmt(kpis.receita_loja)}</div>
+    </div>
+    <div class="kpi red clickable" onclick="goToFinancial('overdue')" title="Ver inadimplentes">
+      <div class="kpi-label">Inadimplência</div>
+      <div class="kpi-value" style="font-size:24px">${fmt(kpis.inadimplencia)}</div>
+      <div class="kpi-sub">${kpis.taxa_inadimplencia}% da carteira</div>
+    </div>
+    <div class="kpi yellow clickable" onclick="nav('queue')" title="Ver fila">
+      <div class="kpi-label">Fila Aguardando</div>
+      <div class="kpi-value">${kpis.queue_aguardando}</div>
+      <div class="kpi-sub">${kpis.queue_hoje} hoje</div>
+    </div>
+    <div class="kpi purple clickable" onclick="nav('clients')" title="Ver clientes">
+      <div class="kpi-label">Clientes Ativos</div>
+      <div class="kpi-value">${kpis.total_clientes}</div>
+      <div class="kpi-sub">${kpis.vip_count} VIP/Gold</div>
+    </div>
+    <div class="kpi clickable" onclick="nav('vessels')" title="Ver embarcações">
+      <div class="kpi-label">Embarcações</div>
+      <div class="kpi-value">${kpis.total_vessels}</div>
+      <div class="kpi-sub">${kpis.contratos_ativos} contratos ativos</div>
+    </div>
+    <div class="kpi yellow clickable" onclick="nav('maintenance')" title="Ver manutenção">
+      <div class="kpi-label">OS em Aberto</div>
+      <div class="kpi-value">${kpis.os_abertas}</div>
+      <div class="kpi-sub">${kpis.os_urgentes} urgentes</div>
+    </div>
+    <div class="kpi clickable" onclick="nav('queue')" title="Ver SLA">
+      <div class="kpi-label">SLA Médio (min)</div>
+      <div class="kpi-value">${kpis.sla_avg_min}</div>
+      <div class="kpi-sub">Tempo médio</div>
+    </div>
   </div>
   <div class="grid g2 mb-2">
     <div class="card">
@@ -10747,6 +10798,35 @@ async function _applyLoginBrand() {
   }
   const isSA = await trySAAutoLogin();
   if (!isSA) tryAutoLogin();
+})();
+
+// ── Cascade entry animations (IntersectionObserver) ──────────────────────────
+(function(){
+  const _io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if(e.isIntersecting){
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        setTimeout(()=>{ e.target.style.transition = ''; e.target.removeAttribute('data-ao'); }, 700);
+        _io.unobserve(e.target);
+      }
+    });
+  },{threshold:0.04});
+
+  const _mo = new MutationObserver(()=>{
+    document.querySelectorAll('#content .kpi:not([data-ao]),#content .card:not([data-ao]),#content .queue-card:not([data-ao])').forEach((el,i)=>{
+      el.setAttribute('data-ao','');
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(18px)';
+      el.style.transition = `opacity 550ms ${i*55}ms cubic-bezier(0.16,1,0.3,1),transform 550ms ${i*55}ms cubic-bezier(0.16,1,0.3,1)`;
+      _io.observe(el);
+    });
+  });
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    const c = document.getElementById('content');
+    if(c) _mo.observe(c,{childList:true,subtree:false});
+  });
 })();
 </script>
 </body>
