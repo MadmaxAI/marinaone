@@ -67,6 +67,31 @@ Cada arquivo deve ser **idempotente** (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`
 
 ---
 
+## ⚠️ REGRA CRÍTICA — Catálogo de Módulos SaaS
+
+### Princípio
+O catálogo de módulos em `saas.modules` representa **funcionalidades reais implementadas no código**. Slug e nome são referenciados diretamente via `requireModule(slug)` e nunca devem ser criados/alterados pela UI — apenas via código.
+
+### Regra obrigatória
+**Toda vez que uma nova funcionalidade/módulo for criada ou alterada no sistema, o seguinte DEVE ser atualizado no mesmo commit:**
+
+1. `src/db/saas_schema.sql` — adicionar o módulo no bloco `INSERT INTO saas.modules(...)` com `ON CONFLICT (slug) DO NOTHING`
+2. Associar o módulo aos tipos de licença corretos no bloco `DO $$ ... license_type_modules ...`
+3. Atualizar o `ROADMAP.md` — catálogo de módulos e tabela de planos
+4. Se o módulo tiver gate de acesso: usar `requireModule('slug')` na rota correspondente do `server.js`
+
+### O que é editável via UI (Super Admin):
+- Descrição (texto informativo)
+- Categoria (agrupamento visual: core / premium / ai / enterprise)
+- Flag `has_ext_cost` (se o módulo gera custo externo, ex: Claude API)
+- Toggle ativo/inativo (ocultar do catálogo de licenças sem remover do banco)
+
+### O que NUNCA é editável via UI:
+- `slug` — identificador usado no código; alterar quebra o `requireModule()`
+- `name` — nome canônico do módulo; alterações só via seed/migration
+
+---
+
 ## Regras de Produto — Domínio Marina One
 
 ### Papéis de usuário (VALID_ROLES)

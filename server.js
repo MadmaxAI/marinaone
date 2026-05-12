@@ -657,7 +657,28 @@ addRoute('PUT', '/api/superadmin/profile', async (req, res, ctx) => {
 
 addRoute('GET', '/api/superadmin/tenants', async (req, res, ctx) => {
   if (!requireSuperAdmin(ctx, res)) return;
-  const tenants = await saasAll('SELECT * FROM saas.tenants ORDER BY created_at DESC');
+  const tenants = await saasAll(`
+    SELECT t.*,
+           lx.license_name,
+           lx.license_slug,
+           lx.license_status,
+           (EXISTS(
+             SELECT 1 FROM saas.license_contracts lc
+             WHERE lc.tenant_slug = t.slug AND lc.status = 'active'
+           )) AS has_active_contract
+    FROM saas.tenants t
+    LEFT JOIN LATERAL (
+      SELECT lt.name AS license_name, lt.slug AS license_slug, tl.status AS license_status
+      FROM saas.tenant_licenses tl
+      JOIN saas.license_types lt ON lt.id = tl.license_type_id
+      WHERE tl.tenant_id = t.id
+        AND tl.status = 'active'
+        AND (tl.ends_at IS NULL OR tl.ends_at >= CURRENT_DATE)
+      ORDER BY tl.created_at DESC
+      LIMIT 1
+    ) lx ON TRUE
+    ORDER BY t.created_at DESC
+  `);
   sendJson(res, tenants);
 });
 
@@ -669,8 +690,9 @@ addRoute('POST', '/api/superadmin/tenants', async (req, res, ctx) => {
   const finalAdminEmail    = adminEmail    || `admin@${cleanSlug}.marina`;
   const finalAdminPassword = adminPassword || 'marina123';
   try {
+    const planSlug = plan || 'starter';
     await provisionTenant(cleanSlug, {
-      marinaName: name, plan: plan || 'professional',
+      marinaName: name, plan: planSlug,
       adminEmail: finalAdminEmail,
       adminPassword: finalAdminPassword,
       adminName: adminName || 'Administrador',
@@ -683,6 +705,8 @@ addRoute('POST', '/api/superadmin/tenants', async (req, res, ctx) => {
       `UPDATE saas.tenants SET admin_email=$1, admin_password_plain=$2 WHERE slug=$3`,
       [finalAdminEmail, finalAdminPassword, cleanSlug]
     );
+    // Cria licença técnica correspondente ao plano — sem isso todos os módulos ficam liberados
+    await _syncTenantLicense(cleanSlug, planSlug, null);
     const tenant = await saasGet('SELECT * FROM saas.tenants WHERE slug=$1', [cleanSlug]);
     sendJson(res, { ok: true, tenant }, 201);
   } catch (e) {
@@ -841,7 +865,7 @@ addRoute('GET', '/api/superadmin/tenants/:slug/stats', async (req, res, ctx) => 
     const { dbAll: tAll, dbGet: tGet } = createDbHelpers(ctx.params.slug);
     const ms = monthStart();
     const [clients, vessels, users, revenue, revenue_month,
-           contracts, spots_seca, spots_molhada, settings_rows] = await Promise.all([
+           contracts, spots_seca, spots_molhada, settings_rows, licenseRow] = await Promise.all([
       tGet('SELECT COUNT(*) as n FROM clients WHERE active=1'),
       tGet('SELECT COUNT(*) as n FROM vessels WHERE active=1'),
       tGet('SELECT COUNT(*) as n FROM users WHERE active=1'),
@@ -850,7 +874,21 @@ addRoute('GET', '/api/superadmin/tenants/:slug/stats', async (req, res, ctx) => 
       tGet(`SELECT COUNT(*) as n FROM contracts WHERE status='active'`),
       tGet(`SELECT COUNT(*) as n FROM spots WHERE type='seca'`),
       tGet(`SELECT COUNT(*) as n FROM spots WHERE type='molhada'`),
-      tAll(`SELECT key, value FROM settings WHERE key IN ('marina_logo','marina_name','marina_email','marina_phone','marina_cnpj','marina_city','marina_state','license_plan','license_valid_until')`),
+      tAll(`SELECT key, value FROM settings WHERE key IN ('marina_logo','marina_name','marina_email','marina_phone','marina_cnpj','marina_city','marina_state')`),
+      // Fonte única de licença: saas.tenant_licenses → saas.license_types
+      saasGet(
+        `SELECT lt.name AS license_name, lt.slug AS license_slug,
+                tl.status AS license_status, tl.ends_at AS license_until
+         FROM saas.tenant_licenses tl
+         JOIN saas.license_types lt ON lt.id = tl.license_type_id
+         JOIN saas.tenants t ON t.id = tl.tenant_id
+         WHERE t.slug = $1
+           AND tl.status = 'active'
+           AND (tl.ends_at IS NULL OR tl.ends_at >= CURRENT_DATE)
+         ORDER BY tl.created_at DESC
+         LIMIT 1`,
+        [ctx.params.slug]
+      ),
     ]);
     const sett = {};
     for (const r of (settings_rows || [])) sett[r.key] = r.value;
@@ -871,8 +909,11 @@ addRoute('GET', '/api/superadmin/tenants/:slug/stats', async (req, res, ctx) => 
       marina_cnpj:     sett.marina_cnpj    || '',
       marina_city:     sett.marina_city    || '',
       marina_state:    sett.marina_state   || '',
-      license_plan:    sett.license_plan   || '',
-      license_until:   sett.license_valid_until || '',
+      // Licença vem exclusivamente de saas.tenant_licenses
+      license_plan:    licenseRow?.license_name  || '',
+      license_slug:    licenseRow?.license_slug  || '',
+      license_status:  licenseRow?.license_status || '',
+      license_until:   licenseRow?.license_until  || '',
     });
   } catch (e) {
     sendJson(res, { error: e.message }, 500);
@@ -897,7 +938,7 @@ async function saasCheckOverdue() {
 async function generateLicenseCharges(contractId, tenantSlug, plan, amount, startDate, endDate) {
   const start  = new Date(startDate + 'T12:00:00Z');
   const end    = endDate ? new Date(endDate + 'T12:00:00Z') : null;
-  const planLabel = { starter:'Starter', professional:'Professional', enterprise:'Enterprise' };
+  const planLabel = { starter:'Starter', pro:'Pro', professional:'Pro', enterprise:'Enterprise', custom:'Custom' };
   const label  = planLabel[plan] || plan;
   const charges = [];
   let cur = new Date(start);
@@ -935,9 +976,13 @@ addRoute('GET', '/api/superadmin/contracts', async (req, res, ctx) => {
       `SELECT lc.*, t.name AS tenant_name,
               (SELECT COUNT(*) FROM saas.license_charges lch WHERE lch.contract_id=lc.id) AS total_charges,
               (SELECT COUNT(*) FROM saas.license_charges lch WHERE lch.contract_id=lc.id AND lch.status='paid') AS paid_charges,
-              (SELECT COALESCE(SUM(amount),0) FROM saas.license_charges lch WHERE lch.contract_id=lc.id AND lch.status='paid') AS total_paid
+              (SELECT COALESCE(SUM(amount),0) FROM saas.license_charges lch WHERE lch.contract_id=lc.id AND lch.status='paid') AS total_paid,
+              tl.id AS tech_lic_id, tl.status AS tech_lic_status, tl.starts_at AS tech_lic_starts,
+              lt2.name AS tech_lic_name, lt2.slug AS tech_lic_slug
        FROM saas.license_contracts lc
-       JOIN saas.tenants t ON t.slug=lc.tenant_slug
+       JOIN saas.tenants t ON t.slug = lc.tenant_slug
+       LEFT JOIN saas.tenant_licenses tl ON tl.contract_id = lc.id AND tl.status = 'active'
+       LEFT JOIN saas.license_types lt2 ON lt2.id = tl.license_type_id
        ORDER BY lc.created_at DESC`
     );
     sendJson(res, rows);
@@ -952,11 +997,12 @@ addRoute('POST', '/api/superadmin/contracts', async (req, res, ctx) => {
   if (!tenant_slug || !plan || !monthly_value || !start_date)
     return sendJson(res, { error: 'tenant_slug, plan, monthly_value e start_date são obrigatórios' }, 400);
   try {
+    const { proposal_id } = ctx.body;
     const row = await saasGet(
-      `INSERT INTO saas.license_contracts(tenant_slug,plan,monthly_value,start_date,end_date,status,notes,contract_file_data,contract_file_name)
-       VALUES($1,$2,$3,$4,$5,'active',$6,$7,$8) RETURNING id`,
+      `INSERT INTO saas.license_contracts(tenant_slug,plan,monthly_value,start_date,end_date,status,notes,contract_file_data,contract_file_name,proposal_id)
+       VALUES($1,$2,$3,$4,$5,'active',$6,$7,$8,$9) RETURNING id`,
       [tenant_slug, plan, Number(monthly_value), start_date, end_date || null, notes || null,
-       contract_file_data || null, contract_file_name || null]
+       contract_file_data || null, contract_file_name || null, proposal_id || null]
     );
     const contractId = row.id;
     let chargesCreated = 0;
@@ -965,6 +1011,8 @@ addRoute('POST', '/api/superadmin/contracts', async (req, res, ctx) => {
     }
     // Atualiza plan do tenant
     await saasRun(`UPDATE saas.tenants SET plan=$1 WHERE slug=$2`, [plan, tenant_slug]);
+    // Sincroniza tenant_licenses com o plano do contrato
+    await _syncTenantLicense(tenant_slug, plan, contractId);
     sendJson(res, { ok: true, id: contractId, charges_created: chargesCreated });
   } catch (e) { sendJson(res, { error: e.message }, 500); }
 });
@@ -1049,18 +1097,18 @@ function generateContractHtml(c, cfg) {
 
   const contractNum = `MO-${String(c.id).padStart(4,'0')}/${new Date().getFullYear()}`;
   const today       = new Date().toLocaleDateString('pt-BR');
-  const planLabels  = { starter: 'Starter', professional: 'Professional', enterprise: 'Enterprise' };
+  const planLabels  = { starter: 'Starter', pro: 'Pro', professional: 'Pro', enterprise: 'Enterprise', custom: 'Custom' };
   const planLabel   = planLabels[c.plan] || c.plan || '';
 
   const planFeatures = {
     starter:      ['Gestão de vagas (até 50 unidades)', 'Cadastro de clientes e embarcações', 'Fila de operações de descida/subida', 'Financeiro básico (contratos e cobranças)', 'Suporte por e-mail em horário comercial'],
-    professional: ['Tudo do plano Starter', 'Gestão avançada de vagas sem limite', 'Módulo de loja de conveniência', 'Integração com API de previsão do tempo', 'Relatórios gerenciais completos', 'Suporte prioritário com tempo de resposta de 4h'],
-    enterprise:   ['Tudo do plano Professional', 'Customizações de layout e marca', 'SLA garantido de 99,5% de disponibilidade', 'Suporte dedicado 24/7', 'Gestor de conta exclusivo', 'Integrações premium sob demanda'],
+    pro:          ['Tudo do plano Starter', 'Gestão avançada de vagas sem limite', 'Módulo de loja de conveniência', 'Integração com API de previsão do tempo', 'Relatórios gerenciais completos', 'Suporte prioritário com tempo de resposta de 4h'],
+    enterprise:   ['Tudo do plano Pro', 'Customizações de layout e marca', 'SLA garantido de 99,5% de disponibilidade', 'Suporte dedicado 24/7', 'Gestor de conta exclusivo', 'Integrações premium sob demanda'],
   };
-  const features = planFeatures[c.plan] || planFeatures.professional;
+  const features = planFeatures[c.plan] || planFeatures[c.plan === 'professional' ? 'pro' : 'starter'];
 
   const sla        = c.plan === 'enterprise' ? '99,5%' : '99,0%';
-  const supportSLA = c.plan === 'enterprise' ? '4 horas (24/7)' : c.plan === 'professional' ? '8 horas úteis' : '48 horas úteis';
+  const supportSLA = c.plan === 'enterprise' ? '4 horas (24/7)' : (c.plan === 'pro' || c.plan === 'professional') ? '8 horas úteis' : '48 horas úteis';
 
   const cityForForum = (cfg.company_city_state || 'São Paulo/SP').split('/')[0].trim();
 
@@ -1782,6 +1830,1137 @@ function fetchWeather(lat, lon, apiKey, provider) {
 }
 
 // ═════════════════════════════════════════════════════════════════════
+//  ROTAS — MÓDULOS x LICENÇAS (Super Admin)
+// ═════════════════════════════════════════════════════════════════════
+
+// ── Módulos ──────────────────────────────────────────────────────────
+
+// GET /api/superadmin/modules
+addRoute('GET', '/api/superadmin/modules', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const rows = await saasAll(`SELECT * FROM saas.modules ORDER BY sort_order, id`);
+    sendJson(res, rows);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// PUT /api/superadmin/modules/:id — apenas metadados editáveis (slug/name gerenciados via código)
+addRoute('PUT', '/api/superadmin/modules/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { id } = ctx.params;
+    const { description, category, has_ext_cost, active } = ctx.body;
+    const row = await saasGet(
+      `UPDATE saas.modules SET
+         description=COALESCE($1,description),
+         category=COALESCE($2,category),
+         has_ext_cost=COALESCE($3,has_ext_cost),
+         active=COALESCE($4,active)
+       WHERE id=$5 RETURNING *`,
+      [description, category, has_ext_cost, active, id]
+    );
+    if (!row) return sendJson(res, { error: 'Módulo não encontrado' }, 404);
+    sendJson(res, row);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// ── Tipos de Licença ─────────────────────────────────────────────────
+
+// GET /api/superadmin/license-types
+addRoute('GET', '/api/superadmin/license-types', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const types = await saasAll(`SELECT * FROM saas.license_types ORDER BY sort_order, id`);
+    const counts = await saasAll(
+      `SELECT license_type_id, COUNT(*) AS tenant_count
+       FROM saas.tenant_licenses
+       WHERE status = 'active' AND (ends_at IS NULL OR ends_at >= CURRENT_DATE)
+       GROUP BY license_type_id`
+    );
+    const countMap = Object.fromEntries(counts.map(r => [r.license_type_id, Number(r.tenant_count)]));
+    for (const t of types) {
+      t.tenant_count = countMap[t.id] || 0;
+      t.modules = await saasAll(
+        `SELECT m.id, m.slug, m.name, m.category, m.has_ext_cost, ltm.percent_share
+         FROM saas.license_type_modules ltm
+         JOIN saas.modules m ON m.id = ltm.module_id
+         WHERE ltm.license_type_id = $1
+         ORDER BY m.sort_order`,
+        [t.id]
+      );
+    }
+    sendJson(res, types);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// POST /api/superadmin/license-types
+addRoute('POST', '/api/superadmin/license-types', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { slug, name, description = '', price_monthly = 0, price_yearly = 0, is_custom = false, sort_order = 0 } = ctx.body;
+    if (!slug || !name) return sendJson(res, { error: 'slug e name obrigatórios' }, 400);
+    const row = await saasGet(
+      `INSERT INTO saas.license_types(slug,name,description,price_monthly,price_yearly,is_custom,sort_order)
+       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [slug, name, description, price_monthly, price_yearly, !!is_custom, sort_order]
+    );
+    sendJson(res, row, 201);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// PUT /api/superadmin/license-types/:id
+addRoute('PUT', '/api/superadmin/license-types/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { id } = ctx.params;
+    const { name, description, price_monthly, price_yearly, active, sort_order } = ctx.body;
+    const row = await saasGet(
+      `UPDATE saas.license_types SET
+         name=COALESCE($1,name), description=COALESCE($2,description),
+         price_monthly=COALESCE($3,price_monthly), price_yearly=COALESCE($4,price_yearly),
+         active=COALESCE($5,active), sort_order=COALESCE($6,sort_order)
+       WHERE id=$7 RETURNING *`,
+      [name, description, price_monthly, price_yearly, active, sort_order, id]
+    );
+    if (!row) return sendJson(res, { error: 'Tipo de licença não encontrado' }, 404);
+    sendJson(res, row);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// PUT /api/superadmin/license-types/:id/modules — redefine módulos + percentuais
+addRoute('PUT', '/api/superadmin/license-types/:id/modules', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { id } = ctx.params;
+    // modules: [{ module_id, percent_share }]
+    const { modules = [] } = ctx.body;
+    const pool = getGlobalPool();
+    // Remove todos os existentes e reinsere (replace completo)
+    await pool.unsafe(`DELETE FROM saas.license_type_modules WHERE license_type_id=$1`, [id]);
+    for (const m of modules) {
+      await pool.unsafe(
+        `INSERT INTO saas.license_type_modules(license_type_id, module_id, percent_share)
+         VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [id, m.module_id, m.percent_share || 0]
+      );
+    }
+    const updated = await saasAll(
+      `SELECT m.id, m.slug, m.name, m.category, ltm.percent_share
+       FROM saas.license_type_modules ltm
+       JOIN saas.modules m ON m.id=ltm.module_id
+       WHERE ltm.license_type_id=$1 ORDER BY m.sort_order`, [id]
+    );
+    sendJson(res, updated);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// DELETE /api/superadmin/license-types/:id
+addRoute('DELETE', '/api/superadmin/license-types/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { id } = ctx.params;
+    const lt = await saasGet(`SELECT * FROM saas.license_types WHERE id=$1`, [id]);
+    if (!lt) return sendJson(res, { error: 'Tipo de licença não encontrado' }, 404);
+    // Bloqueia se há tenant_licenses apontando para este tipo (qualquer status)
+    const inUse = await saasGet(
+      `SELECT COUNT(*) AS n FROM saas.tenant_licenses WHERE license_type_id=$1`, [id]
+    );
+    if (Number(inUse.n) > 0)
+      return sendJson(res, { error: `Este tipo de licença está sendo usado por ${inUse.n} tenant(s) e não pode ser excluído. Revogue todas as licenças associadas primeiro.` }, 409);
+    // Cascata: remove módulos associados e depois o tipo
+    await saasRun(`DELETE FROM saas.license_type_modules WHERE license_type_id=$1`, [id]);
+    await saasRun(`DELETE FROM saas.license_types WHERE id=$1`, [id]);
+    sendJson(res, { ok: true });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// ── Licenças por Tenant ───────────────────────────────────────────────
+
+// GET /api/superadmin/tenants/:slug/license
+addRoute('GET', '/api/superadmin/tenants/:slug/license', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { slug } = ctx.params;
+    const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [slug]);
+    if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+
+    // Licença ativa
+    const license = await saasGet(
+      `SELECT tl.*, lt.slug AS plan_slug, lt.name AS plan_name, lt.price_monthly, lt.price_yearly
+       FROM saas.tenant_licenses tl
+       JOIN saas.license_types lt ON lt.id=tl.license_type_id
+       WHERE tl.tenant_id=$1 AND tl.status='active'
+       ORDER BY tl.created_at DESC LIMIT 1`,
+      [tenant.id]
+    );
+
+    // Módulos do plano
+    let planModules = [];
+    if (license) {
+      planModules = await saasAll(
+        `SELECT m.id, m.slug, m.name, m.category, m.has_ext_cost, ltm.percent_share
+         FROM saas.license_type_modules ltm
+         JOIN saas.modules m ON m.id=ltm.module_id
+         WHERE ltm.license_type_id=$1 AND m.active=TRUE ORDER BY m.sort_order`,
+        [license.license_type_id]
+      );
+    }
+
+    // Overrides individuais
+    const overrides = await saasAll(
+      `SELECT tmo.*, m.slug, m.name, m.category
+       FROM saas.tenant_module_overrides tmo
+       JOIN saas.modules m ON m.id=tmo.module_id
+       WHERE tmo.tenant_id=$1
+       ORDER BY m.sort_order`,
+      [tenant.id]
+    );
+
+    // Módulos efetivos (plano + overrides)
+    const effectiveModules = await _resolveEffectiveModules(tenant.id);
+
+    sendJson(res, { license, plan_modules: planModules, overrides, effective_modules: effectiveModules });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// POST /api/superadmin/tenants/:slug/license — atribui ou troca licença
+addRoute('POST', '/api/superadmin/tenants/:slug/license', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { slug } = ctx.params;
+    const { license_type_id, billing_period = 'monthly', starts_at, ends_at, status = 'active', notes } = ctx.body;
+    if (!license_type_id) return sendJson(res, { error: 'license_type_id obrigatório' }, 400);
+
+    const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [slug]);
+    if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+
+    // Suspende licença anterior ativa
+    await saasRun(
+      `UPDATE saas.tenant_licenses SET status='suspended'
+       WHERE tenant_id=$1 AND status='active'`,
+      [tenant.id]
+    );
+
+    const row = await saasGet(
+      `INSERT INTO saas.tenant_licenses(tenant_id, license_type_id, billing_period, starts_at, ends_at, status, notes, created_by_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [tenant.id, license_type_id, billing_period,
+       starts_at || new Date().toISOString().slice(0,10),
+       ends_at || null, status, notes || null,
+       ctx.user.super_admin_id]
+    );
+    sendJson(res, row, 201);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// DELETE /api/superadmin/tenants/:slug/license — revoga licença ativa
+addRoute('DELETE', '/api/superadmin/tenants/:slug/license', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { slug } = ctx.params;
+    const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [slug]);
+    if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+    const updated = await saasGet(
+      `UPDATE saas.tenant_licenses SET status='cancelled', ends_at=CURRENT_DATE
+       WHERE tenant_id=$1 AND status='active'
+       RETURNING id`,
+      [tenant.id]
+    );
+    if (!updated) return sendJson(res, { error: 'Nenhuma licença ativa encontrada para este tenant' }, 404);
+    sendJson(res, { ok: true });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// POST /api/superadmin/tenants/:slug/license/override — add/remove módulo individual
+addRoute('POST', '/api/superadmin/tenants/:slug/license/override', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { slug } = ctx.params;
+    const { module_id, granted, reason, expires_at } = ctx.body;
+    if (module_id === undefined || granted === undefined) return sendJson(res, { error: 'module_id e granted obrigatórios' }, 400);
+
+    const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [slug]);
+    if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+
+    const row = await saasGet(
+      `INSERT INTO saas.tenant_module_overrides(tenant_id, module_id, granted, reason, expires_at, granted_by)
+       VALUES($1,$2,$3,$4,$5,$6)
+       ON CONFLICT(tenant_id, module_id) DO UPDATE
+         SET granted=$3, reason=$4, expires_at=$5, granted_by=$6, created_at=NOW()
+       RETURNING *`,
+      [tenant.id, module_id, !!granted, reason || null, expires_at || null, ctx.user.super_admin_id]
+    );
+    sendJson(res, row, 201);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// DELETE /api/superadmin/tenants/:slug/license/override/:module_id
+addRoute('DELETE', '/api/superadmin/tenants/:slug/license/override/:module_id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { slug, module_id } = ctx.params;
+    const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [slug]);
+    if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+    await saasRun(
+      `DELETE FROM saas.tenant_module_overrides WHERE tenant_id=$1 AND module_id=$2`,
+      [tenant.id, module_id]
+    );
+    sendJson(res, { ok: true });
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/tenants/:slug/license/effective — módulos efetivos resolvidos
+addRoute('GET', '/api/superadmin/tenants/:slug/license/effective', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { slug } = ctx.params;
+    const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [slug]);
+    if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+    const modules = await _resolveEffectiveModules(tenant.id);
+    sendJson(res, modules);
+  } catch (e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// ── Helper: resolve módulos efetivos de um tenant ─────────────────────
+async function _resolveEffectiveModules(tenantId) {
+  // Módulos do plano ativo
+  const planMods = await saasAll(
+    `SELECT m.id, m.slug, m.name, m.category, m.has_ext_cost, 'plan' AS source
+     FROM saas.tenant_licenses tl
+     JOIN saas.license_type_modules ltm ON ltm.license_type_id=tl.license_type_id
+     JOIN saas.modules m ON m.id=ltm.module_id
+     WHERE tl.tenant_id=$1 AND tl.status='active' AND m.active=TRUE
+       AND (tl.ends_at IS NULL OR tl.ends_at >= CURRENT_DATE)
+     ORDER BY m.sort_order`,
+    [tenantId]
+  );
+
+  // Overrides válidos
+  const overrides = await saasAll(
+    `SELECT tmo.module_id, tmo.granted, m.id, m.slug, m.name, m.category, m.has_ext_cost
+     FROM saas.tenant_module_overrides tmo
+     JOIN saas.modules m ON m.id=tmo.module_id
+     WHERE tmo.tenant_id=$1 AND m.active=TRUE
+       AND (tmo.expires_at IS NULL OR tmo.expires_at >= CURRENT_DATE)`,
+    [tenantId]
+  );
+
+  const result = new Map(planMods.map(m => [m.id, { ...m }]));
+
+  for (const ov of overrides) {
+    if (ov.granted) {
+      result.set(ov.module_id, { id: ov.id, slug: ov.slug, name: ov.name, category: ov.category, has_ext_cost: ov.has_ext_cost, source: 'override_add' });
+    } else {
+      result.delete(ov.module_id);
+    }
+  }
+
+  return Array.from(result.values());
+}
+
+// ── Sincroniza tenant_licenses com o plano do contrato/provisionamento ──
+// Garante que tenant_licenses reflete o plano correto, criando ou trocando.
+async function _syncTenantLicense(tenantSlug, planSlug, contractId) {
+  try {
+    const lt = await saasGet(`SELECT id FROM saas.license_types WHERE slug=$1`, [planSlug]);
+    if (!lt) { console.warn(`[syncLicense] Tipo de licença não encontrado para slug="${planSlug}"`); return; }
+    const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [tenantSlug]);
+    if (!tenant) return;
+    // Suspende qualquer licença ativa anterior
+    await saasRun(
+      `UPDATE saas.tenant_licenses SET status='suspended' WHERE tenant_id=$1 AND status='active'`,
+      [tenant.id]
+    );
+    // Cria nova licença ativa vinculada ao plano correto
+    await saasGet(
+      `INSERT INTO saas.tenant_licenses(tenant_id, license_type_id, contract_id, billing_period, starts_at, status)
+       VALUES($1,$2,$3,'monthly',CURRENT_DATE,'active') RETURNING id`,
+      [tenant.id, lt.id, contractId || null]
+    );
+  } catch(e) {
+    console.error('[syncLicense] Erro:', e.message);
+  }
+}
+
+// ── Middleware: requer módulo licenciado ──────────────────────────────
+function requireModule(moduleSlug) {
+  return async (req, res, ctx, next) => {
+    try {
+      const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [ctx.tenantSlug]);
+      if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+      const mods = await _resolveEffectiveModules(tenant.id);
+      if (!mods.some(m => m.slug === moduleSlug)) {
+        return sendJson(res, { error: 'MODULE_NOT_LICENSED', module: moduleSlug }, 403);
+      }
+      return next();
+    } catch (e) { return sendJson(res, { error: e.message }, 500); }
+  };
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  FASE 2 — PROPOSTAS COMERCIAIS
+// ═════════════════════════════════════════════════════════════════════
+
+// ── Motor de cálculo ─────────────────────────────────────────────────
+function calcProposal(boats, params) {
+  const { price_per_foot, dry_multiplier, covered_multiplier, wet_multiplier, setup_fee,
+          volume_discount_pct, period_discount_pct } = params;
+  let totalFeet = 0;
+  const linesOut = boats.map(b => {
+    const st = b.spot_type || 'seca_sol';
+    const mult = st === 'molhada'    ? Number(wet_multiplier     || 1.2)
+               : st === 'seca_coberta' ? Number(covered_multiplier || 1.1)
+               : Number(dry_multiplier || 1);   // seca_sol + legado 'seca'
+    const factor = Number(b.category_factor || 1);
+    const feet = Number(b.eslora_feet || 0);
+    const line = feet * Number(price_per_foot) * mult * factor;
+    totalFeet += feet;
+    return { ...b, line_value: Math.round(line * 100) / 100 };
+  });
+  const base = linesOut.reduce((s, b) => s + b.line_value, 0);
+  const volDisc  = base * (Number(volume_discount_pct || 0) / 100);
+  const perDisc  = base * (Number(period_discount_pct || 0) / 100);
+  const discount = volDisc + perDisc;
+  const final    = Math.max(0, base - discount) + Number(setup_fee || 0);
+  return {
+    boats: linesOut,
+    total_feet:     Math.round(totalFeet * 100) / 100,
+    total_boats:    linesOut.length,
+    base_value:     Math.round(base * 100) / 100,
+    discount_value: Math.round(discount * 100) / 100,
+    final_value:    Math.round(final * 100) / 100,
+  };
+}
+
+async function _getPricingDefaults() {
+  const rows = await saasAll(
+    `SELECT key, value FROM saas.settings WHERE key LIKE 'pricing_%'`
+  );
+  const cfg = {};
+  rows.forEach(r => { cfg[r.key.replace('pricing_','')] = r.value; });
+  return {
+    price_per_foot:      Number(cfg.price_per_foot      || 5),
+    dry_multiplier:      Number(cfg.dry_multiplier      || 1),
+    covered_multiplier:  Number(cfg.covered_multiplier  || 1.1),
+    wet_multiplier:      Number(cfg.wet_multiplier      || 1.2),
+    setup_fee:           Number(cfg.setup_fee           || 0),
+    valid_days:          Number(cfg.valid_days          || 30),
+  };
+}
+
+async function _proposalSnapshot(id) {
+  const p = await saasGet(`SELECT * FROM saas.pricing_proposals WHERE id=$1`, [id]);
+  if (!p) return null;
+  const boats = await saasAll(`SELECT * FROM saas.pricing_proposal_boats WHERE proposal_id=$1 ORDER BY sort_order,id`, [id]);
+  return { ...p, boats };
+}
+
+async function _logProposal(proposalId, action, opts = {}) {
+  const { oldStatus, newStatus, notes, doneById, snapshot } = opts;
+  await saasRun(
+    `INSERT INTO saas.pricing_proposal_history(proposal_id,action,old_status,new_status,snapshot,notes,done_by_id)
+     VALUES($1,$2,$3,$4,$5,$6,$7)`,
+    [proposalId, action, oldStatus||null, newStatus||null,
+     snapshot ? JSON.stringify(snapshot) : null, notes||null, doneById||null]
+  );
+}
+
+// GET /api/superadmin/proposals
+addRoute('GET', '/api/superadmin/proposals', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const rows = await saasAll(
+      `SELECT p.*, lt.name AS license_type_name,
+              (SELECT COUNT(*) FROM saas.pricing_proposal_boats b WHERE b.proposal_id=p.id) AS boat_count,
+              t.name AS tenant_name, t.active AS tenant_active
+       FROM saas.pricing_proposals p
+       LEFT JOIN saas.license_types lt ON lt.id=p.license_type_id
+       LEFT JOIN saas.tenants t ON t.slug=p.tenant_slug
+       ORDER BY p.updated_at DESC`
+    );
+    sendJson(res, rows);
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/proposals/implantacao — propostas aprovadas/convertidas p/ verificação
+addRoute('GET', '/api/superadmin/proposals/implantacao', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const rows = await saasAll(`
+      SELECT p.id, p.lead_name, p.lead_email, p.status, p.final_value,
+             p.tenant_slug, p.approved_at, p.updated_at,
+             t.id AS tenant_id, t.active AS tenant_active, t.name AS tenant_name,
+             lc.id AS contract_id
+      FROM saas.pricing_proposals p
+      LEFT JOIN saas.tenants t       ON t.slug = p.tenant_slug
+      LEFT JOIN saas.license_contracts lc ON lc.proposal_id = p.id
+      WHERE p.status IN ('approved','converted')
+      ORDER BY p.updated_at DESC
+    `);
+    sendJson(res, rows);
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/proposals/:id
+addRoute('GET', '/api/superadmin/proposals/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const p = await _proposalSnapshot(ctx.params.id);
+    if (!p) return sendJson(res, { error: 'Proposta não encontrada' }, 404);
+    const mods = await saasAll(
+      `SELECT ppm.*, m.name, m.slug, m.category FROM saas.pricing_proposal_modules ppm
+       JOIN saas.modules m ON m.id=ppm.module_id WHERE ppm.proposal_id=$1`, [p.id]
+    );
+    const history = await saasAll(
+      `SELECT h.*, sa.name AS done_by_name FROM saas.pricing_proposal_history h
+       LEFT JOIN saas.super_admins sa ON sa.id=h.done_by_id
+       WHERE h.proposal_id=$1 ORDER BY h.done_at DESC`, [p.id]
+    );
+    sendJson(res, { ...p, modules: mods, history, boats: p.boats || [] });
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// POST /api/superadmin/proposals/calc — prévia de cálculo sem persistir
+addRoute('POST', '/api/superadmin/proposals/calc', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { boats = [], params = {} } = ctx.body;
+    const defs = await _getPricingDefaults();
+    const merged = { ...defs, ...params };
+    const result = calcProposal(boats, merged);
+    sendJson(res, result);
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// POST /api/superadmin/proposals
+addRoute('POST', '/api/superadmin/proposals', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { lead_name, lead_cnpj, lead_email, lead_phone, lead_city_state,
+            lead_contact_name, lead_contact_role, license_type_id,
+            billing_period = 'monthly', notes, boats = [], valid_until,
+            price_per_foot, dry_multiplier, covered_multiplier, wet_multiplier, setup_fee,
+            volume_discount_pct = 0, period_discount_pct = 0 } = ctx.body;
+    if (!lead_name) return sendJson(res, { error: 'Nome da marina é obrigatório' }, 400);
+
+    const defs = await _getPricingDefaults();
+    const params = {
+      price_per_foot:      Number(price_per_foot     ?? defs.price_per_foot),
+      dry_multiplier:      Number(dry_multiplier     ?? defs.dry_multiplier),
+      covered_multiplier:  Number(covered_multiplier ?? defs.covered_multiplier),
+      wet_multiplier:      Number(wet_multiplier     ?? defs.wet_multiplier),
+      setup_fee:           Number(setup_fee          ?? defs.setup_fee),
+      volume_discount_pct: Number(volume_discount_pct),
+      period_discount_pct: Number(period_discount_pct),
+    };
+    const calc = calcProposal(boats, params);
+    const validUntilDate = valid_until || (() => {
+      const d = new Date(); d.setDate(d.getDate() + defs.valid_days); return d.toISOString().slice(0,10);
+    })();
+
+    const row = await saasGet(
+      `INSERT INTO saas.pricing_proposals(
+         lead_name,lead_cnpj,lead_email,lead_phone,lead_city_state,
+         lead_contact_name,lead_contact_role,license_type_id,
+         price_per_foot,dry_multiplier,covered_multiplier,wet_multiplier,setup_fee,billing_period,
+         volume_discount_pct,period_discount_pct,
+         total_feet,total_boats,base_value,discount_value,final_value,
+         valid_until,notes,created_by_id,status)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'draft')
+       RETURNING *`,
+      [lead_name, lead_cnpj||null, lead_email||null, lead_phone||null, lead_city_state||null,
+       lead_contact_name||null, lead_contact_role||null, license_type_id||null,
+       params.price_per_foot, params.dry_multiplier, params.covered_multiplier, params.wet_multiplier, params.setup_fee,
+       billing_period, params.volume_discount_pct, params.period_discount_pct,
+       calc.total_feet, calc.total_boats, calc.base_value, calc.discount_value, calc.final_value,
+       validUntilDate, notes||null, ctx.user.super_admin_id]
+    );
+
+    for (let i = 0; i < calc.boats.length; i++) {
+      const b = calc.boats[i];
+      await saasRun(
+        `INSERT INTO saas.pricing_proposal_boats(proposal_id,name,boat_type,spot_type,eslora_feet,category_factor,line_value,sort_order)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [row.id, b.name, b.boat_type||'lancha', b.spot_type||'seca_sol',
+         b.eslora_feet, b.category_factor||1, b.line_value, i]
+      );
+    }
+    await _logProposal(row.id, 'created', { newStatus:'draft', doneById: ctx.user.super_admin_id, snapshot: await _proposalSnapshot(row.id) });
+    sendJson(res, { ok: true, id: row.id }, 201);
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// PUT /api/superadmin/proposals/:id  — atualiza dados e recalcula
+addRoute('PUT', '/api/superadmin/proposals/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { id } = ctx.params;
+    const current = await saasGet(`SELECT * FROM saas.pricing_proposals WHERE id=$1`, [id]);
+    if (!current) return sendJson(res, { error: 'Proposta não encontrada' }, 404);
+    if (['converted','signed'].includes(current.status))
+      return sendJson(res, { error: 'Proposta já convertida/assinada não pode ser editada' }, 409);
+
+    const { lead_name, lead_cnpj, lead_email, lead_phone, lead_city_state,
+            lead_contact_name, lead_contact_role, license_type_id,
+            billing_period, notes, boats,
+            price_per_foot, dry_multiplier, covered_multiplier, wet_multiplier, setup_fee,
+            volume_discount_pct, period_discount_pct } = ctx.body;
+
+    const params = {
+      price_per_foot:      Number(price_per_foot      ?? current.price_per_foot),
+      dry_multiplier:      Number(dry_multiplier      ?? current.dry_multiplier),
+      covered_multiplier:  Number(covered_multiplier  ?? current.covered_multiplier ?? 1.1),
+      wet_multiplier:      Number(wet_multiplier      ?? current.wet_multiplier),
+      setup_fee:           Number(setup_fee           ?? current.setup_fee),
+      volume_discount_pct: Number(volume_discount_pct ?? current.volume_discount_pct),
+      period_discount_pct: Number(period_discount_pct ?? current.period_discount_pct),
+    };
+
+    let calc = { total_feet: current.total_feet, total_boats: current.total_boats,
+                 base_value: current.base_value, discount_value: current.discount_value,
+                 final_value: current.final_value, boats: [] };
+
+    if (boats !== undefined) {
+      calc = calcProposal(boats, params);
+      await saasRun(`DELETE FROM saas.pricing_proposal_boats WHERE proposal_id=$1`, [id]);
+      for (let i = 0; i < calc.boats.length; i++) {
+        const b = calc.boats[i];
+        await saasRun(
+          `INSERT INTO saas.pricing_proposal_boats(proposal_id,name,boat_type,spot_type,eslora_feet,category_factor,line_value,sort_order)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [id, b.name, b.boat_type||'lancha', b.spot_type||'seca_sol',
+           b.eslora_feet, b.category_factor||1, b.line_value, i]
+        );
+      }
+    }
+
+    await saasRun(
+      `UPDATE saas.pricing_proposals SET
+         lead_name=COALESCE($1,lead_name), lead_cnpj=COALESCE($2,lead_cnpj),
+         lead_email=COALESCE($3,lead_email), lead_phone=COALESCE($4,lead_phone),
+         lead_city_state=COALESCE($5,lead_city_state),
+         lead_contact_name=COALESCE($6,lead_contact_name),
+         lead_contact_role=COALESCE($7,lead_contact_role),
+         license_type_id=COALESCE($8,license_type_id),
+         billing_period=COALESCE($9,billing_period), notes=COALESCE($10,notes),
+         price_per_foot=$11, dry_multiplier=$12, covered_multiplier=$13, wet_multiplier=$14, setup_fee=$15,
+         volume_discount_pct=$16, period_discount_pct=$17,
+         total_feet=$18, total_boats=$19, base_value=$20, discount_value=$21, final_value=$22,
+         updated_at=NOW()
+       WHERE id=$23`,
+      [lead_name||null, lead_cnpj||null, lead_email||null, lead_phone||null,
+       lead_city_state||null, lead_contact_name||null, lead_contact_role||null,
+       license_type_id||null, billing_period||null, notes||null,
+       params.price_per_foot, params.dry_multiplier, params.covered_multiplier, params.wet_multiplier, params.setup_fee,
+       params.volume_discount_pct, params.period_discount_pct,
+       calc.total_feet, calc.total_boats, calc.base_value, calc.discount_value, calc.final_value,
+       id]
+    );
+    await _logProposal(id, 'edited', { doneById: ctx.user.super_admin_id, snapshot: await _proposalSnapshot(id) });
+    sendJson(res, { ok: true });
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// PUT /api/superadmin/proposals/:id/status
+addRoute('PUT', '/api/superadmin/proposals/:id/status', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { id } = ctx.params;
+    const { status, notes, sent_to, negotiation_notes, rejection_reason } = ctx.body;
+    const allowed = ['draft','sent','negotiation','approved','rejected','converted'];
+    if (!allowed.includes(status)) return sendJson(res, { error: 'Status inválido' }, 400);
+    const current = await saasGet(`SELECT * FROM saas.pricing_proposals WHERE id=$1`, [id]);
+    if (!current) return sendJson(res, { error: 'Proposta não encontrada' }, 404);
+
+    const fields = ['status=$1', 'updated_at=NOW()'];
+    const vals   = [status];
+    if (status === 'sent') {
+      fields.push('sent_at=NOW()');
+      if (sent_to) { fields.push(`sent_to=$${vals.length + 1}`); vals.push(sent_to); }
+    }
+    if (status === 'negotiation' && negotiation_notes) {
+      fields.push(`negotiation_notes=$${vals.length + 1}`); vals.push(negotiation_notes);
+    }
+    if (status === 'approved') fields.push('approved_at=NOW()');
+    if (status === 'rejected') {
+      fields.push('rejected_at=NOW()');
+      if (rejection_reason) { fields.push(`rejection_reason=$${vals.length + 1}`); vals.push(rejection_reason); }
+    }
+    if (status === 'converted') fields.push('approved_at=COALESCE(approved_at,NOW())');
+    vals.push(id);
+    await saasRun(`UPDATE saas.pricing_proposals SET ${fields.join(', ')} WHERE id=$${vals.length}`, vals);
+
+    const logNotes = notes || negotiation_notes || rejection_reason || null;
+    await _logProposal(id, 'status_changed', { oldStatus: current.status, newStatus: status, notes: logNotes, doneById: ctx.user.super_admin_id });
+
+    let activated = false, tenant_slug = null;
+    if (status === 'converted' && current.status !== 'converted') {
+      // Se tenant e contrato já existem (criados manualmente), apenas atualiza status
+      const contractExists = await saasGet(
+        `SELECT id, tenant_slug FROM saas.license_contracts WHERE proposal_id=$1 LIMIT 1`, [id]
+      );
+      if (contractExists) {
+        const tSlug = contractExists.tenant_slug;
+        await saasRun(
+          `UPDATE saas.pricing_proposals SET tenant_slug=$1, contract_id=$2, status='converted', updated_at=NOW() WHERE id=$3`,
+          [tSlug, contractExists.id, id]
+        );
+        activated = false; tenant_slug = tSlug;
+      } else {
+        const fresh = await saasGet(`SELECT * FROM saas.pricing_proposals WHERE id=$1`, [id]);
+        const result = await _activateTenantFromProposal(fresh);
+        activated = result.activated; tenant_slug = result.slug;
+      }
+    }
+    sendJson(res, { ok: true, activated, tenant_slug });
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// DELETE /api/superadmin/proposals/:id
+addRoute('DELETE', '/api/superadmin/proposals/:id', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const p = await saasGet(`SELECT status FROM saas.pricing_proposals WHERE id=$1`, [ctx.params.id]);
+    if (!p) return sendJson(res, { error: 'Proposta não encontrada' }, 404);
+    if (['converted'].includes(p.status)) return sendJson(res, { error: 'Proposta convertida não pode ser excluída' }, 409);
+    await saasRun(`DELETE FROM saas.pricing_proposals WHERE id=$1`, [ctx.params.id]);
+    sendJson(res, { ok: true });
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// POST /api/superadmin/proposals/:id/send  — gera token + marca como sent
+addRoute('POST', '/api/superadmin/proposals/:id/send', async (req, res, ctx) => {
+  if (!requireSuperAdmin(ctx, res)) return;
+  try {
+    const { id } = ctx.params;
+    const p = await saasGet(`SELECT * FROM saas.pricing_proposals WHERE id=$1`, [id]);
+    if (!p) return sendJson(res, { error: 'Proposta não encontrada' }, 404);
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const { sent_to } = ctx.body || {};
+    await saasRun(
+      `UPDATE saas.pricing_proposals SET status='sent', sent_at=NOW(), sent_to=$1, signature_token=$2, updated_at=NOW() WHERE id=$3`,
+      [sent_to || null, token, id]
+    );
+    await _logProposal(id, 'sent', { oldStatus: p.status, newStatus: 'sent', doneById: ctx.user.super_admin_id });
+    sendJson(res, { ok: true, token, link: `/assinar/${token}` });
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// GET /api/superadmin/proposals/:id/preview  — HTML imprimível
+addRoute('GET', '/api/superadmin/proposals/:id/preview', async (req, res, ctx) => {
+  const { jwtVerify } = require('./src/middleware/auth');
+  let user = ctx.user;
+  if (!user) {
+    const qToken = (ctx.qs || {}).token || '';
+    try { user = qToken ? jwtVerify(qToken) : null; } catch { user = null; }
+  }
+  if (!user || user.role !== 'superadmin') {
+    res.writeHead(403, { 'Content-Type': 'text/html' });
+    return res.end('<h2>Acesso negado</h2>');
+  }
+  try {
+    const p = await _proposalSnapshot(ctx.params.id);
+    if (!p) { res.writeHead(404); return res.end('Proposta não encontrada'); }
+    const lt = p.license_type_id
+      ? await saasGet(`SELECT name FROM saas.license_types WHERE id=$1`, [p.license_type_id])
+      : null;
+    const cfgRows = await saasAll(`SELECT key,value FROM saas.settings`);
+    const cfg = {};
+    cfgRows.forEach(r => { cfg[r.key] = r.value || ''; });
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(generateProposalHtml(p, lt, cfg));
+  } catch(e) { res.writeHead(500); res.end(e.message); }
+});
+
+// ── Assinatura pública ────────────────────────────────────────────────
+// GET /api/public/proposals/:token  — dados para a página pública
+addRoute('GET', '/api/public/proposals/:token', async (req, res) => {
+  try {
+    const p = await saasGet(
+      `SELECT p.*, lt.name AS license_type_name
+       FROM saas.pricing_proposals p
+       LEFT JOIN saas.license_types lt ON lt.id=p.license_type_id
+       WHERE p.signature_token=$1`, [ctx_token(req)]
+    );
+    if (!p) return sendJson(res, { error: 'Proposta não encontrada ou link inválido' }, 404);
+    if (p.signed_at) return sendJson(res, { error: 'Esta proposta já foi assinada' }, 409);
+    if (p.status === 'rejected') return sendJson(res, { error: 'Esta proposta foi rejeitada' }, 410);
+    const boats = await saasAll(
+      `SELECT * FROM saas.pricing_proposal_boats WHERE proposal_id=$1 ORDER BY sort_order,id`, [p.id]
+    );
+    sendJson(res, { ...p, boats, signature_token: undefined });
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// POST /api/public/proposals/:token/sign  — assinar
+addRoute('POST', '/api/public/proposals/:token/sign', async (req, res) => {
+  try {
+    const token = ctx_token(req);
+    const { signed_name, signed_doc } = req._body || {};
+    if (!signed_name) return sendJson(res, { error: 'Nome do signatário é obrigatório' }, 400);
+    const p = await saasGet(`SELECT * FROM saas.pricing_proposals WHERE signature_token=$1`, [token]);
+    if (!p) return sendJson(res, { error: 'Link inválido' }, 404);
+    if (p.signed_at) return sendJson(res, { error: 'Proposta já assinada' }, 409);
+
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '';
+    await saasRun(
+      `UPDATE saas.pricing_proposals SET
+         signed_at=NOW(), signed_name=$1, signed_doc=$2, signed_ip=$3,
+         status='approved', updated_at=NOW()
+       WHERE id=$4`,
+      [signed_name, signed_doc||null, ip, p.id]
+    );
+    await _logProposal(p.id, 'signed', { oldStatus: p.status, newStatus: 'approved',
+      notes: `Assinado por ${signed_name}`, snapshot: await _proposalSnapshot(p.id) });
+
+    // Ativação automática do tenant
+    const result = await _activateTenantFromProposal(p);
+    sendJson(res, { ok: true, activated: result.activated, tenant_slug: result.slug });
+  } catch(e) { sendJson(res, { error: e.message }, 500); }
+});
+
+// Helper: extrai token da URL /api/public/proposals/:token/*
+function ctx_token(req) {
+  const m = (req.url || '').match(/\/api\/public\/proposals\/([^\/\?]+)/);
+  return m ? m[1] : '';
+}
+
+// Ativação automática do tenant após assinatura
+async function _activateTenantFromProposal(p) {
+  try {
+    // Gera slug a partir do nome da marina
+    let slug = (p.lead_name || 'marina')
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40);
+
+    // Resolve o slug do plano a partir do license_type_id da proposta
+    let planSlug = 'pro';
+    if (p.license_type_id) {
+      const lt = await saasGet(`SELECT slug FROM saas.license_types WHERE id=$1`, [p.license_type_id]);
+      if (lt) planSlug = lt.slug;
+    }
+
+    // Verifica se já existe tenant
+    const existing = await saasGet(`SELECT id, slug FROM saas.tenants WHERE slug=$1`, [slug]);
+    let finalSlug = slug;
+    if (existing) {
+      finalSlug = existing.slug;
+    } else {
+      const adminEmail    = p.lead_email    || `admin@${slug}.marina`;
+      const adminPassword = 'Marina@' + Math.random().toString(36).slice(2,8);
+      await provisionTenant(finalSlug, {
+        marinaName:    p.lead_name,
+        plan:          planSlug,
+        adminEmail,
+        adminPassword,
+        adminName:     p.lead_contact_name || 'Administrador',
+        spots_seca:    0,
+        spots_molhada: 0,
+        logo_base64:   '',
+      });
+      await saasRun(
+        `UPDATE saas.tenants SET
+           admin_email=$1, admin_password_plain=$2,
+           cnpj=$3, representative_name=$4
+         WHERE slug=$5`,
+        [adminEmail, adminPassword, p.lead_cnpj||null, p.lead_contact_name||null, finalSlug]
+      );
+    }
+
+    // Verifica se contrato já existe para esta proposta (idempotência)
+    const existingContract = await saasGet(
+      `SELECT id FROM saas.license_contracts WHERE proposal_id=$1 LIMIT 1`, [p.id]
+    );
+    if (existingContract) {
+      await saasRun(
+        `UPDATE saas.pricing_proposals SET tenant_slug=$1, contract_id=$2, status='converted', updated_at=NOW() WHERE id=$3`,
+        [finalSlug, existingContract.id, p.id]
+      );
+      return { activated: false, slug: finalSlug };
+    }
+
+    // Cria contrato de licença
+    const contract = await saasGet(
+      `INSERT INTO saas.license_contracts(
+         tenant_slug, plan, monthly_value, start_date, status, notes, proposal_id)
+       VALUES($1,$2,$3,CURRENT_DATE,'active',$4,$5) RETURNING id`,
+      [finalSlug, planSlug, p.final_value, `Gerado automaticamente — Proposta #${p.id}`, p.id]
+    );
+
+    // Sincroniza licença técnica com o plano correto
+    await _syncTenantLicense(finalSlug, planSlug, contract.id);
+
+    // Atualiza proposta como convertida
+    await saasRun(
+      `UPDATE saas.pricing_proposals SET
+         tenant_slug=$1, contract_id=$2, status='converted', updated_at=NOW()
+       WHERE id=$3`,
+      [finalSlug, contract.id, p.id]
+    );
+    await _logProposal(p.id, 'activated', { oldStatus: 'approved', newStatus: 'converted',
+      notes: `Tenant ${finalSlug} ativado` });
+
+    return { activated: true, slug: finalSlug };
+  } catch(e) {
+    console.error('[activation]', e.message);
+    return { activated: false, slug: null };
+  }
+}
+
+// Geração do HTML da proposta (imprimível)
+function generateProposalHtml(p, lt, cfg) {
+  const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+  const propNum = `MOP-${String(p.id).padStart(4,'0')}/${new Date().getFullYear()}`;
+  const company = cfg.company_legal_name || 'Marina One Tecnologia Ltda.';
+  const boatTypeLabel = { lancha:'Lancha', veleiro:'Veleiro', iate:'Iate', jet_ski:'Jet Ski', outro:'Outro' };
+  const spotLabel = { seca:'Seca', molhada:'Molhada' };
+  const periodLabel = p.billing_period === 'yearly' ? 'anual' : 'mensal';
+
+  const boatRows = (p.boats||[]).map((b,i) => `
+    <tr>
+      <td>${i+1}</td><td>${b.name||'—'}</td>
+      <td>${boatTypeLabel[b.boat_type]||b.boat_type}</td>
+      <td>${spotLabel[b.spot_type]||b.spot_type}</td>
+      <td>${Number(b.eslora_feet).toFixed(1)} pés</td>
+      <td>${Number(b.category_factor).toFixed(2)}×</td>
+      <td style="text-align:right">${fmtBRL(b.line_value)}</td>
+    </tr>`).join('');
+
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Proposta ${propNum}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;color:#1a2332;background:#fff;padding:40px}
+  h1{font-size:22px;font-weight:700;color:#1a8de6}
+  h2{font-size:15px;font-weight:700;margin:24px 0 10px;color:#1a2332;border-bottom:2px solid #1a8de6;padding-bottom:6px}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
+  .logo-area h1{margin-bottom:4px}.logo-area p{font-size:11px;color:#64748b}
+  .prop-meta{text-align:right;font-size:12px;color:#64748b}
+  .prop-meta strong{display:block;font-size:18px;color:#1a2332;margin-bottom:4px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
+  .card{border:1px solid #e2e8f0;border-radius:8px;padding:16px}
+  .card label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;display:block;margin-bottom:2px}
+  .card span{font-size:13px;font-weight:500}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  th{background:#f1f5f9;padding:9px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b}
+  td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}
+  .totals{margin-left:auto;width:320px}
+  .totals td{padding:7px 12px}
+  .totals .label{color:#64748b}
+  .totals .total-row{font-weight:700;font-size:15px;border-top:2px solid #1a8de6;color:#1a8de6}
+  .badge{display:inline-block;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700}
+  .badge-blue{background:#dbeafe;color:#1d4ed8}
+  .footer{margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;display:flex;justify-content:space-between}
+  .sign-area{margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
+  .sign-line{border-top:1px solid #1a2332;margin-top:40px;padding-top:8px;font-size:11px;color:#64748b;text-align:center}
+  @media print{body{padding:20px}button{display:none}}
+</style></head><body>
+<div style="text-align:right;margin-bottom:16px">
+  <button onclick="window.print()" style="padding:8px 18px;background:#1a8de6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨️ Imprimir / Salvar PDF</button>
+</div>
+<div class="header">
+  <div class="logo-area"><h1>⚓ ${cfg.general_system_name||'Marina One'}</h1><p>${company}</p></div>
+  <div class="prop-meta">
+    <strong>Proposta ${propNum}</strong>
+    Emitida em: ${new Date().toLocaleDateString('pt-BR')}<br>
+    Válida até: ${fmtDate(p.valid_until)}<br>
+    <span class="badge badge-blue">${lt ? lt.name : 'Plano personalizado'}</span>
+  </div>
+</div>
+
+<h2>Dados da Marina</h2>
+<div class="grid2">
+  <div class="card">
+    <label>Razão Social / Nome</label><span>${p.lead_name}</span><br><br>
+    <label>CNPJ</label><span>${p.lead_cnpj||'—'}</span><br><br>
+    <label>Cidade / Estado</label><span>${p.lead_city_state||'—'}</span>
+  </div>
+  <div class="card">
+    <label>Representante</label><span>${p.lead_contact_name||'—'}</span><br><br>
+    <label>Cargo</label><span>${p.lead_contact_role||'—'}</span><br><br>
+    <label>E-mail</label><span>${p.lead_email||'—'}</span>
+    ${p.lead_phone ? `<br><br><label>Telefone</label><span>${p.lead_phone}</span>` : ''}
+  </div>
+</div>
+
+<h2>Embarcações Contempladas</h2>
+<table>
+  <thead><tr>
+    <th>#</th><th>Embarcação</th><th>Tipo</th><th>Vaga</th>
+    <th>Eslora</th><th>Fator</th><th style="text-align:right">Valor Mensal</th>
+  </tr></thead>
+  <tbody>${boatRows||'<tr><td colspan="7" style="text-align:center;color:#94a3b8">Nenhuma embarcação</td></tr>'}</tbody>
+</table>
+
+<table class="totals">
+  <tr><td class="label">Total de pés (eslora)</td><td style="text-align:right">${Number(p.total_feet).toFixed(1)} pés</td></tr>
+  <tr><td class="label">Valor/pé</td><td style="text-align:right">${fmtBRL(p.price_per_foot)}</td></tr>
+  <tr><td class="label">Valor base</td><td style="text-align:right">${fmtBRL(p.base_value)}</td></tr>
+  ${Number(p.discount_value)>0 ? `<tr><td class="label">Descontos</td><td style="text-align:right;color:#16a34a">- ${fmtBRL(p.discount_value)}</td></tr>` : ''}
+  ${Number(p.setup_fee)>0 ? `<tr><td class="label">Taxa de implantação</td><td style="text-align:right">${fmtBRL(p.setup_fee)}</td></tr>` : ''}
+  <tr class="total-row"><td>TOTAL ${periodLabel.toUpperCase()}</td><td style="text-align:right">${fmtBRL(p.final_value)}</td></tr>
+</table>
+
+${p.notes ? `<h2>Observações</h2><p style="padding:12px;background:#f8fafc;border-radius:6px;line-height:1.6">${p.notes}</p>` : ''}
+
+<div class="sign-area">
+  <div>
+    <div class="sign-line">${p.lead_contact_name||'Representante da Marina'}<br>${p.lead_contact_role||'—'}</div>
+  </div>
+  <div>
+    <div class="sign-line">${cfg.company_representative_name||'Representante Marina One'}<br>${cfg.company_representative_role||'Sócio-Administrador'}</div>
+  </div>
+</div>
+
+<div class="footer">
+  <span>${company} — ${cfg.company_cnpj||''}</span>
+  <span>Proposta ${propNum} — ${new Date().toLocaleDateString('pt-BR')}</span>
+</div>
+</body></html>`;
+}
+
+// ── Página pública de assinatura (rota de conteúdo HTML) ─────────────
+addRoute('GET', '/assinar/:token', async (req, res) => {
+  const token = (req.url || '').split('/assinar/')[1]?.split('?')[0] || '';
+  try {
+    const p = await saasGet(
+      `SELECT p.*, lt.name AS license_type_name
+       FROM saas.pricing_proposals p
+       LEFT JOIN saas.license_types lt ON lt.id=p.license_type_id
+       WHERE p.signature_token=$1`, [token]
+    );
+    const boats = p ? await saasAll(
+      `SELECT * FROM saas.pricing_proposal_boats WHERE proposal_id=$1 ORDER BY sort_order,id`, [p?.id]
+    ) : [];
+    const cfgRows = await saasAll(`SELECT key,value FROM saas.settings`);
+    const cfg = {};
+    cfgRows.forEach(r => { cfg[r.key] = r.value || ''; });
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(generateSignaturePage(p, boats, cfg, token));
+  } catch(e) { res.writeHead(500); res.end('<h2>Erro interno</h2>'); }
+});
+
+// POST /assinar/:token/confirmar
+addRoute('POST', '/assinar/:token/confirmar', async (req, res) => {
+  const token = (req.url || '').split('/assinar/')[1]?.split('/')[0] || '';
+  try {
+    const body = req._body || {};
+    const { signed_name, signed_doc } = body;
+    if (!signed_name) { res.writeHead(400); return res.end('Nome obrigatório'); }
+    const p = await saasGet(`SELECT * FROM saas.pricing_proposals WHERE signature_token=$1`, [token]);
+    if (!p) { res.writeHead(404); return res.end('Link inválido'); }
+    if (p.signed_at) { res.writeHead(409); return res.end('Proposta já assinada'); }
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '';
+    await saasRun(
+      `UPDATE saas.pricing_proposals SET signed_at=NOW(), signed_name=$1, signed_doc=$2, signed_ip=$3, status='approved', updated_at=NOW() WHERE id=$4`,
+      [signed_name, signed_doc||null, ip, p.id]
+    );
+    await _logProposal(p.id, 'signed', { oldStatus: p.status, newStatus: 'approved', notes: `Assinado por ${signed_name}` });
+    const result = await _activateTenantFromProposal({ ...p });
+    // Redireciona para página de sucesso
+    res.writeHead(302, { 'Location': `/assinar/${token}?signed=1` });
+    res.end();
+  } catch(e) { res.writeHead(500); res.end('<h2>Erro ao processar assinatura</h2><p>' + e.message + '</p>'); }
+});
+
+function generateSignaturePage(p, boats, cfg, token) {
+  const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+  const propNum = p ? `MOP-${String(p.id).padStart(4,'0')}/${new Date().getFullYear()}` : '—';
+  const signed  = (new URL('http://x' + (p?.signed_at ? '?signed=1' : '?')).searchParams.get('signed')) || '';
+
+  if (!p) return `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;text-align:center">
+    <h2 style="color:#ef4444">Link inválido ou expirado</h2><p>Esta proposta não foi encontrada.</p></body></html>`;
+
+  const alreadySigned = !!p.signed_at;
+  const periodLabel = p.billing_period === 'yearly' ? 'anual' : 'mensal';
+  const boatRows = boats.map((b,i) => `
+    <tr><td>${i+1}. ${b.name}</td><td>${Number(b.eslora_feet).toFixed(1)} pés</td>
+    <td>${b.spot_type==='molhada'?'Molhada':'Seca'}</td><td style="text-align:right">${fmtBRL(b.line_value)}</td></tr>`).join('');
+
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proposta ${propNum} — Assinatura Digital</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a1628;color:#e2e8f0;min-height:100vh;padding:24px}
+  .wrap{max-width:720px;margin:0 auto}
+  .card{background:#111f38;border:1px solid #1e3a5f;border-radius:16px;padding:28px;margin-bottom:20px}
+  h1{font-size:20px;font-weight:700;color:#1a8de6;margin-bottom:4px}
+  h2{font-size:14px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}
+  .meta{font-size:12px;color:#64748b;margin-bottom:24px}
+  table{width:100%;border-collapse:collapse}
+  td,th{padding:9px 10px;font-size:13px;border-bottom:1px solid #1e3a5f;text-align:left}
+  th{color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .total-row td{font-weight:700;font-size:16px;color:#1a8de6;border-top:2px solid #1a8de6;border-bottom:none}
+  input,textarea{width:100%;background:#0a1628;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;color:#e2e8f0;font-size:13px;margin-top:6px;outline:none}
+  input:focus,textarea:focus{border-color:#1a8de6;box-shadow:0 0 0 3px rgba(26,141,230,.2)}
+  label{font-size:12px;font-weight:600;color:#94a3b8;display:block;margin-top:14px}
+  .btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;margin-top:20px}
+  .btn-primary{background:linear-gradient(135deg,#1a8de6,#2563eb);color:#fff}
+  .btn-primary:hover{opacity:.9}
+  .success{text-align:center;padding:40px}
+  .success h2{color:#10b981;font-size:22px;margin-bottom:12px}
+  .success p{color:#94a3b8;line-height:1.6}
+  .badge{display:inline-block;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700;background:rgba(26,141,230,.15);color:#1a8de6;margin-bottom:12px}
+  .warning{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px 16px;font-size:12px;color:#fbbf24;margin-top:16px}
+</style></head><body>
+<div class="wrap">
+  <div class="card">
+    <div class="badge">⚓ ${cfg.general_system_name||'Marina One'}</div>
+    <h1>Proposta Comercial ${propNum}</h1>
+    <div class="meta">Emitida em ${new Date(p.created_at).toLocaleDateString('pt-BR')} · Válida até ${fmtDate(p.valid_until)} · ${p.license_type_name||'Plano personalizado'}</div>
+    <h2>Dados da Marina</h2>
+    <table>
+      <tr><td style="color:#64748b;width:140px">Marina</td><td><strong>${p.lead_name}</strong></td></tr>
+      ${p.lead_cnpj ? `<tr><td style="color:#64748b">CNPJ</td><td>${p.lead_cnpj}</td></tr>` : ''}
+      ${p.lead_city_state ? `<tr><td style="color:#64748b">Cidade/UF</td><td>${p.lead_city_state}</td></tr>` : ''}
+      ${p.lead_contact_name ? `<tr><td style="color:#64748b">Representante</td><td>${p.lead_contact_name}${p.lead_contact_role?' — '+p.lead_contact_role:''}</td></tr>` : ''}
+    </table>
+  </div>
+  <div class="card">
+    <h2>Embarcações</h2>
+    <table>
+      <thead><tr><th>Embarcação</th><th>Eslora</th><th>Vaga</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${boatRows||'<tr><td colspan="4" style="text-align:center;color:#64748b">Nenhuma embarcação</td></tr>'}</tbody>
+    </table>
+    <table style="margin-top:12px;width:280px;margin-left:auto">
+      ${Number(p.discount_value)>0 ? `<tr><td style="color:#64748b">Desconto</td><td style="text-align:right;color:#10b981">- ${fmtBRL(p.discount_value)}</td></tr>` : ''}
+      <tr class="total-row"><td>Total ${periodLabel}</td><td style="text-align:right">${fmtBRL(p.final_value)}</td></tr>
+    </table>
+  </div>
+  ${alreadySigned ? `
+  <div class="card success">
+    <h2>✅ Proposta já assinada</h2>
+    <p>Assinada por <strong>${p.signed_name}</strong> em ${new Date(p.signed_at).toLocaleString('pt-BR')}.<br>
+    Em breve nossa equipe entrará em contato para dar continuidade.</p>
+  </div>` : `
+  <div class="card">
+    <h2>Assinar Proposta</h2>
+    <p style="font-size:13px;color:#94a3b8;margin-bottom:4px;line-height:1.6">
+      Ao assinar, você concorda com os termos desta proposta e autoriza a ${cfg.company_legal_name||'Marina One'} a prosseguir com a ativação do sistema.
+    </p>
+    <form method="POST" action="/assinar/${token}/confirmar">
+      <label>Nome completo do signatário *</label>
+      <input name="signed_name" required placeholder="Nome conforme documento" value="${p.lead_contact_name||''}">
+      <label>CPF ou RG</label>
+      <input name="signed_doc" placeholder="000.000.000-00">
+      <div class="warning">⚠️ Esta ação é irreversível. Ao clicar em Assinar, a proposta será registrada com data, hora e IP desta sessão.</div>
+      <button type="submit" class="btn btn-primary">✍️ Assinar Proposta Digitalmente</button>
+    </form>
+  </div>`}
+  <div style="text-align:center;font-size:11px;color:#334155;margin-top:16px">
+    ${cfg.company_legal_name||'Marina One'} · ${cfg.company_cnpj||''} · Proposta ${propNum}
+  </div>
+</div>
+</body></html>`;
+}
+
+// ═════════════════════════════════════════════════════════════════════
 //  ROTAS — AUTH (por tenant)
 // ═════════════════════════════════════════════════════════════════════
 addRoute('POST', '/api/auth/login', async (req, res, ctx) => {
@@ -1847,6 +3026,20 @@ addRoute('GET', '/api/auth/me', async (req, res, ctx) => {
   const { dbAll: tAll } = ctx.db;
   const permissions = await loadPermissionsAll(ctx.user.role, tAll);
   sendJson(res, { ...ctx.user, permissions });
+});
+
+// GET /api/tenant/my-modules — módulos efetivos do tenant logado (licença + overrides)
+addRoute('GET', '/api/tenant/my-modules', async (req, res, ctx) => {
+  try {
+    const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [ctx.tenantSlug]);
+    if (!tenant) return sendJson(res, { has_license: false, slugs: [] });
+    const hasLicense = !!(await saasGet(
+      `SELECT 1 FROM saas.tenant_licenses WHERE tenant_id=$1 AND status='active'
+       AND (ends_at IS NULL OR ends_at >= CURRENT_DATE) LIMIT 1`, [tenant.id]
+    ));
+    const mods = hasLicense ? await _resolveEffectiveModules(tenant.id) : [];
+    sendJson(res, { has_license: hasLicense, slugs: mods.map(m => m.slug) });
+  } catch (e) { sendJson(res, { has_license: false, slugs: [] }); }
 });
 
 // ═════════════════════════════════════════════════════════════════════

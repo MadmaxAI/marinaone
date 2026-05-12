@@ -72,6 +72,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .nav-item.active .icon{opacity:1}
 .nav-item.active .icon svg{transform:scale(1.1)}
 .nav-badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:var(--r-full);line-height:1.4;box-shadow:0 2px 8px rgba(239,68,68,.4)}
+/* Módulo não licenciado */
+.nav-item.nav-locked{opacity:.45;cursor:default}
+.nav-item.nav-locked:hover{background:none;color:var(--text2);border-left-color:transparent}
+.nav-lock-icon{margin-left:auto;font-size:10px;opacity:.6}
 /* Sidebar footer — usuário logado */
 .sidebar-footer{padding:12px;border-top:1px solid var(--border);flex-shrink:0}
 .sidebar-user{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r-md);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);transition:var(--t-base)}
@@ -642,10 +646,12 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
   <!-- Tab nav -->
   <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:0;flex-shrink:0">
     <button id="sa-tab-btn-operacional" onclick="saTab('operacional')" style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);border-bottom:2px solid var(--accent);transition:all .15s">🏖️ Operacional</button>
+    <button id="sa-tab-btn-propostas"   onclick="saTab('propostas')"   style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">📋 Propostas</button>
     <button id="sa-tab-btn-contratos"   onclick="saTab('contratos')"   style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">📄 Contratos</button>
     <button id="sa-tab-btn-financeiro"  onclick="saTab('financeiro')"  style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">💰 Financeiro</button>
-    <button id="sa-tab-btn-analytics"      onclick="saTab('analytics')"      style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">📊 Analytics</button>
+    <button id="sa-tab-btn-analytics"   onclick="saTab('analytics')"   style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">📊 Analytics</button>
     <button id="sa-tab-btn-configuracoes" onclick="saTab('configuracoes')" style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">⚙️ Configurações</button>
+    <button id="sa-tab-btn-licencas"    onclick="saTab('licencas')"    style="padding:14px 20px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s">🔑 Módulos & Licenças</button>
   </div>
 
   <div style="flex:1;overflow-y:auto;background:var(--bg)">
@@ -657,10 +663,12 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
         <input id="sa-op-search" type="text" placeholder="🔍 Buscar marina..." oninput="saRenderTable()"
           style="flex:1;min-width:160px;padding:7px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
         <select id="sa-op-plan" onchange="saRenderTable()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
-          <option value="">Todos os planos</option>
+          <option value="">Todas as licenças</option>
           <option value="starter">Starter</option>
-          <option value="professional">Professional</option>
+          <option value="pro">Pro</option>
           <option value="enterprise">Enterprise</option>
+          <option value="custom">Custom</option>
+          <option value="">Sem licença</option>
         </select>
         <select id="sa-op-status" onchange="saRenderTable()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
           <option value="">Todos os status</option>
@@ -674,10 +682,28 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
         </div>
       </div>
       <div id="sa-kpis" class="grid g4" style="margin-bottom:20px"></div>
+
+      <!-- Verificação de implantação -->
+      <div id="sa-implantacao-wrap" style="margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+        <div style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="saToggleImplantacao()">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:14px;font-weight:700">🔍 Verificação de Implantação</span>
+            <span id="sa-impl-badge" style="display:none;font-size:11px;padding:2px 8px;border-radius:100px;background:#f59e0b22;color:#f59e0b;font-weight:700"></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();saLoadImplantacao()">↻ Verificar</button>
+            <span id="sa-impl-arrow" style="color:var(--text3);font-size:12px">▾</span>
+          </div>
+        </div>
+        <div id="sa-implantacao-body" style="display:none;border-top:1px solid var(--border)">
+          <div style="padding:16px 18px;color:var(--text3);font-size:12px">Clique em "Verificar" para checar propostas aprovadas/convertidas.</div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="table-wrap">
           <table id="sa-table">
-            <thead><tr><th>Marina</th><th>Slug</th><th>Plano</th><th>Clientes</th><th>Usuários</th><th>Receita/Mês</th><th>Status</th><th>Criado em</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Marina</th><th>Slug</th><th>Licença</th><th>Clientes</th><th>Usuários</th><th>Receita/Mês</th><th>Status</th><th>Criado em</th><th>Ações</th></tr></thead>
             <tbody id="sa-tbody"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:40px">Carregando...</td></tr></tbody>
           </table>
         </div>
@@ -686,38 +712,38 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
 
     <!-- ═══ TAB: CONTRATOS ═══ -->
     <div id="sa-tab-contratos" style="display:none;padding:28px">
-      <!-- Filtro sempre visível -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <input id="sa-ct-search" type="text" placeholder="🔍 Buscar marina..." oninput="saRenderContracts()"
-          style="flex:1;min-width:160px;padding:7px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
-        <select id="sa-contract-filter-status" onchange="saRenderContracts()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
-          <option value="">Todos os status</option>
-          <option value="active">Ativo</option>
-          <option value="trial">Trial</option>
-          <option value="expired">Expirado</option>
-          <option value="cancelled">Cancelado</option>
-        </select>
-        <select id="sa-contract-filter-plan" onchange="saRenderContracts()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
-          <option value="">Todos os planos</option>
-          <option value="starter">Starter</option>
-          <option value="professional">Professional</option>
-          <option value="enterprise">Enterprise</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sa-ct-search').value='';document.getElementById('sa-contract-filter-status').value='';document.getElementById('sa-contract-filter-plan').value='';saRenderContracts()">✕ Limpar</button>
-        <div style="margin-left:auto;display:flex;gap:8px">
-          <button class="btn btn-ghost btn-sm" onclick="saLoadContracts()">↻ Atualizar</button>
-          <button class="btn btn-primary btn-sm" onclick="saOpenNewContract()">+ Novo Contrato</button>
+      <!-- CONTRATOS -->
+      <div id="ct-sub-contratos">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <input id="sa-ct-search" type="text" placeholder="🔍 Buscar marina..." oninput="saRenderContracts()"
+            style="flex:1;min-width:160px;padding:7px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+          <select id="sa-contract-filter-status" onchange="saRenderContracts()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+            <option value="">Todos os status</option>
+            <option value="active">Ativo</option>
+            <option value="trial">Trial</option>
+            <option value="expired">Expirado</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+          <select id="sa-contract-filter-plan" onchange="saRenderContracts()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+            <option value="">Todas as licenças</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sa-ct-search').value='';document.getElementById('sa-contract-filter-status').value='';document.getElementById('sa-contract-filter-plan').value='';saRenderContracts()">✕ Limpar</button>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="saLoadContracts()">↻ Atualizar</button>
+            <button class="btn btn-primary btn-sm" onclick="saOpenNewContract()">+ Novo Contrato</button>
+          </div>
+        </div>
+        <div id="sa-contracts-kpis" class="grid g4" style="margin-bottom:20px"></div>
+        <div class="card">
+          <div class="table-wrap">
+            <table id="sa-contracts-table">
+              <thead><tr><th>Marina</th><th>Plano Contrato</th><th>Licença Técnica</th><th>Proposta</th><th>Início</th><th>Término</th><th>Valor/Mês</th><th>Parcelas</th><th>Recebido</th><th>Status</th><th>Ações</th></tr></thead>
+              <tbody id="sa-contracts-tbody"><tr><td colspan="11" style="text-align:center;color:var(--text3);padding:40px">Carregando...</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div id="sa-contracts-kpis" class="grid g4" style="margin-bottom:20px"></div>
-      <div class="card">
-        <div class="table-wrap">
-          <table id="sa-contracts-table">
-            <thead><tr><th>Marina</th><th>Plano</th><th>Início</th><th>Término</th><th>Valor/Mês</th><th>Parcelas</th><th>Recebido</th><th>Status</th><th>Ações</th></tr></thead>
-            <tbody id="sa-contracts-tbody"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:40px">Carregando...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
+
     </div>
 
     <!-- ═══ TAB: FINANCEIRO ═══ -->
@@ -771,10 +797,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
           <option value="24">Últimos 24 meses</option>
         </select>
         <select id="sa-anl-plan" onchange="saLoadAnalytics()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
-          <option value="">Todos os planos</option>
-          <option value="starter">Starter</option>
-          <option value="professional">Professional</option>
-          <option value="enterprise">Enterprise</option>
+          <option value="">Todas as licenças</option>
         </select>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sa-anl-plan').value='';saLoadAnalytics()">✕ Limpar</button>
         <button class="btn btn-ghost btn-sm" onclick="saLoadAnalytics()">↻ Atualizar</button>
@@ -868,6 +891,69 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
         </tr></thead>
           <tbody id="sa-pred-cashflow-tbody"></tbody></table></div>
       </div>
+    </div>
+
+    <!-- ═══ TAB: PROPOSTAS ═══ -->
+    <div id="sa-tab-propostas" style="display:none;padding:28px">
+
+      <!-- Cabeçalho -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div>
+          <div style="font-size:18px;font-weight:700">📋 Propostas Comerciais</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">Pipeline de propostas: da prospecção à ativação automática</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="ppLoad()">↻ Atualizar</button>
+          <button class="btn btn-primary btn-sm" onclick="ppOpenWizard()">+ Nova Proposta</button>
+        </div>
+      </div>
+
+      <!-- KPIs rápidos -->
+      <div id="pp-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px"></div>
+
+      <!-- Kanban pipeline -->
+      <div id="pp-kanban" style="display:flex;gap:14px;overflow-x:auto;padding-bottom:12px;min-height:300px">
+        <!-- colunas geradas por JS -->
+      </div>
+
+    </div>
+
+    <!-- ═══ TAB: MÓDULOS & LICENÇAS ═══ -->
+    <div id="sa-tab-licencas" style="display:none;padding:28px">
+
+      <!-- Sub-abas internas -->
+      <div style="display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--border)">
+        <button id="lic-sub-btn-modulos"   onclick="licSubTab('modulos')"   style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);border-bottom:2px solid var(--accent)">📦 Catálogo de Módulos</button>
+        <button id="lic-sub-btn-planos"    onclick="licSubTab('planos')"    style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent">🎫 Tipos de Licença</button>
+      </div>
+
+      <!-- SUB: MÓDULOS -->
+      <div id="lic-sub-modulos">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+          <div>
+            <div style="font-size:16px;font-weight:700">📦 Catálogo de Módulos</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:3px">Todos os módulos disponíveis no sistema</div>
+          </div>
+          <div style="font-size:11px;color:var(--text3);padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px">Módulos gerenciados via código — edite <code>saas_schema.sql</code></div>
+        </div>
+        <div id="lic-modules-msg" style="display:none;margin-bottom:12px"></div>
+        <div id="lic-modules-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px"></div>
+      </div>
+
+      <!-- SUB: TIPOS DE LICENÇA -->
+      <div id="lic-sub-planos" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+          <div>
+            <div style="font-size:16px;font-weight:700">🎫 Tipos de Licença</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:3px">Planos comerciais e distribuição de módulos</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="licOpenNewType()">+ Novo Tipo</button>
+        </div>
+        <div id="lic-types-msg" style="display:none;margin-bottom:12px"></div>
+        <div id="lic-types-list" style="display:flex;flex-direction:column;gap:16px"></div>
+      </div>
+
+
     </div>
 
     <!-- ═══ TAB: CONFIGURAÇÕES ═══ -->
@@ -1352,11 +1438,54 @@ function applyMarinaLogo(sett) {
 }
 
 /** Abre o app após autenticação bem-sucedida */
+// ── Mapeamento page → slug do módulo SaaS ────────────────────────────
+const PAGE_MODULE_SLUG = {
+  dashboard:    'core_dashboard',
+  queue:        'core_queue',
+  clients:      'core_clients',
+  vessels:      'core_vessels',
+  spots:        'core_spots',
+  contracts:    'core_contracts',
+  financial:    'core_financial',
+  store:        'premium_store',
+  conveniencia: 'premium_conveniencia',
+  totem:        'premium_conveniencia',
+  maintenance:  'premium_maintenance',
+  analytics:    'premium_analytics',
+  alerts:       'premium_alerts',
+  // settings, users, access: sem gate de módulo (controlados por role)
+};
+
+window._tenantHasLicense = false;
+window._tenantModuleSlugs = new Set();
+
+async function _loadTenantModules() {
+  try {
+    const data = await api('GET', '/tenant/my-modules');
+    window._tenantHasLicense = !!data.has_license;
+    window._tenantModuleSlugs = new Set(data.slugs || []);
+  } catch(e) {
+    window._tenantHasLicense = false;
+    window._tenantModuleSlugs = new Set();
+  }
+}
+
+function isModuleLicensed(page) {
+  // Se não há licença ativa, não aplica bloqueio (modo legacy)
+  if (!window._tenantHasLicense) return true;
+  const slug = PAGE_MODULE_SLUG[page];
+  // Páginas sem slug mapeado (settings, users, access) sempre liberadas
+  if (!slug) return true;
+  return window._tenantModuleSlugs.has(slug);
+}
+
 async function openApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('topbar-user').textContent = currentUser.name;
   if (isTotem()) document.body.classList.add('totem-mode');
+  // Carrega módulos licenciados antes de montar sidebar
+  await _loadTenantModules();
   applyPermissionsToSidebar();
   nav(defaultPageForRole());
   setInterval(refreshBadges, 30000);
@@ -1523,11 +1652,26 @@ function applyPermissionsToSidebar() {
   document.querySelectorAll('[data-module="_admin"]').forEach(el => {
     el.style.display = (role === 'admin') ? '' : 'none';
   });
-  // Itens normais — seguem can()
+  // Itens normais — seguem can() + gate de módulo licenciado
   document.querySelectorAll('.nav-item[data-module]').forEach(el => {
     const m = el.dataset.module;
     if (m === '_admin') return;
-    el.style.display = can(m, 'view') ? '' : 'none';
+    if (!can(m, 'view')) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    const page = el.dataset.page;
+    const licensed = isModuleLicensed(page);
+    // Remove estado anterior de bloqueio
+    el.classList.remove('nav-locked');
+    const prevLock = el.querySelector('.nav-lock-icon');
+    if (prevLock) prevLock.remove();
+    if (!licensed) {
+      el.classList.add('nav-locked');
+      const lockSpan = document.createElement('span');
+      lockSpan.className = 'nav-lock-icon';
+      lockSpan.textContent = '🔒';
+      lockSpan.title = 'Módulo não incluído na sua licença';
+      el.appendChild(lockSpan);
+    }
   });
   // Esconder seções vazias (quando todos os filhos estão escondidos)
   document.querySelectorAll('.nav-section[data-section]').forEach(sec => {
@@ -1605,6 +1749,11 @@ function nav(page) {
     toast('Você não tem permissão para acessar este módulo', 'error');
     return;
   }
+  // Gate de licença de módulo
+  if (!isModuleLicensed(page)) {
+    _showModuleUpgradeModal(page);
+    return;
+  }
   if (page !== 'queue') _stopQueueRefresh();
   currentPage = page;
   document.getElementById('page-title').textContent = pageTitles[page]||page;
@@ -1618,6 +1767,28 @@ function nav(page) {
 }
 
 function refreshPage() { nav(currentPage); }
+
+function _showModuleUpgradeModal(page) {
+  const slug = PAGE_MODULE_SLUG[page] || '';
+  const pageName = (document.querySelector(`.nav-item[data-page="${page}"]`)?.textContent || page).trim().replace('🔒','').trim();
+  const categoryMap = { core:'Core', premium:'Premium', ai:'IA', enterprise:'Enterprise' };
+  const slugPrefix = slug.split('_')[0];
+  const category   = categoryMap[slugPrefix] || 'Premium';
+  const planSugest = slugPrefix === 'enterprise' ? 'Enterprise' : slugPrefix === 'ai' ? 'Pro ou Enterprise' : 'Pro';
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:420px;text-align:center">
+    <div style="font-size:40px;margin-bottom:12px">🔒</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">${pageName}</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:20px;line-height:1.6">
+      Este módulo <strong style="color:var(--text)">${category}</strong> não está incluído na licença atual desta marina.<br>
+      Para liberar o acesso, entre em contato com o administrador do sistema ou solicite upgrade para o plano <strong style="color:var(--accent)">${planSugest}</strong>.
+    </div>
+    <div style="padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:20px;font-size:12px;color:var(--text3);font-family:monospace">${slug}</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
+      <button class="btn btn-primary" onclick="closeModal();nav('settings')">Falar com suporte</button>
+    </div>
+  </div>`);
+}
 
 // ── HELPERS ──────────────────────────────────────────
 const fmt = n => n == null ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
@@ -8689,9 +8860,10 @@ function saRenderTable() {
   const statsAll = window._saStatsAll || [];
   const { col, dir } = window._saSort;
   const fmtBRL = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
-  const planBadge = p => {
-    const m = {professional:'badge-info', starter:'badge-purple', enterprise:'badge-success'};
-    return `<span class="badge ${m[p]||'badge-gray'}">${p||'—'}</span>`;
+  const licenseBadge = (name, slug) => {
+    const m = { pro:'badge-info', professional:'badge-info', starter:'badge-purple', enterprise:'badge-success', custom:'badge-warning' };
+    const cls = m[(slug||name||'').toLowerCase()] || 'badge-gray';
+    return name ? `<span class="badge ${cls}">${name}</span>` : `<span style="color:var(--text3);font-size:12px">—</span>`;
   };
 
   // Filtros
@@ -8702,13 +8874,13 @@ function saRenderTable() {
   // Mescla tenant + stats, aplica filtros
   let rows = tenants.map((t, i) => ({ t, st: statsAll[i] || {}, origIdx: i }));
   if (search)  rows = rows.filter(({t}) => t.name?.toLowerCase().includes(search) || t.slug?.toLowerCase().includes(search));
-  if (planF)   rows = rows.filter(({t}) => t.plan === planF);
+  if (planF)   rows = rows.filter(({st}) => (st.license_slug || '').toLowerCase() === planF);
   if (statusF) rows = rows.filter(({t}) => statusF === 'active' ? t.active : !t.active);
 
   const getVal = ({ t, st }) => {
     if (col === 'name')    return (t.name    || '').toLowerCase();
     if (col === 'slug')    return (t.slug    || '').toLowerCase();
-    if (col === 'plan')    return (t.plan    || '').toLowerCase();
+    if (col === 'plan')    return (st.license_slug || '').toLowerCase();
     if (col === 'clients') return Number(st.clients     || 0);
     if (col === 'users')   return Number(st.users       || 0);
     if (col === 'revenue') return Number(st.revenue_month ?? st.revenue ?? 0);
@@ -8729,7 +8901,7 @@ function saRenderTable() {
   const th  = (c, lbl) => `<th style="${thS}" onclick="saSort('${c}')">${lbl}${ind(c)}</th>`;
   const thead = document.querySelector('#sa-table thead tr');
   if (thead) thead.innerHTML =
-    th('name','Marina') + th('slug','Slug') + th('plan','Plano') +
+    th('name','Marina') + th('slug','Slug') + th('plan','Licença') +
     th('clients','Clientes') + th('users','Usuários') +
     th('revenue','Receita/Mês') + th('status','Status') +
     th('created','Criado em') + '<th>Ações</th>';
@@ -8746,15 +8918,19 @@ function saRenderTable() {
     const statusBadge = t.active
       ? '<span class="badge badge-success">Ativa</span>'
       : '<span class="badge badge-danger">Inativa</span>';
+    const noContractBadge = t.active && !t.has_active_contract
+      ? '<span class="badge badge-warning" style="font-size:10px;margin-left:4px" title="Nenhum contrato ativo cadastrado">⚠️ Sem contrato</span>'
+      : '';
     return `<tr class="row-link" onclick="saViewTenant(${origIdx})" title="Clique para ver detalhes">
       <td>
         <div style="display:flex;align-items:center;gap:8px">
           ${st?.marina_logo ? `<img src="${st.marina_logo}" style="width:28px;height:28px;object-fit:contain;border-radius:4px;flex-shrink:0">` : '<span style="width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:16px">⚓</span>'}
           <span style="font-weight:600;color:var(--text)">${t.name}</span>
+          ${noContractBadge}
         </div>
       </td>
       <td><code style="font-size:11px;color:var(--accent)">${t.slug}</code></td>
-      <td>${planBadge(t.plan)}</td>
+      <td>${licenseBadge(st.license_plan, st.license_slug)}</td>
       <td>${st?.clients ?? '—'}</td>
       <td>${st?.users   ?? '—'}</td>
       <td style="font-size:12px">
@@ -8805,7 +8981,9 @@ async function saLoadTenants() {
 
 async function saToggleActive(slug, currentlyActive) {
   if (!confirm(`${currentlyActive?'Desativar':'Ativar'} a marina "${slug}"?`)) return;
-  await saApi('PUT', `/superadmin/tenants/${slug}`, { active: !currentlyActive });
+  const r = await saApi('PUT', `/superadmin/tenants/${slug}`, { active: !currentlyActive });
+  if (!r || r.error) { toast(r?.error || 'Erro ao alterar status.', 'error'); return; }
+  toast(`Marina "${slug}" ${currentlyActive ? 'desativada' : 'ativada'} com sucesso.`);
   saLoadTenants();
 }
 
@@ -8844,7 +9022,7 @@ async function saViewTenant(idx) {
   const t  = window._saTenants[idx];
   const st = window._saStatsAll[idx] || {};
   const fmtBRL = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
-  const planLabel = {professional:'Professional',starter:'Starter',enterprise:'Enterprise'};
+  const licBadge = (name, slug) => { const m={pro:'badge-info',professional:'badge-info',starter:'badge-purple',enterprise:'badge-success',custom:'badge-warning'}; return name ? `<span class="badge ${m[(slug||name||'').toLowerCase()]||'badge-gray'}">${name}</span>` : ''; };
   const devUrl  = `http://localhost:3000?tenant=${t.slug}`;
   const _bd     = (window.BASE_DOMAIN && window.BASE_DOMAIN !== 'localhost') ? window.BASE_DOMAIN : 'marinaone.com.br';
   const prodUrl = `https://${t.slug}.${_bd}`;
@@ -8869,7 +9047,7 @@ async function saViewTenant(idx) {
             <code style="font-size:12px;color:var(--accent)">${t.slug}</code>
             <div style="display:flex;gap:6px;margin-top:6px">
               <span class="badge ${t.active?'badge-success':'badge-danger'}">${t.active?'Ativa':'Inativa'}</span>
-              <span class="badge badge-info">${planLabel[t.plan]||t.plan||'—'}</span>
+              ${licBadge(st.license_plan, st.license_slug)}
             </div>
           </div>
         </div>
@@ -8896,7 +9074,7 @@ async function saViewTenant(idx) {
           ${st.marina_phone ? `<div><span style="color:var(--text3)">Telefone:</span> ${st.marina_phone}</div>` : ''}
           ${st.marina_cnpj  ? `<div><span style="color:var(--text3)">CNPJ:</span> ${st.marina_cnpj}</div>` : ''}
           ${st.marina_city  ? `<div><span style="color:var(--text3)">Cidade/UF:</span> ${st.marina_city}${st.marina_state ? '/' + st.marina_state : ''}</div>` : ''}
-          <div><span style="color:var(--text3)">Licença:</span> ${planLabel[st.license_plan]||st.license_plan||'—'} ${st.license_until ? '(válida até '+new Date(st.license_until).toLocaleDateString('pt-BR')+')' : ''}</div>
+          <div><span style="color:var(--text3)">Licença:</span> ${st.license_plan ? `${st.license_plan}${st.license_until ? ' (válida até '+new Date(st.license_until).toLocaleDateString('pt-BR')+')' : ''}` : '<span style="color:var(--text3)">Sem licença ativa</span>'}</div>
           <div><span style="color:var(--text3)">Cadastro:</span> ${t.created_at ? new Date(t.created_at).toLocaleDateString('pt-BR') : '—'}</div>
         </div>
       </div>
@@ -9006,22 +9184,15 @@ function saEditTenant(idx) {
         <label>Nome da Marina *</label>
         <input id="se-name" value="${t.name||''}" placeholder="Nome da Marina">
       </div>
-      <div class="form-row cols2">
-        <div class="form-group">
-          <label>Plano</label>
-          <select id="se-plan">
-            <option value="starter"      ${t.plan==='starter'      ?'selected':''}>Starter</option>
-            <option value="professional" ${t.plan==='professional' ?'selected':''}>Professional</option>
-            <option value="enterprise"   ${t.plan==='enterprise'   ?'selected':''}>Enterprise</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Status</label>
-          <select id="se-active">
-            <option value="true"  ${t.active ?'selected':''}>✅ Ativa</option>
-            <option value="false" ${!t.active?'selected':''}>⏸️ Inativa</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="se-active">
+          <option value="true"  ${t.active ?'selected':''}>✅ Ativa</option>
+          <option value="false" ${!t.active?'selected':''}>⏸️ Inativa</option>
+        </select>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text3);margin-bottom:4px">
+        🔑 Para alterar o plano ou módulos desta marina, acesse <strong>Módulos &amp; Licenças → Licenças por Marina</strong>.
       </div>
 
       <div class="form-group" style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--surface2)">
@@ -9081,7 +9252,6 @@ function saEditTenant(idx) {
 
 async function saSaveEdit(slug, idx) {
   const name   = document.getElementById('se-name').value.trim();
-  const plan   = document.getElementById('se-plan').value;
   const active = document.getElementById('se-active').value === 'true';
   const errEl  = document.getElementById('sa-edit-err');
   errEl.style.display = 'none';
@@ -9097,7 +9267,7 @@ async function saSaveEdit(slug, idx) {
   const representative_role = document.getElementById('se-rep-role')?.value.trim()|| null;
   const representative_cpf  = document.getElementById('se-rep-cpf')?.value.trim() || null;
   const res = await saApi('PUT', `/superadmin/tenants/${slug}`, {
-    name, plan, active,
+    name, active,
     cnpj, address, city_state,
     representative_name, representative_role, representative_cpf,
   });
@@ -9121,10 +9291,7 @@ async function saSaveEdit(slug, idx) {
   btn.disabled = false; btn.textContent = '💾 Salvar';
   saCloseModal();
   saLoadTenants();
-  const t = document.createElement('div');
-  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#10b981;color:#fff;padding:12px 20px;border-radius:10px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4)';
-  t.textContent = `✅ Marina "${name}" atualizada!`;
-  document.body.appendChild(t); setTimeout(()=>t.remove(), 3500);
+  toast(`Marina "${name}" atualizada com sucesso!`);
 }
 
 // ── Funções auxiliares de logo no modal de edição ─────────────────────
@@ -9184,40 +9351,57 @@ async function saEditRemoveLogo(slug, idx) {
   document.body.appendChild(t); setTimeout(()=>t.remove(), 3000);
 }
 
-function saOpenNewTenantModal() {
+function saOpenNewTenantModal(proposalId) {
+  const p = proposalId ? (window._ppList || []).find(x => Number(x.id) === Number(proposalId)) : null;
+  const autoSlug = name => name.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+
+  const nameVal  = p ? p.lead_name      : '';
+  const slugVal  = p ? autoSlug(p.lead_name) : '';
+  const emailVal = p ? (p.lead_email    || '') : '';
+  const contactVal = p ? (p.lead_contact_name || '') : '';
+
+  const proposalBanner = p ? `
+    <div style="background:#f59e0b11;border:1px solid #f59e0b44;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#d97706">
+      ⚡ Originado da Proposta #${p.id} — após criar a marina, o contrato será gerado automaticamente.
+    </div>` : '';
+
   document.getElementById('modal-root').innerHTML = `
   <div class="modal-overlay" onclick="if(event.target===this)saCloseModal()">
     <div class="modal">
       <div class="modal-title">🏖️ Nova Marina</div>
       <div id="sa-modal-err" class="login-error" style="display:none"></div>
+      <input type="hidden" id="sa-proposal-ctx" value="${proposalId || ''}">
+      ${proposalBanner}
       <div class="form-row cols2">
         <div class="form-group">
           <label>Nome da Marina *</label>
-          <input id="sa-name" placeholder="Marina Porto Belo" oninput="saAutoSlug()">
+          <input id="sa-name" placeholder="Marina Porto Belo" value="${escHtml(nameVal)}" oninput="saAutoSlug()">
         </div>
         <div class="form-group">
           <label>Slug (identificador único) *</label>
-          <input id="sa-slug" placeholder="porto-belo" style="font-family:monospace">
+          <input id="sa-slug" placeholder="porto-belo" value="${escHtml(slugVal)}" style="font-family:monospace">
         </div>
       </div>
       <div class="form-row cols2">
         <div class="form-group">
           <label>Plano</label>
           <select id="sa-plan">
-            <option value="professional">Professional</option>
             <option value="starter">Starter</option>
+            <option value="pro">Pro</option>
             <option value="enterprise">Enterprise</option>
           </select>
         </div>
         <div class="form-group">
           <label>Nome do Administrador</label>
-          <input id="sa-admin-name" placeholder="Gerente da Marina">
+          <input id="sa-admin-name" placeholder="Gerente da Marina" value="${escHtml(contactVal)}">
         </div>
       </div>
       <div class="form-row cols2">
         <div class="form-group">
           <label>E-mail do Admin *</label>
-          <input id="sa-admin-email" type="email" placeholder="admin@marinaportobelo.com">
+          <input id="sa-admin-email" type="email" placeholder="admin@marinaportobelo.com" value="${escHtml(emailVal)}">
         </div>
         <div class="form-group">
           <label>Senha inicial do Admin *</label>
@@ -9240,7 +9424,7 @@ function saOpenNewTenantModal() {
         <div id="sa-logo-preview" style="margin-top:8px"></div>
       </div>
       <div style="background:var(--surface2);border-radius:8px;padding:12px;font-size:12px;color:var(--text3);margin-bottom:4px">
-        💡 O sistema criará automaticamente o banco isolado, as migrações, os usuários padrão e as configurações da marina. As vagas serão nomeadas S01…Sn (secas) e M01…Mn (molhadas).
+        💡 O sistema criará automaticamente o banco isolado, as migrações, os usuários padrão e as configurações da marina.
       </div>
       <div class="form-actions">
         <button class="btn btn-ghost" onclick="saCloseModal()">Cancelar</button>
@@ -9354,14 +9538,42 @@ async function saCreateTenant() {
     return;
   }
   saCloseModal();
+
+  // Se veio de proposta aprovada: cria contrato + marca proposta como converted
+  const pending = window._pendingContractProposal;
+  if (pending) {
+    window._pendingContractProposal = null;
+    btn.disabled = true; btn.textContent = '⏳ Criando contrato…';
+    const cr = await saApi('POST', '/superadmin/contracts', {
+      tenant_slug: slug,
+      plan: pending.plan,
+      monthly_value: pending.monthly_value,
+      start_date: pending.start_date,
+      end_date: pending.end_date || null,
+      status: pending.status || 'active',
+      notes: pending.notes || `Originado da Proposta #${pending.proposalId}`,
+      generate_charges: pending.genCharges !== false,
+      proposal_id: pending.proposalId,
+    });
+    if (cr?.error) {
+      toast(`Marina criada, mas erro ao criar contrato: ${cr.error}`, 'error');
+    } else {
+      // Marca proposta como converted (rota verifica que contrato existe e só atualiza status)
+      await saApi('PUT', '/superadmin/proposals/' + pending.proposalId + '/status', { status: 'converted' });
+      const vagasMsg2 = (spotsSeca + spotsMolhada) > 0 ? ` (${spotsSeca}S + ${spotsMolhada}M)` : '';
+      toast(`Marina "${name}" criada${vagasMsg2}! Contrato vinculado à Proposta #${pending.proposalId}.`);
+    }
+    saLoadTenants();
+    window._saContractsLoaded = false;
+    window._saPpLoaded = false;
+    window._saImplLoaded = false;
+    saLoadContracts();
+    return;
+  }
+
   saLoadTenants();
-  // Toast de sucesso
-  const t = document.createElement('div');
-  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#10b981;color:#fff;padding:14px 20px;border-radius:10px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4)';
   const vagasMsg = (spotsSeca + spotsMolhada) > 0 ? ` (${spotsSeca} secas + ${spotsMolhada} molhadas)` : '';
-  t.textContent = `✅ Marina "${name}" criada com sucesso!${vagasMsg}`;
-  document.body.appendChild(t);
-  setTimeout(()=>t.remove(), 4000);
+  toast(`Marina "${name}" criada com sucesso!${vagasMsg}`);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -9371,7 +9583,7 @@ window._saActiveTab = 'operacional';
 
 function saTab(tab) {
   window._saActiveTab = tab;
-  ['operacional','contratos','financeiro','analytics','configuracoes'].forEach(t => {
+  ['operacional','contratos','financeiro','analytics','configuracoes','propostas','licencas'].forEach(t => {
     const el = document.getElementById('sa-tab-' + t);
     if (el) el.style.display = t === tab ? '' : 'none';
     const btn = document.getElementById('sa-tab-btn-' + t);
@@ -9384,6 +9596,1502 @@ function saTab(tab) {
   if (tab === 'financeiro'    && !window._saFinLoaded)       saLoadFinanceiro();
   if (tab === 'analytics'     && !window._saAnlLoaded)       saLoadAnalytics();
   if (tab === 'configuracoes' && !window._saCfgLoaded)       saLoadSettings();
+  if (tab === 'propostas'     && !window._saPpLoaded)        ppLoad();
+  if (tab === 'licencas'      && !window._saLicLoaded)       licInit();
+}
+
+// ════════════════════════════════════════════════════════════
+//  SA — MÓDULOS & LICENÇAS
+// ════════════════════════════════════════════════════════════
+window._saLicLoaded  = false;
+window._licModules   = [];   // catálogo completo
+window._licTypes     = [];   // tipos de licença
+window._licSubActive = 'modulos';
+
+const LIC_CATEGORY_LABELS = { core:'Core', premium:'Premium', ai:'IA', enterprise:'Enterprise' };
+const LIC_CATEGORY_COLORS = { core:'var(--accent)', premium:'#a78bfa', ai:'#34d399', enterprise:'#f59e0b' };
+const LIC_STATUS_LABELS   = { active:'Ativo', suspended:'Suspenso', expired:'Expirado', trial:'Trial' };
+const LIC_STATUS_BADGE    = { active:'badge-success', suspended:'badge-warning', expired:'badge-gray', trial:'badge-info' };
+
+async function licInit() {
+  window._saLicLoaded = true;
+  await Promise.all([licLoadModules(), licLoadTypes()]);
+  licSubTab('modulos');
+}
+
+function licSubTab(sub) {
+  window._licSubActive = sub;
+  ['modulos','planos'].forEach(s => {
+    const el  = document.getElementById('lic-sub-' + s);
+    const btn = document.getElementById('lic-sub-btn-' + s);
+    if (el)  el.style.display     = s === sub ? '' : 'none';
+    if (btn) { btn.style.color = s === sub ? 'var(--accent)' : 'var(--text3)'; btn.style.borderBottom = s === sub ? '2px solid var(--accent)' : '2px solid transparent'; }
+  });
+}
+
+
+// ── Módulos ──────────────────────────────────────────────────────────
+async function licLoadModules() {
+  try {
+    window._licModules = await saApi('GET', '/superadmin/modules');
+    licRenderModules();
+  } catch(e) { licMsg('modules', 'Erro ao carregar módulos: ' + e.message, 'danger'); }
+}
+
+function licRenderModules() {
+  const grid = document.getElementById('lic-modules-grid');
+  if (!grid) return;
+  const cats = ['core','premium','ai','enterprise'];
+  let html = '';
+  cats.forEach(cat => {
+    const mods = window._licModules.filter(m => m.category === cat);
+    if (!mods.length) return;
+    html += `<div style="grid-column:1/-1;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${LIC_CATEGORY_COLORS[cat]};margin-top:8px;padding-bottom:6px;border-bottom:1px solid var(--border)">${LIC_CATEGORY_LABELS[cat]}</div>`;
+    mods.forEach(m => {
+      html += `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700;margin-bottom:4px">${m.name}</div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${m.description||''}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <span style="font-size:10px;padding:2px 8px;border-radius:100px;background:${LIC_CATEGORY_COLORS[m.category]}22;color:${LIC_CATEGORY_COLORS[m.category]};font-weight:600">${LIC_CATEGORY_LABELS[m.category]||m.category}</span>
+                ${m.is_future ? '<span style="font-size:10px;padding:2px 8px;border-radius:100px;background:#7c3aed22;color:#a78bfa;font-weight:600">⏳ Futuro</span>' : ''}
+                ${m.has_ext_cost ? '<span style="font-size:10px;padding:2px 8px;border-radius:100px;background:#fef3c722;color:#f59e0b;font-weight:600">Custo externo</span>' : ''}
+                <span class="badge ${m.active ? 'badge-success' : 'badge-gray'}" style="font-size:10px">${m.active ? 'Ativo' : 'Inativo'}</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="licEditModule(${m.id})" title="Editar">✏️</button>
+              <button class="btn btn-ghost btn-sm" onclick="licToggleModule(${m.id},${!m.active})" title="${m.active?'Desativar':'Ativar'}">${m.active?'⏸':'▶️'}</button>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:8px;font-family:monospace">${m.slug}</div>
+        </div>`;
+    });
+  });
+  grid.innerHTML = html;
+}
+
+async function licToggleModule(id, active) {
+  try {
+    await saApi('PUT', '/superadmin/modules/' + id, { active });
+    toast(active ? 'Módulo ativado.' : 'Módulo desativado.');
+    await licLoadModules();
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+function licEditModule(id) {
+  const m = window._licModules.find(x => x.id == id);
+  if (!m) return;
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:460px">
+    <div class="modal-title">✏️ Informações do Módulo</div>
+    <div style="padding:12px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Identificador (imutável — gerenciado via código)</div>
+      <code style="font-size:13px;font-weight:600">${m.slug}</code>
+      <div style="font-size:13px;font-weight:600;margin-top:6px">${m.name}</div>
+    </div>
+    <form onsubmit="event.preventDefault();licSaveEditModule(${id})" style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label>Descrição</label>
+        <input id="lem-desc" value="${m.description||''}" placeholder="Descrição exibida no catálogo">
+      </div>
+      <div class="form-group">
+        <label>Categoria</label>
+        <select id="lem-cat">
+          ${['core','premium','ai','enterprise'].map(c=>`<option value="${c}"${m.category===c?' selected':''}>${LIC_CATEGORY_LABELS[c]}</option>`).join('')}
+        </select>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <input id="lem-cost" type="checkbox" ${m.has_ext_cost?'checked':''} style="width:16px;height:16px">
+        <div>
+          <div style="font-size:13px;font-weight:600">Gera custo externo</div>
+          <div style="font-size:11px;color:var(--text3)">Módulos que consomem APIs pagas (ex: Claude API)</div>
+        </div>
+      </label>
+      <div class="form-actions" style="margin:0;padding-top:4px">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">💾 Salvar</button>
+      </div>
+    </form>
+  </div>`);
+}
+
+async function licSaveEditModule(id) {
+  try {
+    await saApi('PUT', '/superadmin/modules/' + id, {
+      description:  document.getElementById('lem-desc').value.trim(),
+      category:     document.getElementById('lem-cat').value,
+      has_ext_cost: document.getElementById('lem-cost').checked,
+    });
+    closeModal();
+    await licLoadModules();
+    toast('Módulo atualizado');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+// ── Tipos de Licença ─────────────────────────────────────────────────
+async function licLoadTypes() {
+  try {
+    window._licTypes = await saApi('GET', '/superadmin/license-types');
+    licRenderTypes();
+  } catch(e) { licMsg('types', 'Erro ao carregar tipos: ' + e.message, 'danger'); }
+}
+
+function licRenderTypes() {
+  const list = document.getElementById('lic-types-list');
+  if (!list) return;
+  if (!window._licTypes.length) { list.innerHTML = '<div style="color:var(--text3);text-align:center;padding:32px">Nenhum tipo de licença cadastrado</div>'; return; }
+  list.innerHTML = window._licTypes.map(t => {
+    const total = (t.modules||[]).reduce((s,m) => s + parseFloat(m.percent_share||0), 0);
+    const isOk  = Math.abs(total - 100) < 0.5;
+    return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:18px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div>
+              <div style="font-size:15px;font-weight:700">${t.name} <span style="font-size:11px;color:var(--text3);font-family:monospace">${t.slug}</span></div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">${t.description||''}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px">
+            <div style="text-align:right">
+              <div style="font-size:16px;font-weight:700;color:var(--accent)">R$ ${Number(t.price_monthly||0).toFixed(0)}<span style="font-size:11px;color:var(--text3)">/mês</span></div>
+              <div style="font-size:11px;color:var(--text3)">R$ ${Number(t.price_yearly||0).toFixed(0)}/ano</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:18px;font-weight:700;color:${t.tenant_count>0?'var(--accent)':'var(--text3)'}">${t.tenant_count}</div>
+              <div style="font-size:10px;color:var(--text3)">marina${t.tenant_count!==1?'s':''}</div>
+            </div>
+            <span class="badge ${t.active?'badge-success':'badge-gray'}">${t.active?'Ativo':'Inativo'}</span>
+            <button class="btn btn-ghost btn-sm" onclick="licEditType(${t.id})">✏️ Editar</button>
+            <button class="btn btn-primary btn-sm" onclick="licManageModules(${t.id})">📦 Módulos</button>
+            <button class="btn btn-danger btn-sm" onclick="licDeleteType(${t.id})" ${t.tenant_count>0?'disabled title="Em uso por '+t.tenant_count+' marina(s) — revogue as licenças antes de excluir"':''}>🗑️</button>
+          </div>
+        </div>
+        <div style="padding:14px 20px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span style="font-size:11px;color:var(--text3)">${(t.modules||[]).length} módulos</span>
+            <span style="font-size:11px;${isOk?'color:#34d399':'color:#f87171'}">${isOk?'✓ Distribuição 100%':'⚠ Total: '+total.toFixed(1)+'%'}</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${(t.modules||[]).map(m => `
+              <div style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:${LIC_CATEGORY_COLORS[m.category]}15;border:1px solid ${LIC_CATEGORY_COLORS[m.category]}33;border-radius:100px">
+                <span style="font-size:11px;color:${LIC_CATEGORY_COLORS[m.category]};font-weight:600">${m.name}</span>
+                <span style="font-size:10px;color:var(--text3)">${parseFloat(m.percent_share||0).toFixed(1)}%</span>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function licOpenNewType() {
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:500px">
+    <div class="modal-title">➕ Novo Tipo de Licença</div>
+    <form onsubmit="event.preventDefault();licSaveNewType()" style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label class="required">Slug</label>
+          <input id="lnt-slug" required placeholder="ex: starter_plus" pattern="[a-z0-9_]+" title="Apenas letras minúsculas, números e _">
+        </div>
+        <div class="form-group">
+          <label class="required">Nome</label>
+          <input id="lnt-name" required placeholder="Nome do plano">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Descrição</label>
+        <input id="lnt-desc" placeholder="Descrição curta do plano">
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>Preço mensal (R$)</label>
+          <input id="lnt-pm" type="number" value="0" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Preço anual (R$)</label>
+          <input id="lnt-py" type="number" value="0" min="0" step="0.01">
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <input id="lnt-custom" type="checkbox" style="width:16px;height:16px">
+        <div>
+          <div style="font-size:13px;font-weight:600">Licença customizada</div>
+          <div style="font-size:11px;color:var(--text3)">Módulos e preço negociados individualmente por marina</div>
+        </div>
+      </label>
+      <div class="form-actions" style="margin:0;padding-top:4px">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">➕ Criar Tipo</button>
+      </div>
+    </form>
+  </div>`);
+}
+
+async function licSaveNewType() {
+  const slug = document.getElementById('lnt-slug').value.trim();
+  const name = document.getElementById('lnt-name').value.trim();
+  if (!slug || !name) { toast('Slug e nome são obrigatórios', 'error'); return; }
+  try {
+    await saApi('POST', '/superadmin/license-types', {
+      slug, name,
+      description:   document.getElementById('lnt-desc').value.trim(),
+      price_monthly: parseFloat(document.getElementById('lnt-pm').value) || 0,
+      price_yearly:  parseFloat(document.getElementById('lnt-py').value) || 0,
+      is_custom:     document.getElementById('lnt-custom').checked,
+    });
+    closeModal();
+    await licLoadTypes();
+    toast('Tipo de licença criado');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+function licEditType(id) {
+  const t = window._licTypes.find(x => x.id == id);
+  if (!t) return;
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:500px">
+    <div class="modal-title">✏️ Editar Tipo de Licença</div>
+    <form onsubmit="event.preventDefault();licSaveEditType(${id})" style="display:flex;flex-direction:column;gap:14px">
+      <div style="padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Slug (imutável)</div>
+        <code style="font-size:13px;font-weight:600">${t.slug}</code>
+      </div>
+      <div class="form-group">
+        <label class="required">Nome</label>
+        <input id="let-name" required value="${t.name}">
+      </div>
+      <div class="form-group">
+        <label>Descrição</label>
+        <input id="let-desc" value="${t.description||''}">
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>Preço mensal (R$)</label>
+          <input id="let-pm" type="number" value="${t.price_monthly||0}" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Preço anual (R$)</label>
+          <input id="let-py" type="number" value="${t.price_yearly||0}" min="0" step="0.01">
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <input id="let-active" type="checkbox" ${t.active?'checked':''} style="width:16px;height:16px">
+        <div>
+          <div style="font-size:13px;font-weight:600">Tipo ativo</div>
+          <div style="font-size:11px;color:var(--text3)">Tipos inativos não aparecem na atribuição de licença</div>
+        </div>
+      </label>
+      <div class="form-actions" style="margin:0;padding-top:4px">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">💾 Salvar</button>
+      </div>
+    </form>
+  </div>`);
+}
+
+async function licSaveEditType(id) {
+  try {
+    await saApi('PUT', '/superadmin/license-types/' + id, {
+      name:          document.getElementById('let-name').value.trim(),
+      description:   document.getElementById('let-desc').value.trim(),
+      price_monthly: parseFloat(document.getElementById('let-pm').value) || 0,
+      price_yearly:  parseFloat(document.getElementById('let-py').value) || 0,
+      active:        document.getElementById('let-active').checked,
+    });
+    closeModal();
+    await licLoadTypes();
+    toast('Tipo de licença atualizado');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+function licDeleteType(id) {
+  const t = window._licTypes.find(x => x.id == id);
+  if (!t) return;
+  if (t.tenant_count > 0) {
+    toast(`Não é possível excluir: ${t.tenant_count} marina(s) usam esta licença`, 'error');
+    return;
+  }
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:440px">
+    <div class="modal-title">🗑️ Excluir Tipo de Licença</div>
+    <div style="padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:16px">
+      <div style="font-size:14px;font-weight:700">${escHtml(t.name)}</div>
+      <code style="font-size:12px;color:var(--text3)">${t.slug}</code>
+    </div>
+    <p style="font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:16px">
+      Esta ação é <strong>irreversível</strong>. O tipo de licença e todos os seus vínculos de módulos serão excluídos permanentemente.
+    </p>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="licConfirmDeleteType(${id})">🗑️ Confirmar Exclusão</button>
+    </div>
+  </div>`);
+}
+
+async function licConfirmDeleteType(id) {
+  try {
+    await saApi('DELETE', '/superadmin/license-types/' + id);
+    closeModal();
+    await licLoadTypes();
+    toast('Tipo de licença excluído');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+function licManageModules(typeId) {
+  const t   = window._licTypes.find(x => x.id == typeId);
+  const all = window._licModules.filter(m => m.active);
+  const sel = new Map((t.modules||[]).map(m => [m.id, parseFloat(m.percent_share||0)]));
+
+  const rows = all.map(m => {
+    const pct = sel.get(m.id) || 0;
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:10px 12px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0">
+          <input type="checkbox" class="lmm-chk" data-id="${m.id}" ${sel.has(m.id)?'checked':''} onchange="licMmmToggle(${m.id})" style="width:15px;height:15px;flex-shrink:0">
+          <span style="font-size:13px;font-weight:500">${m.name}</span>
+          <span style="font-size:10px;padding:1px 7px;border-radius:100px;background:${LIC_CATEGORY_COLORS[m.category]}20;color:${LIC_CATEGORY_COLORS[m.category]};font-weight:600">${LIC_CATEGORY_LABELS[m.category]}</span>
+        </label>
+      </td>
+      <td style="padding:10px 12px;text-align:right;width:130px">
+        <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+          <input type="number" id="lmm-pct-${m.id}" class="lmm-pct" data-id="${m.id}" value="${pct.toFixed(3)}" step="0.001" min="0" max="100"
+            style="width:76px;text-align:right;padding:5px 8px"
+            oninput="licMmmUpdateTotal()">
+          <span style="font-size:12px;color:var(--text3);flex-shrink:0">%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  modal(`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-title">📦 Módulos — ${t.name}</div>
+    <div style="font-size:12px;color:var(--text3);margin:-12px 0 14px">Selecione os módulos e defina o % de distribuição de valor. A soma deve ser 100%.</div>
+    <div style="max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;position:sticky;top:0;background:var(--bg)">Módulo</th>
+          <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;position:sticky;top:0;background:var(--bg);width:130px">% do valor</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:13px">Total: <strong id="lmm-total" style="color:var(--accent);font-size:15px">0%</strong>
+        <span id="lmm-total-warn" style="font-size:11px;color:#f87171;margin-left:6px;display:none">⚠ Deve somar 100%</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="licMmmDistribuir()">⚖️ Distribuir igualmente</button>
+    </div>
+    <div class="form-actions" style="margin:0;padding-top:12px">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="licSaveModules(${typeId})">💾 Salvar Distribuição</button>
+    </div>
+  </div>`);
+  licMmmUpdateTotal();
+}
+
+function licMmmToggle(id) {
+  const chk = document.querySelector(`.lmm-chk[data-id="${id}"]`);
+  const inp = document.getElementById('lmm-pct-' + id);
+  if (inp) inp.disabled = !chk.checked;
+  licMmmUpdateTotal();
+}
+
+function licMmmUpdateTotal() {
+  const chks = document.querySelectorAll('.lmm-chk:checked');
+  let total = 0;
+  chks.forEach(c => { const v = parseFloat(document.getElementById('lmm-pct-' + c.dataset.id)?.value) || 0; total += v; });
+  const el = document.getElementById('lmm-total');
+  const warn = document.getElementById('lmm-total-warn');
+  if (el) { el.textContent = total.toFixed(2) + '%'; el.style.color = Math.abs(total-100)<0.5 ? '#34d399' : 'var(--accent)'; }
+  if (warn) warn.style.display = Math.abs(total-100) < 0.5 ? 'none' : '';
+}
+
+function licMmmDistribuir() {
+  const chks = Array.from(document.querySelectorAll('.lmm-chk:checked'));
+  if (!chks.length) return;
+  const pct = (100 / chks.length).toFixed(3);
+  chks.forEach(c => { const inp = document.getElementById('lmm-pct-' + c.dataset.id); if (inp) inp.value = pct; });
+  licMmmUpdateTotal();
+}
+
+async function licSaveModules(typeId) {
+  const chks = Array.from(document.querySelectorAll('.lmm-chk:checked'));
+  const modules = chks.map(c => ({ module_id: parseInt(c.dataset.id), percent_share: parseFloat(document.getElementById('lmm-pct-' + c.dataset.id)?.value) || 0 }));
+  const total = modules.reduce((s,m) => s + m.percent_share, 0);
+  if (Math.abs(total - 100) > 1) {
+    if (!confirm(`A soma dos percentuais é ${total.toFixed(1)}% (esperado 100%). Deseja salvar mesmo assim?`)) return;
+  }
+  try {
+    await saApi('PUT', '/superadmin/license-types/' + typeId + '/modules', { modules });
+    closeModal();
+    await licLoadTypes();
+    toast('Distribuição de módulos salva!');
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+
+async function licOpenAssignLicense(slug) {
+  if (!window._licTypes.length) await _ensureLicTypes();
+  const types = window._licTypes.filter(t => t.active);
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:520px">
+    <div class="modal-title">🔑 Atribuir Licença</div>
+    <div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);margin-bottom:16px;font-size:12px;color:var(--text3)">Marina: <strong style="color:var(--text);font-family:monospace">${slug}</strong></div>
+    <form onsubmit="event.preventDefault();licSaveAssign('${slug}')" style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="required">Tipo de Licença</label>
+        <select id="lal-type">
+          ${types.map(t=>`<option value="${t.id}">${t.name} — R$ ${Number(t.price_monthly||0).toFixed(0)}/mês</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label class="required">Data de início</label>
+          <input id="lal-start" type="date" required value="${new Date().toISOString().slice(0,10)}">
+        </div>
+        <div class="form-group">
+          <label>Término <span style="font-weight:400;color:var(--text3)">(vazio = indeterminado)</span></label>
+          <input id="lal-end" type="date">
+        </div>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>Cobrança</label>
+          <select id="lal-period">
+            <option value="monthly">Mensal</option>
+            <option value="yearly">Anual</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status inicial</label>
+          <select id="lal-status">
+            <option value="active">Ativo</option>
+            <option value="trial">Trial</option>
+            <option value="suspended">Suspenso</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notas internas</label>
+        <input id="lal-notes" placeholder="Observações sobre esta licença...">
+      </div>
+      <div class="form-actions" style="margin:0;padding-top:4px">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">🔑 Atribuir Licença</button>
+      </div>
+    </form>
+  </div>`);
+}
+
+async function licSaveAssign(slug) {
+  try {
+    await saApi('POST', '/superadmin/tenants/' + slug + '/license', {
+      license_type_id: parseInt(document.getElementById('lal-type').value),
+      starts_at:       document.getElementById('lal-start').value,
+      ends_at:         document.getElementById('lal-end').value || null,
+      billing_period:  document.getElementById('lal-period').value,
+      status:          document.getElementById('lal-status').value,
+      notes:           document.getElementById('lal-notes').value.trim() || null,
+    });
+    closeModal();
+    toast('Licença atribuída com sucesso!');
+    window._saContractsLoaded = false;
+    saLoadContracts();
+    await licLoadTypes();
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+function licRevokeLicense(slug) {
+  const t = (window._saContracts || []).find(x => x.tenant_slug === slug);
+  const name = t ? (t.tenant_name || slug) : slug;
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
+    <div class="modal-title">🚫 Revogar Licença</div>
+    <p style="font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:16px">
+      Revogar a licença de <strong>${escHtml(name)}</strong>?<br>
+      A marina ficará sem licença ativa e perderá acesso aos módulos premium imediatamente.
+    </p>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="licConfirmRevoke('${slug}')">🚫 Confirmar Revogação</button>
+    </div>
+  </div>`);
+}
+
+async function licConfirmRevoke(slug) {
+  try {
+    await saApi('DELETE', '/superadmin/tenants/' + slug + '/license');
+    closeModal();
+    toast('Licença revogada');
+    window._saContractsLoaded = false;
+    saLoadContracts();
+    await licLoadTypes();
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+async function licOpenAddOverride(slug) {
+  if (!window._licModules.length) await licLoadModules();
+  const mods = window._licModules.filter(m => m.active);
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+    <div class="modal-title">⚡ Override de Módulo</div>
+    <div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);margin-bottom:16px;font-size:12px;color:var(--text3)">Marina: <strong style="color:var(--text);font-family:monospace">${slug}</strong></div>
+    <form onsubmit="event.preventDefault();licSaveOverride('${slug}')" style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="required">Módulo</label>
+        <select id="lao-mod">
+          ${mods.map(m=>`<option value="${m.id}">${m.name} — ${LIC_CATEGORY_LABELS[m.category]}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="required">Ação</label>
+        <select id="lao-grant">
+          <option value="true">✓ Conceder — adicionar módulo a esta marina</option>
+          <option value="false">✗ Revogar — remover módulo desta marina</option>
+        </select>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>Expira em <span style="font-weight:400;color:var(--text3)">(vazio = permanente)</span></label>
+          <input id="lao-exp" type="date">
+        </div>
+        <div class="form-group">
+          <label>Motivo</label>
+          <input id="lao-reason" placeholder="Justificativa">
+        </div>
+      </div>
+      <div class="form-actions" style="margin:0;padding-top:4px">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">⚡ Salvar Override</button>
+      </div>
+    </form>
+  </div>`);
+}
+
+async function licSaveOverride(slug) {
+  try {
+    await saApi('POST', '/superadmin/tenants/' + slug + '/license/override', {
+      module_id:  parseInt(document.getElementById('lao-mod').value),
+      granted:    document.getElementById('lao-grant').value === 'true',
+      expires_at: document.getElementById('lao-exp').value || null,
+      reason:     document.getElementById('lao-reason').value.trim() || null,
+    });
+    closeModal();
+    toast('Override salvo com sucesso!');
+    // Recarrega painel de licença técnica do contrato aberto, se houver
+    const c = (window._saContracts||[]).find(x => x.tenant_slug === slug);
+    if (c) saLoadTechLic(c.id, slug);
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+async function licRemoveOverride(slug, moduleId) {
+  if (!confirm('Remover este override?')) return;
+  try {
+    await saApi('DELETE', '/superadmin/tenants/' + slug + '/license/override/' + moduleId);
+    toast('Override removido com sucesso!');
+    const c = (window._saContracts||[]).find(x => x.tenant_slug === slug);
+    if (c) saLoadTechLic(c.id, slug);
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+function licMsg(area, msg, type) {
+  const el = document.getElementById('lic-' + area + '-msg');
+  if (!el) return;
+  el.style.display = '';
+  el.innerHTML = `<div class="badge badge-${type==='danger'?'danger':'success'}" style="padding:8px 12px;font-size:12px">${msg}</div>`;
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// ════════════════════════════════════════════════════════════
+//  SA — PROPOSTAS COMERCIAIS (FASE 2)
+// ════════════════════════════════════════════════════════════
+window._saPpLoaded   = false;
+window._ppList       = [];
+
+const PP_STATUS_LABEL = {
+  draft:       'Rascunho',
+  sent:        'Enviada',
+  negotiation: 'Negociação',
+  approved:    'Aprovada',
+  converted:   'Convertida',
+  rejected:    'Rejeitada',
+};
+const PP_STATUS_BADGE = {
+  draft:       'badge-gray',
+  sent:        'badge-info',
+  negotiation: 'badge-warning',
+  approved:    'badge-success',
+  converted:   'badge-success',
+  rejected:    'badge-danger',
+};
+const PP_KANBAN_COLS = [
+  { key:'draft',       label:'Rascunho',   color:'#6b7280' },
+  { key:'sent',        label:'Enviada',    color:'#3b82f6' },
+  { key:'negotiation', label:'Negociação', color:'#f59e0b' },
+  { key:'approved',    label:'Aprovada',   color:'#10b981' },
+  { key:'converted',   label:'Convertida', color:'#059669' },
+  { key:'rejected',    label:'Rejeitada',  color:'#ef4444' },
+];
+
+async function ppLoad() {
+  window._saPpLoaded = true;
+  try {
+    const [list, types] = await Promise.all([
+      saApi('GET', '/superadmin/proposals'),
+      saApi('GET', '/superadmin/license-types'),
+    ]);
+    window._ppList   = list;
+    window._ppTypes  = types;
+    ppRenderKpis(list);
+    ppRenderKanban(list);
+  } catch(e) { toast('Erro ao carregar propostas: ' + e.message, 'danger'); }
+}
+
+function ppRenderKpis(list) {
+  const total   = list.length;
+  const active  = list.filter(p => !['converted','rejected'].includes(p.status)).length;
+  const conv    = list.filter(p => p.status === 'converted').length;
+  const mrr     = list.filter(p => p.status === 'converted')
+                      .reduce((s, p) => s + parseFloat(p.final_value || 0), 0);
+  document.getElementById('pp-kpis').innerHTML = `
+    <div class="card" style="padding:16px;text-align:center">
+      <div style="font-size:24px;font-weight:700">${total}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Total de Propostas</div>
+    </div>
+    <div class="card" style="padding:16px;text-align:center">
+      <div style="font-size:24px;font-weight:700;color:#f59e0b">${active}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Em Andamento</div>
+    </div>
+    <div class="card" style="padding:16px;text-align:center">
+      <div style="font-size:24px;font-weight:700;color:#10b981">${conv}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Convertidas</div>
+    </div>
+    <div class="card" style="padding:16px;text-align:center">
+      <div style="font-size:24px;font-weight:700;color:var(--accent)">R$ ${mrr.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">MRR Convertido</div>
+    </div>
+  `;
+}
+
+function ppRenderKanban(list) {
+  const kanban = document.getElementById('pp-kanban');
+  kanban.innerHTML = PP_KANBAN_COLS.map(col => {
+    const cards = list.filter(p => p.status === col.key);
+    return `
+      <div style="min-width:220px;flex:1;max-width:280px;display:flex;flex-direction:column;gap:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div style="width:10px;height:10px;border-radius:50%;background:${col.color}"></div>
+          <div style="font-size:13px;font-weight:700">${col.label}</div>
+          <div style="margin-left:auto;background:${col.color}22;color:${col.color};border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700">${cards.length}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-height:200px">
+          ${cards.length === 0
+            ? `<div style="border:1px dashed var(--border);border-radius:8px;padding:24px 12px;text-align:center;color:var(--text3);font-size:12px">Nenhuma proposta</div>`
+            : cards.map(p => ppCardHtml(p)).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function ppCardHtml(p) {
+  const val = parseFloat(p.final_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const ago = ppRelDate(p.created_at);
+  return `
+    <div onclick="ppOpenDetail(${p.id})" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;transition:border .15s"
+         onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.lead_name)}</div>
+      ${p.lead_city_state ? `<div style="font-size:11px;color:var(--text3);margin-bottom:6px">📍 ${escHtml(p.lead_city_state)}</div>` : ''}
+      <div style="font-size:14px;font-weight:700;color:var(--accent)">R$ ${val}<span style="font-size:10px;color:var(--text3);font-weight:400">/mês</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+        <div style="font-size:10px;color:var(--text3)">${ago}</div>
+        <div style="font-size:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2px 6px">${p.total_boats || 0} emb.</div>
+      </div>
+    </div>`;
+}
+
+function ppRelDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), now = new Date();
+  const diff = Math.floor((now - d) / 86400000);
+  if (diff === 0) return 'Hoje';
+  if (diff === 1) return 'Ontem';
+  if (diff < 30) return `${diff}d atrás`;
+  return d.toLocaleDateString('pt-BR');
+}
+
+function escHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Detail Modal helpers ──────────────────────────────────────
+function ppPipelineBar(status) {
+  const stages = [
+    { key:'draft',       label:'Rascunho'  },
+    { key:'sent',        label:'Enviada'   },
+    { key:'negotiation', label:'Negociação'},
+    { key:'approved',    label:'Aprovada'  },
+    { key:'converted',   label:'Convertida'},
+  ];
+  const rejected = status === 'rejected';
+  const order    = stages.map(s => s.key);
+  const curIdx   = rejected ? -1 : order.indexOf(status);
+
+  const stepsHtml = stages.map((s, i) => {
+    const past    = !rejected && i < curIdx;
+    const current = !rejected && i === curIdx;
+    const dot     = past ? '#10b981' : current ? 'var(--accent)' : 'var(--border)';
+    const line    = (i > 0 && (past || current)) ? (i <= curIdx ? '#10b981' : 'var(--border)') : 'var(--border)';
+    const linePrev= i > 0 ? (past ? '#10b981' : 'var(--border)') : null;
+    const txt     = past || current ? 'var(--text)' : 'var(--text3)';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;position:relative">
+      ${i > 0 ? `<div style="position:absolute;top:7px;right:50%;width:100%;height:2px;background:${linePrev};z-index:0"></div>` : ''}
+      <div style="width:16px;height:16px;border-radius:50%;background:${dot};display:flex;align-items:center;justify-content:center;z-index:1;font-size:9px;color:#fff;flex-shrink:0">${past ? '✓' : ''}</div>
+      <div style="font-size:10px;color:${txt};text-align:center;line-height:1.2">${s.label}</div>
+    </div>`;
+  });
+
+  if (rejected) {
+    stepsHtml.push(`<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:0 0 auto">
+      <div style="width:16px;height:16px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;z-index:1;font-size:9px;color:#fff">✕</div>
+      <div style="font-size:10px;color:#ef4444;text-align:center;line-height:1.2">Rejeitada</div>
+    </div>`);
+  }
+
+  return `<div style="display:flex;align-items:flex-start;gap:0;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:16px">${stepsHtml.join('')}</div>`;
+}
+
+function ppStageBlock(p) {
+  const rows = [];
+  if (p.sent_at)           rows.push(`<div style="font-size:12px;display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text3)">Enviada em</span><span>${new Date(p.sent_at).toLocaleString('pt-BR')}</span></div>`);
+  if (p.sent_to)           rows.push(`<div style="font-size:12px;display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text3)">Destinatário</span><span>${escHtml(p.sent_to)}</span></div>`);
+  if (p.negotiation_notes) rows.push(`<div style="font-size:12px;padding:4px 0"><div style="color:var(--text3);margin-bottom:4px">Notas de negociação</div><div style="padding:8px;background:var(--bg);border-radius:4px;font-size:12px;line-height:1.5">${escHtml(p.negotiation_notes)}</div></div>`);
+  if (p.approved_at)       rows.push(`<div style="font-size:12px;display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text3)">Aprovada em</span><span style="color:#10b981">${new Date(p.approved_at).toLocaleString('pt-BR')}</span></div>`);
+  if (p.rejection_reason)  rows.push(`<div style="font-size:12px;padding:4px 0"><div style="color:#ef4444;margin-bottom:4px">Motivo da rejeição</div><div style="padding:8px;background:var(--bg);border-radius:4px;font-size:12px;color:#ef4444;line-height:1.5">${escHtml(p.rejection_reason)}</div></div>`);
+  if (p.rejected_at)       rows.push(`<div style="font-size:12px;display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text3)">Rejeitada em</span><span style="color:#ef4444">${new Date(p.rejected_at).toLocaleString('pt-BR')}</span></div>`);
+  if (!rows.length) return '';
+  return `<div style="margin-top:16px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">Andamento</div>
+    ${rows.join('')}
+  </div>`;
+}
+
+function ppActionButtons(p) {
+  const id = p.id; const st = p.status;
+  const btns = [`<button class="btn btn-ghost btn-sm" onclick="ppPreview(${id})">🖨️ Preview</button>`];
+  if (st === 'draft') {
+    btns.push(`<button class="btn btn-primary btn-sm" onclick="ppEditProposal(${id})">✏️ Editar</button>`);
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="ppTransition(${id},'sent')">📧 Enviar →</button>`);
+  }
+  if (st === 'sent') {
+    if (p.signature_token) btns.push(`<button class="btn btn-ghost btn-sm" onclick="ppCopyLink('${p.signature_token}')">📋 Copiar Link</button>`);
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="ppTransition(${id},'negotiation')">🤝 Negociação →</button>`);
+  }
+  if (st === 'negotiation') {
+    if (p.signature_token) btns.push(`<button class="btn btn-ghost btn-sm" onclick="ppCopyLink('${p.signature_token}')">📋 Copiar Link</button>`);
+    btns.push(`<button class="btn btn-primary btn-sm" onclick="ppTransition(${id},'approved')">✅ Aprovar →</button>`);
+  }
+  if (st === 'approved') {
+    if (p.signature_token) btns.push(`<button class="btn btn-ghost btn-sm" onclick="ppCopyLink('${p.signature_token}')">📋 Copiar Link</button>`);
+    else btns.push(`<button class="btn btn-ghost btn-sm" onclick="ppTransition(${id},'sent')">🔗 Gerar Link</button>`);
+    btns.push(`<button class="btn btn-primary btn-sm" onclick="ppTransition(${id},'converted')">🚀 Converter →</button>`);
+  }
+  if (!['converted','rejected'].includes(st)) {
+    btns.push(`<button class="btn btn-danger btn-sm" onclick="ppTransition(${id},'rejected')">❌ Rejeitar</button>`);
+  }
+  return btns.join('');
+}
+
+function ppCopyLink(token) {
+  navigator.clipboard.writeText(location.origin + '/assinar/' + token).then(() => toast('Link copiado!'));
+}
+
+// ── Detail Modal ─────────────────────────────────────────────
+async function ppOpenDetail(id) {
+  const p = window._ppList.find(x => Number(x.id) === Number(id));
+  if (!p) return;
+  let boats = [], history = [];
+  try {
+    const d = await saApi('GET', '/superadmin/proposals/' + id);
+    boats   = d.boats   || [];
+    history = d.history || [];
+    Object.assign(p, d);
+  } catch(e) {}
+
+  const fmt2 = v => parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const val  = fmt2(p.final_value);
+  const base = fmt2(p.base_value);
+  const disc = fmt2(p.discount_value);
+  const setup= fmt2(p.setup_fee);
+
+  const ltName = (window._ppTypes || []).find(t => t.id == p.license_type_id)?.name || '—';
+  const billingLabel = { monthly:'Mensal', quarterly:'Trimestral', semiannual:'Semestral', annual:'Anual' }[p.billing_period] || p.billing_period || 'Mensal';
+
+  const boatsHtml = boats.length === 0
+    ? '<div style="color:var(--text3);font-size:12px;padding:8px 0">Nenhuma embarcação</div>'
+    : `<table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:3px 6px;font-weight:600">Nome</th>
+          <th style="text-align:left;padding:3px 6px;font-weight:600">Tipo / Vaga</th>
+          <th style="text-align:right;padding:3px 6px;font-weight:600">Pés</th>
+          <th style="text-align:right;padding:3px 6px;font-weight:600">R$/mês</th>
+        </tr></thead>
+        <tbody>${boats.map(b => `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:3px 6px">${escHtml(b.name)}</td>
+            <td style="padding:3px 6px">${PP_BOAT_LABELS[b.boat_type]||b.boat_type} / ${PP_SPOT_LABELS[b.spot_type]||b.spot_type}</td>
+            <td style="text-align:right;padding:3px 6px">${parseFloat(b.eslora_feet).toFixed(1)}</td>
+            <td style="text-align:right;padding:3px 6px">${fmt2(b.line_value)}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+
+  const histHtml = history.length === 0
+    ? '<div style="color:var(--text3);font-size:12px;padding:8px">Sem histórico</div>'
+    : history.map(h => `
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:16px;line-height:1;flex-shrink:0">${ppActionIcon(h.action)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600">${PP_HIST_LABELS[h.action] || escHtml(h.action)}</div>
+            ${h.notes ? `<div style="font-size:11px;color:var(--text3);word-break:break-word">${escHtml(h.notes)}</div>` : ''}
+            <div style="font-size:10px;color:var(--text3)">${new Date(h.done_at).toLocaleString('pt-BR')}${h.done_by_name ? ' · '+escHtml(h.done_by_name) : ''}</div>
+          </div>
+        </div>`).join('');
+
+  const sigBlock = p.signature_token
+    ? `<div style="margin-top:16px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">Link de Assinatura</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" value="${location.origin}/assinar/${p.signature_token}" readonly style="flex:1;font-size:11px;padding:6px 8px;background:var(--bg)">
+          <button class="btn btn-ghost btn-sm" onclick="ppCopyLink('${p.signature_token}')">📋 Copiar</button>
+        </div>
+        ${p.signed_at ? `<div style="margin-top:6px;font-size:11px;color:#10b981">✅ Assinado em ${new Date(p.signed_at).toLocaleString('pt-BR')} por ${escHtml(p.signed_name||'')}</div>` : ''}
+      </div>`
+    : '';
+
+  const section = (label, html) => `<div style="margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:7px">${label}</div>
+    ${html}
+  </div>`;
+
+  const row = (label, value) => `<div style="font-size:12px;display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text3)">${label}</span><span>${value}</span></div>`;
+
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:780px;width:96vw;max-height:90vh;overflow-y:auto">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>📋 Proposta #${p.id} — ${escHtml(p.lead_name)}</span>
+      <span class="badge ${PP_STATUS_BADGE[p.status]}" style="font-size:11px">${PP_STATUS_LABEL[p.status]}</span>
+      <span style="margin-left:auto;font-size:11px;color:var(--text3)">Criada ${ppRelDate(p.created_at)}</span>
+    </div>
+
+    ${ppPipelineBar(p.status)}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <!-- Lead + Proposta -->
+      <div>
+        ${section('Lead', `
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">${escHtml(p.lead_name)}</div>
+          ${p.lead_cnpj         ? `<div style="font-size:12px;color:var(--text3)">CNPJ: ${escHtml(p.lead_cnpj)}</div>` : ''}
+          ${p.lead_contact_name ? `<div style="font-size:12px;color:var(--text3)">${escHtml(p.lead_contact_name)}${p.lead_contact_role ? ' — '+escHtml(p.lead_contact_role) : ''}</div>` : ''}
+          ${p.lead_email        ? `<div style="font-size:12px;color:var(--text3)">✉️ <a href="mailto:${escHtml(p.lead_email)}" style="color:inherit">${escHtml(p.lead_email)}</a></div>` : ''}
+          ${p.lead_phone        ? `<div style="font-size:12px;color:var(--text3)">📞 ${escHtml(p.lead_phone)}</div>` : ''}
+          ${p.lead_city_state   ? `<div style="font-size:12px;color:var(--text3)">📍 ${escHtml(p.lead_city_state)}</div>` : ''}
+        `)}
+        ${section('Proposta', `
+          ${row('Licença', ltName)}
+          ${row('Ciclo', billingLabel)}
+          ${p.valid_until ? row('Válida até', new Date(p.valid_until).toLocaleDateString('pt-BR')) : ''}
+          ${parseFloat(p.setup_fee||0) > 0 ? row('Taxa de setup', 'R$ '+setup) : ''}
+        `)}
+      </div>
+      <!-- Precificação + Embarcações -->
+      <div>
+        ${section('Precificação', `
+          ${row('Embarcações', (p.total_boats||0)+' ('+parseFloat(p.total_feet||0).toFixed(1)+' pés total)')}
+          ${row('Valor base', 'R$ '+base+'/mês')}
+          ${parseFloat(p.discount_value||0) > 0 ? `<div style="font-size:12px;display:flex;justify-content:space-between;padding:3px 0;color:#ef4444"><span>Desconto</span><span>−R$ ${disc}</span></div>` : ''}
+          <div style="font-size:16px;font-weight:700;color:var(--accent);display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:6px;padding-top:6px"><span>Total</span><span>R$ ${val}/mês</span></div>
+        `)}
+        ${section('Embarcações ('+boats.length+')', boatsHtml)}
+      </div>
+    </div>
+
+    ${ppStageBlock(p)}
+    ${sigBlock}
+
+    <div style="margin-top:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">Histórico</div>
+      <div style="max-height:160px;overflow-y:auto">${histHtml}</div>
+    </div>
+
+    <div class="form-actions" style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${ppActionButtons(p)}</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
+    </div>
+  </div>`);
+}
+
+const PP_HIST_LABELS = {
+  created:        'Proposta criada',
+  edited:         'Proposta editada',
+  sent:           'Proposta enviada',
+  signed:         'Assinatura digital',
+  activated:      'Tenant ativado',
+  status_changed: 'Status alterado',
+  note:           'Observação',
+};
+
+function ppActionIcon(a) {
+  const m = { created:'🆕', edited:'✏️', sent:'📧', signed:'✅', activated:'🚀', status_changed:'🔄', note:'📝' };
+  return m[a] || '•';
+}
+
+// ── Pipeline transitions ──────────────────────────────────────
+function ppTransition(id, newStatus) {
+  const labels = { sent:'Enviar Proposta', negotiation:'Mover para Negociação', approved:'Aprovar Proposta', rejected:'Rejeitar Proposta', converted:'Converter em Tenant' };
+  const colors  = { sent:'btn-primary', negotiation:'btn-primary', approved:'btn-primary', rejected:'btn-danger', converted:'btn-primary' };
+
+  let body = '';
+  if (newStatus === 'sent') {
+    body = `<div class="form-group" style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">E-mail do destinatário <span style="color:var(--text3);font-weight:400">(opcional)</span></label>
+      <input type="email" id="pp-tr-sent_to" placeholder="contato@marina.com.br" style="width:100%;padding:8px;font-size:13px">
+    </div>`;
+  } else if (newStatus === 'negotiation') {
+    body = `<div class="form-group" style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">Notas de negociação <span style="color:var(--text3);font-weight:400">(opcional)</span></label>
+      <textarea id="pp-tr-negotiation_notes" rows="4" style="width:100%;padding:8px;font-size:13px;resize:vertical" placeholder="Observações, pedidos do cliente, ajustes discutidos..."></textarea>
+    </div>`;
+  } else if (newStatus === 'approved') {
+    body = `<div style="font-size:13px;color:var(--text3);margin-bottom:12px">Confirmar aprovação desta proposta?</div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">Observações <span style="color:var(--text3);font-weight:400">(opcional)</span></label>
+      <textarea id="pp-tr-notes" rows="2" style="width:100%;padding:8px;font-size:13px;resize:vertical"></textarea>
+    </div>`;
+  } else if (newStatus === 'rejected') {
+    body = `<div class="form-group" style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">Motivo da rejeição <span style="color:#ef4444">*</span></label>
+      <textarea id="pp-tr-rejection_reason" rows="4" style="width:100%;padding:8px;font-size:13px;resize:vertical" placeholder="Descreva o motivo..."></textarea>
+    </div>`;
+  } else if (newStatus === 'converted') {
+    body = `<div style="font-size:13px;color:var(--text3);line-height:1.6">Converter esta proposta em tenant ativo? O sistema irá criar o schema do banco de dados, provisionar o usuário administrador e ativar a licença automaticamente.</div>`;
+  }
+
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:440px">
+    <div class="modal-title">${labels[newStatus] || 'Alterar Status'}</div>
+    ${body}
+    <div class="form-actions">
+      <button class="btn ${colors[newStatus]||'btn-primary'}" onclick="ppDoTransition(${id},'${newStatus}')">Confirmar</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    </div>
+  </div>`);
+}
+
+async function ppDoTransition(id, newStatus) {
+  if (newStatus === 'sent') {
+    // For 'sent', generate signature token via POST /send
+    const sentTo = (document.getElementById('pp-tr-sent_to')?.value || '').trim();
+    try {
+      const r = await saApi('POST', '/superadmin/proposals/' + id + '/send', sentTo ? { sent_to: sentTo } : {});
+      const link = location.origin + '/assinar/' + r.token;
+      closeModal();
+      modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:500px">
+        <div class="modal-title">📧 Proposta Enviada</div>
+        <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Link de assinatura gerado. Envie ao representante da marina:</p>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <input type="text" value="${link}" readonly style="flex:1;font-size:12px;padding:8px;background:var(--bg)">
+          <button class="btn btn-ghost btn-sm" onclick="ppCopyLink('${r.token}')">📋</button>
+        </div>
+        <div class="form-actions"><button class="btn btn-ghost" onclick="closeModal()">Fechar</button></div>
+      </div>`);
+      ppLoad();
+    } catch(e) { toast('Erro: ' + e.message, 'danger'); }
+    return;
+  }
+
+  const payload = { status: newStatus };
+  if (newStatus === 'negotiation') {
+    const v = document.getElementById('pp-tr-negotiation_notes')?.value?.trim();
+    if (v) payload.negotiation_notes = v;
+  }
+  if (newStatus === 'approved') {
+    const v = document.getElementById('pp-tr-notes')?.value?.trim();
+    if (v) payload.notes = v;
+  }
+  if (newStatus === 'rejected') {
+    const v = document.getElementById('pp-tr-rejection_reason')?.value?.trim();
+    if (!v) { toast('Informe o motivo da rejeição', 'danger'); return; }
+    payload.rejection_reason = v;
+  }
+
+  try {
+    const r = await saApi('PUT', '/superadmin/proposals/' + id + '/status', payload);
+    const label = PP_STATUS_LABEL[newStatus] || 'Status atualizado';
+    if (newStatus === 'converted' && r.activated) {
+      toast(`Tenant ativado: ${r.tenant_slug}`);
+    } else {
+      toast(`Proposta: ${label}`);
+    }
+    closeModal();
+    ppLoad();
+  } catch(e) { toast('Erro: ' + e.message, 'danger'); }
+}
+
+async function ppPreview(id) {
+  const url = API + '/superadmin/proposals/' + id + '/preview?token=' + encodeURIComponent(window.saToken || '');
+  window.open(url, '_blank');
+}
+
+async function ppGenerateLink(id) {
+  ppTransition(id, 'sent');
+}
+
+// ── Wizard: Nova Proposta ────────────────────────────────────
+window._ppWizardStep   = 1;
+window._ppWizardData   = {};
+window._ppWizardBoats  = [];
+
+function ppOpenWizard(editId) {
+  window._ppWizardStep  = 1;
+  window._ppWizardData  = editId ? (window._ppList.find(p => p.id === editId) || {}) : {};
+  window._ppWizardBoats = [];
+  window._ppWizardEditId = editId || null;
+
+  if (editId) {
+    saApi('GET', '/superadmin/proposals/' + editId).then(d => {
+      window._ppWizardBoats = (d.boats || []).map(b => ({ ...b }));
+      ppRenderWizard();
+    });
+  }
+  ppRenderWizard();
+}
+
+function ppEditProposal(id) { closeModal(); ppOpenWizard(id); }
+
+function ppRenderWizard() {
+  const step  = window._ppWizardStep;
+  const data  = window._ppWizardData;
+  const title = window._ppWizardEditId ? `Editar Proposta #${window._ppWizardEditId}` : 'Nova Proposta';
+  const steps = ['Lead', 'Embarcações', 'Precificação'];
+
+  const stepBar = steps.map((s, i) => {
+    const n  = i + 1;
+    const active = n === step;
+    const done   = n < step;
+    return `<div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0">
+      <div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;
+        background:${done?'#10b981':active?'var(--accent)':'var(--surface2)'};
+        color:${(done||active)?'#fff':'var(--text3)'}">${done?'✓':n}</div>
+      <div style="font-size:12px;font-weight:${active?700:400};color:${active?'var(--text)':'var(--text3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s}</div>
+      ${i < steps.length-1 ? `<div style="flex:1;height:1px;background:var(--border)"></div>` : ''}
+    </div>`;
+  }).join('');
+
+  let body = '';
+  if (step === 1) body = ppWizardStep1Html(data);
+  if (step === 2) body = ppWizardStep2Html();
+  if (step === 3) body = ppWizardStep3Html(data);
+
+  const isLast = step === 3;
+  const isEdit = !!window._ppWizardEditId;
+
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:680px;width:96vw">
+    <div class="modal-title">${title}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px">${stepBar}</div>
+    <div id="pp-wiz-body">${body}</div>
+    <div class="form-actions">
+      ${step > 1 ? `<button class="btn btn-ghost" onclick="ppWizardPrev()">← Voltar</button>` : ''}
+      ${!isLast
+        ? `<button class="btn btn-primary" onclick="ppWizardNext()">Próximo →</button>`
+        : `<button class="btn btn-primary" onclick="ppWizardSave()">${isEdit ? '💾 Salvar' : '✅ Criar Proposta'}</button>`}
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    </div>
+  </div>`);
+}
+
+function ppWizardStep1Html(d) {
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group" style="margin:0;grid-column:1/-1">
+        <label>Nome da Marina / Lead *</label>
+        <input id="wiz-lead_name" value="${escHtml(d.lead_name||'')}" required placeholder="Ex: Marina do Sol">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>CNPJ</label>
+        <input id="wiz-lead_cnpj" value="${escHtml(d.lead_cnpj||'')}" placeholder="00.000.000/0001-00">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Cidade / Estado</label>
+        <input id="wiz-lead_city_state" value="${escHtml(d.lead_city_state||'')}" placeholder="São Paulo/SP">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Nome do Contato</label>
+        <input id="wiz-lead_contact_name" value="${escHtml(d.lead_contact_name||'')}" placeholder="João Silva">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Cargo do Contato</label>
+        <input id="wiz-lead_contact_role" value="${escHtml(d.lead_contact_role||'')}" placeholder="Diretor">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>E-mail</label>
+        <input id="wiz-lead_email" type="email" value="${escHtml(d.lead_email||'')}" placeholder="contato@marina.com">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Telefone / WhatsApp</label>
+        <input id="wiz-lead_phone" value="${escHtml(d.lead_phone||'')}" placeholder="(11) 99999-9999">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Slug (tenant ID — somente para conversão)</label>
+        <input id="wiz-tenant_slug" value="${escHtml(d.tenant_slug||'')}" placeholder="marina-do-sol">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Tipo de Licença *</label>
+        <select id="wiz-license_type_id">
+          <option value="">Selecionar…</option>
+          ${(window._ppTypes||[]).map(t => `<option value="${t.id}"${d.license_type_id==t.id?' selected':''}>${escHtml(t.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
+}
+
+const PP_SPOT_LABELS = { seca_sol:'Seca ao Sol', seca_coberta:'Seca Coberta', molhada:'Molhada' };
+const PP_BOAT_LABELS = { lancha:'Lancha', veleiro:'Veleiro', jetski:'Jet Ski', catamarano:'Catamarã', outro:'Outro' };
+
+function ppSpotSelect(i, cur) {
+  const s = `font-size:12px;padding:4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)`;
+  return `<select onchange="window._ppWizardBoats[${i}].spot_type=this.value" style="${s}">
+    ${Object.entries(PP_SPOT_LABELS).map(([v,l])=>`<option value="${v}"${cur===v?' selected':''}>${l}</option>`).join('')}
+  </select>`;
+}
+
+function ppBoatSelect(i, cur) {
+  const s = `font-size:12px;padding:4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)`;
+  return `<select onchange="window._ppWizardBoats[${i}].boat_type=this.value" style="${s}">
+    ${Object.entries(PP_BOAT_LABELS).map(([v,l])=>`<option value="${v}"${cur===v?' selected':''}>${l}</option>`).join('')}
+  </select>`;
+}
+
+function ppWizardStep2Html() {
+  const boats = window._ppWizardBoats;
+  const inp   = `font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)`;
+  const rows  = boats.length === 0
+    ? `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Nenhuma embarcação adicionada. Use "+ Individual", "+ Por Lote" ou "📂 Importar CSV".</td></tr>`
+    : boats.map((b, i) => `
+        <tr>
+          <td style="padding:5px 6px"><input value="${escHtml(b.name)}" oninput="window._ppWizardBoats[${i}].name=this.value" style="width:120px;${inp}" placeholder="Nome"></td>
+          <td style="padding:5px 6px">${ppBoatSelect(i, b.boat_type||'lancha')}</td>
+          <td style="padding:5px 6px">${ppSpotSelect(i, b.spot_type||'seca_sol')}</td>
+          <td style="padding:5px 6px"><input type="number" step="0.1" min="1" value="${b.eslora_feet||30}" oninput="window._ppWizardBoats[${i}].eslora_feet=parseFloat(this.value)||0" style="width:64px;${inp}"></td>
+          <td style="padding:5px 6px"><input type="number" step="0.01" min="0.1" max="5" value="${b.category_factor||1}" oninput="window._ppWizardBoats[${i}].category_factor=parseFloat(this.value)||1" style="width:52px;${inp}"></td>
+          <td style="padding:5px 6px;text-align:center"><button onclick="ppRemoveBoat(${i})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:15px;line-height:1;padding:0">✕</button></td>
+        </tr>`).join('');
+
+  const total = boats.reduce((s,b) => s + (parseFloat(b.eslora_feet)||0), 0);
+  const summary = boats.length
+    ? `<div style="font-size:12px;color:var(--text3);margin-top:8px">
+        <span>${boats.length} embarcação(ões)</span>
+        <span style="margin:0 8px">·</span>
+        <span>${total.toFixed(1)} pés totais</span>
+        <span style="margin:0 8px">·</span>
+        <span>${boats.filter(b=>b.spot_type==='molhada').length} molhada(s)</span>
+        <span style="margin:0 4px">·</span>
+        <span>${boats.filter(b=>b.spot_type==='seca_coberta').length} cobert(a/as)</span>
+        <span style="margin:0 4px">·</span>
+        <span>${boats.filter(b=>!b.spot_type||b.spot_type==='seca_sol'||b.spot_type==='seca').length} seca ao sol</span>
+       </div>` : '';
+
+  return `
+    <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:600;margin-right:auto">Embarcações da proposta</div>
+      <button class="btn btn-ghost btn-sm" onclick="ppAddBoat()">+ Individual</button>
+      <button class="btn btn-ghost btn-sm" onclick="ppOpenBatchModal()">+ Por Lote</button>
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importar CSV (nome,tipo,eslora_pes,vaga,fator)">
+        📂 Importar CSV
+        <input type="file" accept=".csv,.txt" style="display:none" onchange="ppImportCSV(this)">
+      </label>
+      <button class="btn btn-ghost btn-sm" onclick="ppDownloadCSVTemplate()" title="Baixar modelo de planilha">⬇ Modelo</button>
+    </div>
+    <div style="overflow-x:auto;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border);background:var(--surface2)">
+          <th style="text-align:left;padding:6px 8px;white-space:nowrap">Nome</th>
+          <th style="text-align:left;padding:6px 8px;white-space:nowrap">Tipo</th>
+          <th style="text-align:left;padding:6px 8px;white-space:nowrap">Vaga</th>
+          <th style="text-align:left;padding:6px 8px;white-space:nowrap">Eslora (pés)</th>
+          <th style="text-align:left;padding:6px 8px;white-space:nowrap">Fator</th>
+          <th style="width:28px"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${summary}
+    <div style="margin-top:8px;font-size:11px;color:var(--text3)">
+      Eslora em pés · Fator: 1.0 = padrão, ex: 1.2 = premium · Vaga: Seca ao Sol / Seca Coberta / Molhada
+    </div>`;
+}
+
+function ppAddBoat() {
+  window._ppWizardBoats.push({ name:'', boat_type:'lancha', spot_type:'seca_sol', eslora_feet:30, category_factor:1.0 });
+  ppRenderWizard();
+}
+
+function ppRemoveBoat(i) {
+  window._ppWizardBoats.splice(i, 1);
+  ppRenderWizard();
+}
+
+// ── Cadastro por Lote ────────────────────────────────────────
+function ppOpenBatchModal() {
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+    <div class="modal-title">+ Adicionar por Lote</div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:14px">Gera N embarcações do mesmo tipo de uma só vez.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group" style="margin:0">
+        <label>Tipo de Embarcação</label>
+        <select id="batch-type">
+          ${Object.entries(PP_BOAT_LABELS).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Tipo de Vaga</label>
+        <select id="batch-spot">
+          ${Object.entries(PP_SPOT_LABELS).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Eslora (pés)</label>
+        <input id="batch-eslora" type="number" step="0.5" min="1" value="30">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Quantidade</label>
+        <input id="batch-qty" type="number" min="1" max="200" value="10">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Fator de Categoria</label>
+        <input id="batch-factor" type="number" step="0.01" min="0.1" max="5" value="1">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Prefixo do Nome</label>
+        <input id="batch-prefix" placeholder="Ex: Lancha (deixe vazio p/ auto)">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="ppApplyBatch()">Adicionar</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    </div>
+  </div>`);
+}
+
+function ppApplyBatch() {
+  const type   = document.getElementById('batch-type').value;
+  const spot   = document.getElementById('batch-spot').value;
+  const eslora = parseFloat(document.getElementById('batch-eslora').value) || 30;
+  const qty    = Math.min(200, parseInt(document.getElementById('batch-qty').value) || 1);
+  const factor = parseFloat(document.getElementById('batch-factor').value) || 1;
+  const prefix = document.getElementById('batch-prefix').value.trim() || PP_BOAT_LABELS[type] || type;
+  const pad    = qty > 9 ? 2 : 1;
+  for (let k = 1; k <= qty; k++) {
+    window._ppWizardBoats.push({
+      name: `${prefix} ${String(k).padStart(pad,'0')}`,
+      boat_type: type, spot_type: spot,
+      eslora_feet: eslora, category_factor: factor,
+    });
+  }
+  closeModal();
+  ppRenderWizard();
+}
+
+// ── Importação CSV ───────────────────────────────────────────
+function ppDownloadCSVTemplate() {
+  const header = 'nome,tipo,eslora_pes,vaga,fator';
+  const ex = [
+    'Lancha 01,lancha,30,seca_sol,1.0',
+    'Lancha 02,lancha,35,seca_coberta,1.0',
+    'Veleiro 01,veleiro,45,molhada,1.1',
+    'Jet Ski 01,jetski,12,seca_sol,1.0',
+  ].join('\n');
+  const blob = new Blob([header + '\n' + ex], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'modelo_embarcacoes.csv';
+  a.click();
+}
+
+function ppImportCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return;
+    // Detecta e pula cabeçalho
+    const firstLower = lines[0].toLowerCase();
+    const start = (firstLower.includes('nome') || firstLower.includes('tipo') || firstLower.includes('eslora')) ? 1 : 0;
+    let added = 0, errors = 0;
+    for (let i = start; i < lines.length; i++) {
+      const cols = lines[i].split(/[,;|\t]/).map(c => c.trim().replace(/^["']|["']$/g,''));
+      if (cols.length < 3) { errors++; continue; }
+      const [nome, tipo, esloraRaw, vagaRaw, fatorRaw] = cols;
+      const eslora = parseFloat(esloraRaw);
+      if (!nome || isNaN(eslora) || eslora <= 0) { errors++; continue; }
+      // Normaliza tipo de vaga
+      const vagaNorm = (vagaRaw||'').toLowerCase().replace(/\s+/g,'_');
+      const spotMap = { seca_sol:'seca_sol', seca_coberta:'seca_coberta', molhada:'molhada',
+                        seca:'seca_sol', coberta:'seca_coberta', molha:'molhada', wet:'molhada', dry:'seca_sol' };
+      const spot = spotMap[vagaNorm] || 'seca_sol';
+      // Normaliza tipo de embarcação
+      const tipoNorm = (tipo||'lancha').toLowerCase();
+      const boatMap = { lancha:'lancha', veleiro:'veleiro', jetski:'jetski', 'jet ski':'jetski',
+                        'jet_ski':'jetski', catamarano:'catamarano', catamara:'catamarano', outro:'outro' };
+      const boat = boatMap[tipoNorm] || 'outro';
+      window._ppWizardBoats.push({
+        name: nome, boat_type: boat, spot_type: spot,
+        eslora_feet: eslora, category_factor: parseFloat(fatorRaw)||1,
+      });
+      added++;
+    }
+    input.value = '';
+    ppRenderWizard();
+    if (errors) toast(`${added} embarcação(ões) importada(s). ${errors} linha(s) ignorada(s).`, 'info');
+    else toast(`${added} embarcação(ões) importada(s) com sucesso.`);
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function ppWizardStep3Html(d) {
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group" style="margin:0">
+        <label>Preço por pé (R$)</label>
+        <input id="wiz-price_per_foot" type="number" step="0.01" min="0" value="${d.price_per_foot||5}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Taxa de Setup (R$)</label>
+        <input id="wiz-setup_fee" type="number" step="1" min="0" value="${d.setup_fee||0}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Mult. Seca ao Sol</label>
+        <input id="wiz-dry_multiplier" type="number" step="0.01" min="0.1" max="5" value="${d.dry_multiplier||1}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Mult. Seca Coberta</label>
+        <input id="wiz-covered_multiplier" type="number" step="0.01" min="0.1" max="5" value="${d.covered_multiplier||1.1}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Mult. Molhada</label>
+        <input id="wiz-wet_multiplier" type="number" step="0.01" min="0.1" max="5" value="${d.wet_multiplier||1.2}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Desconto por Volume (%)</label>
+        <input id="wiz-volume_discount_pct" type="number" step="0.5" min="0" max="100" value="${d.volume_discount_pct||0}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Desconto por Período (%)</label>
+        <input id="wiz-period_discount_pct" type="number" step="0.5" min="0" max="100" value="${d.period_discount_pct||0}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Ciclo de Cobrança</label>
+        <select id="wiz-billing_period">
+          <option value="monthly"${(d.billing_period||'monthly')==='monthly'?' selected':''}>Mensal</option>
+          <option value="quarterly"${d.billing_period==='quarterly'?' selected':''}>Trimestral</option>
+          <option value="annual"${d.billing_period==='annual'?' selected':''}>Anual</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Validade da Proposta</label>
+        <input id="wiz-valid_until" type="date" value="${d.valid_until ? d.valid_until.split('T')[0] : ''}">
+      </div>
+      <div class="form-group" style="margin:0;grid-column:1/-1">
+        <label>Observações</label>
+        <textarea id="wiz-notes" rows="3" placeholder="Condições especiais, notas internas...">${escHtml(d.notes||'')}</textarea>
+      </div>
+    </div>
+    <div id="pp-calc-preview" style="margin-top:16px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="ppCalcPreview()">🧮 Calcular Prévia</button>
+    </div>`;
+}
+
+async function ppCalcPreview() {
+  const boats = window._ppWizardBoats;
+  const params = {
+    price_per_foot:      parseFloat(document.getElementById('wiz-price_per_foot')?.value || 5),
+    dry_multiplier:      parseFloat(document.getElementById('wiz-dry_multiplier')?.value || 1),
+    covered_multiplier:  parseFloat(document.getElementById('wiz-covered_multiplier')?.value || 1.1),
+    wet_multiplier:      parseFloat(document.getElementById('wiz-wet_multiplier')?.value || 1.2),
+    volume_discount_pct: parseFloat(document.getElementById('wiz-volume_discount_pct')?.value || 0),
+    period_discount_pct: parseFloat(document.getElementById('wiz-period_discount_pct')?.value || 0),
+  };
+  try {
+    const r = await saApi('POST', '/superadmin/proposals/calc', { boats, params });
+    document.getElementById('pp-calc-preview').innerHTML = `
+      <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+        <div><div style="font-size:11px;color:var(--text3)">Base</div><div style="font-size:18px;font-weight:700">R$ ${parseFloat(r.base_value).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div></div>
+        <div><div style="font-size:11px;color:var(--text3)">Desconto</div><div style="font-size:18px;font-weight:700;color:#ef4444">−R$ ${parseFloat(r.discount_value).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div></div>
+        <div><div style="font-size:11px;color:var(--text3)">Total/mês</div><div style="font-size:22px;font-weight:700;color:var(--accent)">R$ ${parseFloat(r.final_value).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div></div>
+        <div style="margin-left:auto"><button type="button" class="btn btn-ghost btn-sm" onclick="ppCalcPreview()">↻ Recalcular</button></div>
+      </div>`;
+  } catch(e) { toast('Erro no cálculo: ' + e.message, 'danger'); }
+}
+
+function ppWizardCollect1() {
+  const v = {
+    lead_name:        document.getElementById('wiz-lead_name')?.value.trim(),
+    lead_cnpj:        document.getElementById('wiz-lead_cnpj')?.value.trim(),
+    lead_city_state:  document.getElementById('wiz-lead_city_state')?.value.trim(),
+    lead_contact_name:document.getElementById('wiz-lead_contact_name')?.value.trim(),
+    lead_contact_role:document.getElementById('wiz-lead_contact_role')?.value.trim(),
+    lead_email:       document.getElementById('wiz-lead_email')?.value.trim(),
+    lead_phone:       document.getElementById('wiz-lead_phone')?.value.trim(),
+    tenant_slug:      document.getElementById('wiz-tenant_slug')?.value.trim(),
+    license_type_id:  parseInt(document.getElementById('wiz-license_type_id')?.value) || null,
+  };
+  if (!v.lead_name) { toast('Nome da marina é obrigatório', 'danger'); return null; }
+  return v;
+}
+
+function ppWizardCollect3() {
+  return {
+    price_per_foot:      parseFloat(document.getElementById('wiz-price_per_foot')?.value) || 5,
+    setup_fee:           parseFloat(document.getElementById('wiz-setup_fee')?.value) || 0,
+    dry_multiplier:      parseFloat(document.getElementById('wiz-dry_multiplier')?.value) || 1,
+    covered_multiplier:  parseFloat(document.getElementById('wiz-covered_multiplier')?.value) || 1.1,
+    wet_multiplier:      parseFloat(document.getElementById('wiz-wet_multiplier')?.value) || 1.2,
+    volume_discount_pct: parseFloat(document.getElementById('wiz-volume_discount_pct')?.value) || 0,
+    period_discount_pct: parseFloat(document.getElementById('wiz-period_discount_pct')?.value) || 0,
+    billing_period:      document.getElementById('wiz-billing_period')?.value || 'monthly',
+    valid_until:         document.getElementById('wiz-valid_until')?.value || null,
+    notes:               document.getElementById('wiz-notes')?.value.trim() || null,
+  };
+}
+
+function ppWizardNext() {
+  if (window._ppWizardStep === 1) {
+    const v = ppWizardCollect1();
+    if (!v) return;
+    Object.assign(window._ppWizardData, v);
+    window._ppWizardStep = 2;
+  } else if (window._ppWizardStep === 2) {
+    if (window._ppWizardBoats.length === 0) { toast('Adicione ao menos uma embarcação', 'danger'); return; }
+    window._ppWizardStep = 3;
+  }
+  ppRenderWizard();
+}
+
+function ppWizardPrev() {
+  if (window._ppWizardStep === 3) {
+    Object.assign(window._ppWizardData, ppWizardCollect3());
+  }
+  window._ppWizardStep--;
+  ppRenderWizard();
+}
+
+async function ppWizardSave() {
+  const step3 = ppWizardCollect3();
+  if (!step3) return;
+  const payload = { ...window._ppWizardData, ...step3, boats: window._ppWizardBoats };
+  try {
+    if (window._ppWizardEditId) {
+      await saApi('PUT', '/superadmin/proposals/' + window._ppWizardEditId, payload);
+      toast('Proposta atualizada');
+    } else {
+      await saApi('POST', '/superadmin/proposals', payload);
+      toast('Proposta criada');
+    }
+    closeModal();
+    ppLoad();
+  } catch(e) { toast('Erro: ' + e.message, 'danger'); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -9392,8 +11100,27 @@ function saTab(tab) {
 window._saContracts = [];
 window._saContractsLoaded = false;
 
-const SA_PLAN_PRICES = { starter: 299, professional: 599, enterprise: 1299 };
-const SA_PLAN_LABELS = { starter: 'Starter', professional: 'Professional', enterprise: 'Enterprise' };
+// Helpers dinâmicos — usam window._licTypes carregado da aba Módulos & Licenças
+function _licLabel(slug) {
+  if (!slug) return '—';
+  const t = (window._licTypes || []).find(t => t.slug === slug);
+  return t ? t.name : slug;
+}
+function _licBadge(slug) {
+  const name = _licLabel(slug);
+  const m = { starter:'badge-gray', pro:'badge-info', enterprise:'badge-success', custom:'badge-warning' };
+  return `<span class="badge ${m[slug]||'badge-gray'}">${name}</span>`;
+}
+function _licPrice(slug) {
+  const t = (window._licTypes || []).find(t => t.slug === slug);
+  return t ? Number(t.price_monthly || 0) : 0;
+}
+async function _ensureLicTypes() {
+  if (!(window._licTypes || []).length) {
+    try { window._licTypes = await saApi('GET', '/superadmin/license-types'); } catch(e) {}
+  }
+  return window._licTypes || [];
+}
 
 function saContractStatusBadge(s) {
   const m = { active:'badge-success', trial:'badge-warning', expired:'badge-gray', cancelled:'badge-danger' };
@@ -9405,6 +11132,22 @@ async function saLoadContracts() {
   window._saContractsLoaded = true;
   document.getElementById('sa-contracts-tbody').innerHTML =
     '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Carregando...</td></tr>';
+  // Popular filtros dinâmicos a partir de license_types
+  const licTypes = await _ensureLicTypes();
+  const fp = document.getElementById('sa-contract-filter-plan');
+  if (fp && fp.options.length <= 1 && licTypes.length) {
+    licTypes.forEach(lt => {
+      const o = document.createElement('option'); o.value = lt.slug; o.textContent = lt.name;
+      fp.appendChild(o);
+    });
+  }
+  const fa = document.getElementById('sa-anl-plan');
+  if (fa && fa.options.length <= 1 && licTypes.length) {
+    licTypes.forEach(lt => {
+      const o = document.createElement('option'); o.value = lt.slug; o.textContent = lt.name;
+      fa.appendChild(o);
+    });
+  }
   const rows = await saApi('GET', '/superadmin/contracts');
   if (!rows || !Array.isArray(rows)) {
     document.getElementById('sa-contracts-tbody').innerHTML =
@@ -9437,16 +11180,23 @@ function saRenderContracts() {
   if (search)       rows = rows.filter(r => (r.tenant_name||r.tenant_slug).toLowerCase().includes(search));
   const tbody = document.getElementById('sa-contracts-tbody');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhum contrato encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:32px">Nenhum contrato encontrado.</td></tr>';
     return;
   }
+  const techLicBadge = c => {
+    if (!c.tech_lic_name) return `<span style="font-size:11px;color:var(--text3)">—</span>`;
+    const m = { starter:'badge-gray', pro:'badge-info', enterprise:'badge-success', custom:'badge-warning' };
+    return `<span class="badge ${m[c.tech_lic_slug]||'badge-gray'}" style="font-size:10px">${c.tech_lic_name}</span>`;
+  };
   tbody.innerHTML = rows.map(c => `<tr class="row-link" onclick="saViewContract(${c.id})" title="Clique para ver detalhes">
     <td><span style="font-weight:600">${c.tenant_name || c.tenant_slug}</span></td>
-    <td><span class="badge ${c.plan==='enterprise'?'badge-success':c.plan==='professional'?'badge-info':'badge-gray'}">${SA_PLAN_LABELS[c.plan]||c.plan}</span></td>
+    <td>${_licBadge(c.plan)}</td>
+    <td>${techLicBadge(c)}</td>
+    <td style="font-size:11px;color:var(--text3)">${c.proposal_id ? `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 6px;cursor:pointer" onclick="event.stopPropagation();ppOpenDetail(${c.proposal_id})" title="Abrir proposta">#${c.proposal_id}</span>` : '—'}</td>
     <td style="font-size:12px;color:var(--text3)">${fmtDate(c.start_date)}</td>
     <td style="font-size:12px;color:var(--text3)">${fmtDate(c.end_date)}</td>
     <td style="font-weight:600;font-size:13px">${fmtBRL(c.monthly_value)}</td>
-    <td style="font-size:12px"><div>${c.paid_charges}/${c.total_charges} pagas</div><div style="font-size:10px;color:var(--text3)">${fmtBRL(c.total_paid)} recebido</div></td>
+    <td style="font-size:12px"><div>${c.paid_charges}/${c.total_charges} pagas</div><div style="font-size:10px;color:var(--text3)">${fmtBRL(c.total_paid)}</div></td>
     <td style="font-size:12px">${fmtBRL(c.total_paid)}</td>
     <td>${saContractStatusBadge(c.status)}</td>
     <td onclick="event.stopPropagation()">
@@ -9465,23 +11215,62 @@ function saGenerateContract(contractId) {
   window.open(url, '_blank');
 }
 
-function saOpenNewContract() {
-  const tenants = (window._saTenants || []).filter(t => t.active);
-  const tenantOpts = tenants.map(t => `<option value="${t.slug}">${t.name}</option>`).join('');
-  const planOpts = Object.entries(SA_PLAN_LABELS).map(([v,l]) =>
-    `<option value="${v}">${l} — R$ ${SA_PLAN_PRICES[v].toLocaleString('pt-BR')}/mês</option>`).join('');
-  modal(`
+async function saOpenNewContract() {
+  // Sempre busca dados frescos
+  const [licTypes, allTenants, allProposals] = await Promise.all([
+    _ensureLicTypes(),
+    saApi('GET', '/superadmin/tenants').catch(() => []),
+    saApi('GET', '/superadmin/proposals').catch(() => []),
+  ]);
+  window._saTenants = allTenants || [];
+  window._ppList    = allProposals || [];
+
+  const fmt2 = v => parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
+  // CAMINHO A: tenants ativos sem contrato ativo
+  const tenantsNoContract = (allTenants || []).filter(t => t.active && !t.has_active_contract);
+
+  // CAMINHO B: propostas approved — tenant_slug é NULL até ativação
+  const proposalsApproved = (allProposals || []).filter(p => p.status === 'approved');
+
+  // Campo MARINA unificado: optgroup de tenants + optgroup de propostas
+  const tenantGroup = tenantsNoContract.length ? `
+    <optgroup label="── Marinas ativas sem contrato ──">
+      ${tenantsNoContract.map(t => `<option value="tenant:${escHtml(t.slug)}">${escHtml(t.name)}</option>`).join('')}
+    </optgroup>` : '';
+
+  const proposalGroup = proposalsApproved.length ? `
+    <optgroup label="── Propostas aprovadas (cria marina + contrato) ──">
+      ${proposalsApproved.map(p => `<option value="proposal:${p.id}">${escHtml(p.lead_name)} — R$ ${fmt2(p.final_value)}/mês</option>`).join('')}
+    </optgroup>` : '';
+
+  const licOpts = licTypes.filter(lt => lt.active).map(lt =>
+    `<option value="${lt.slug}">${escHtml(lt.name)} — R$ ${Number(lt.price_monthly || 0).toLocaleString('pt-BR')}/mês</option>`
+  ).join('');
+
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:580px">
     <div class="modal-title" style="margin-bottom:16px">📄 Novo Contrato de Licença</div>
+    ${!tenantGroup && !proposalGroup ? `
+      <div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">
+        Nenhuma marina ou proposta aprovada disponível para novo contrato.
+      </div>` : ''}
+    <input type="hidden" id="sc-proposal-id" value="">
     <div style="display:grid;gap:12px">
-      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">MARINA *</label>
-        <select id="sc-tenant" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"
-          onchange="document.getElementById('sc-value').value=SA_PLAN_PRICES[document.getElementById('sc-plan').value]||''">
-          <option value="">Selecione...</option>${tenantOpts}
-        </select></div>
-      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">PLANO *</label>
+      <div>
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">MARINA *</label>
+        <select id="sc-tenant" onchange="scOnMarinaChange(this.value)"
+          style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+          <option value="">Selecione...</option>
+          ${tenantGroup}${proposalGroup}
+        </select>
+        <div id="sc-marina-hint" style="font-size:11px;color:#d97706;margin-top:4px;display:none">
+          ⚡ Esta opção criará a marina e gerará o contrato automaticamente ao salvar.
+        </div>
+      </div>
+      <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">TIPO DE LICENÇA *</label>
         <select id="sc-plan" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"
-          onchange="document.getElementById('sc-value').value=SA_PLAN_PRICES[this.value]||''">
-          <option value="">Selecione...</option>${planOpts}
+          onchange="document.getElementById('sc-value').value=(_licPrice(this.value)||'')">
+          <option value="">Selecione...</option>${licOpts}
         </select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">VALOR MENSAL (R$) *</label>
@@ -9493,7 +11282,7 @@ function saOpenNewContract() {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">DATA INÍCIO *</label>
-          <input id="sc-start" type="date" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
+          <input id="sc-start" type="date" value="${new Date().toISOString().slice(0, 10)}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
         <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">DATA TÉRMINO</label>
           <input id="sc-end" type="date" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
       </div>
@@ -9513,14 +11302,69 @@ function saOpenNewContract() {
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saSaveNewContract()">✅ Criar Contrato</button>
-    </div>`);
-  // Preenche data início com hoje
-  const today = new Date().toISOString().slice(0,10);
-  document.getElementById('sc-start').value = today;
+    </div>
+  </div>`);
+}
+
+async function scActivateFromProposal(id) {
+  const p = (window._ppList || []).find(x => Number(x.id) === Number(id));
+  if (!p) return;
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ Ativando...';
+  try {
+    const r = await saApi('PUT', '/superadmin/proposals/' + id + '/status', { status: 'converted' });
+    if (r && r.error) { toast(r.error, 'error'); btn.disabled = false; btn.textContent = '⚡ Ativar + Contrato'; return; }
+    closeModal();
+    toast(`Marina ${p.lead_name} ativada! Contrato gerado automaticamente.`);
+    window._saContractsLoaded = false;
+    window._saPpLoaded = false;
+    window._saImplLoaded = false;
+    saLoadContracts();
+  } catch(e) { toast('Erro: ' + e.message, 'error'); btn.disabled = false; btn.textContent = '⚡ Ativar + Contrato'; }
+}
+
+// Chamado ao mudar o select MARINA — preenche form se for proposta
+function scOnMarinaChange(val) {
+  const hint = document.getElementById('sc-marina-hint');
+  if (!val.startsWith('proposal:')) {
+    if (hint) hint.style.display = 'none';
+    // Limpa campos preenchidos por proposta anterior
+    const pidEl = document.getElementById('sc-proposal-id');
+    if (pidEl) pidEl.value = '';
+    return;
+  }
+  if (hint) hint.style.display = 'block';
+  const id = Number(val.replace('proposal:', ''));
+  scFillFromProposal(id);
+}
+
+// Preenche o form a partir de uma proposta (sem tocar no select — já está setado)
+function scFillFromProposal(id) {
+  const p = (window._ppList || []).find(x => Number(x.id) === Number(id));
+  if (!p) return;
+  // tipo de licença — sc-plan usa slug como value
+  const planSel = document.getElementById('sc-plan');
+  if (planSel && p.license_type_id) {
+    const lt = (window._licTypes || []).find(t => Number(t.id) === Number(p.license_type_id));
+    if (lt) planSel.value = lt.slug;
+  }
+  // valor
+  const valEl = document.getElementById('sc-value');
+  if (valEl && p.final_value) valEl.value = Number(p.final_value).toFixed(2);
+  // data início
+  const startEl = document.getElementById('sc-start');
+  if (startEl && !startEl.value) startEl.value = new Date().toISOString().slice(0, 10);
+  // proposal_id oculto
+  const pidEl = document.getElementById('sc-proposal-id');
+  if (pidEl) pidEl.value = id;
+  // observações
+  const notesEl = document.getElementById('sc-notes');
+  if (notesEl && !notesEl.value) notesEl.value = `Originado da Proposta #${id} — ${p.lead_name}`;
 }
 
 async function saSaveNewContract() {
-  const tenant_slug  = document.getElementById('sc-tenant').value;
+  const marinaVal    = document.getElementById('sc-tenant').value;
   const plan         = document.getElementById('sc-plan').value;
   const monthly_value= parseFloat(document.getElementById('sc-value').value);
   const start_date   = document.getElementById('sc-start').value;
@@ -9530,10 +11374,29 @@ async function saSaveNewContract() {
   const genCharges   = document.getElementById('sc-gen').checked;
   const errEl        = document.getElementById('sc-err');
   errEl.style.display = 'none';
-  if (!tenant_slug) { errEl.textContent='Selecione a marina.';       errEl.style.display='block'; return; }
-  if (!plan)        { errEl.textContent='Selecione o plano.';        errEl.style.display='block'; return; }
-  if (!monthly_value|| isNaN(monthly_value)) { errEl.textContent='Informe o valor mensal.'; errEl.style.display='block'; return; }
-  if (!start_date)  { errEl.textContent='Informe a data de início.'; errEl.style.display='block'; return; }
+  if (!marinaVal) { errEl.textContent='Selecione a marina.'; errEl.style.display='block'; return; }
+
+  // CAMINHO B: proposta aprovada → abre modal Nova Marina pré-preenchido
+  // O admin preenche as credenciais manualmente; após criar o tenant o sistema cria o contrato e marca converted
+  if (marinaVal.startsWith('proposal:')) {
+    const proposalId = Number(marinaVal.replace('proposal:', ''));
+    const p = (window._ppList || []).find(x => Number(x.id) === proposalId);
+    if (!p) { errEl.textContent = 'Proposta não encontrada.'; errEl.style.display='block'; return; }
+    if (!plan)         { errEl.textContent = 'Selecione o tipo de licença.'; errEl.style.display='block'; return; }
+    if (!monthly_value || isNaN(monthly_value)) { errEl.textContent = 'Informe o valor mensal.'; errEl.style.display='block'; return; }
+    if (!start_date)   { errEl.textContent = 'Informe a data de início.'; errEl.style.display='block'; return; }
+    // Salva contexto do contrato para usar após criação do tenant
+    window._pendingContractProposal = { proposalId, plan, monthly_value, start_date, end_date, status, notes, genCharges };
+    closeModal();
+    saOpenNewTenantModal(proposalId);
+    return;
+  }
+
+  // CAMINHO A: tenant já existente — validação e criação manual
+  const tenant_slug = marinaVal.replace('tenant:', '');
+  if (!plan)         { errEl.textContent='Selecione o tipo de licença.'; errEl.style.display='block'; return; }
+  if (!monthly_value || isNaN(monthly_value)) { errEl.textContent='Informe o valor mensal.'; errEl.style.display='block'; return; }
+  if (!start_date)   { errEl.textContent='Informe a data de início.'; errEl.style.display='block'; return; }
   // Lê arquivo como base64
   let contract_file_data = null, contract_file_name = null;
   const f = document.getElementById('sc-file')?.files[0];
@@ -9544,9 +11407,11 @@ async function saSaveNewContract() {
     });
     contract_file_name = f.name;
   }
+  const proposal_id = document.getElementById('sc-proposal-id')?.value || null;
   const r = await saApi('POST', '/superadmin/contracts', {
     tenant_slug, plan, monthly_value, start_date, end_date, status, notes,
     contract_file_data, contract_file_name, generate_charges: genCharges,
+    proposal_id: proposal_id ? Number(proposal_id) : null,
   });
   if (!r || r.error) { errEl.textContent = r?.error||'Erro ao criar contrato.'; errEl.style.display='block'; return; }
   closeModal();
@@ -9555,18 +11420,106 @@ async function saSaveNewContract() {
   saLoadContracts();
 }
 
+function saToggleImplantacao() {
+  const body  = document.getElementById('sa-implantacao-body');
+  const arrow = document.getElementById('sa-impl-arrow');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display  = open ? 'none' : '';
+  if (arrow) arrow.textContent = open ? '▾' : '▴';
+  if (!open && !window._saImplLoaded) saLoadImplantacao();
+}
+
+async function saLoadImplantacao() {
+  const body = document.getElementById('sa-implantacao-body');
+  if (!body) return;
+  body.innerHTML = '<div style="padding:16px;color:var(--text3);font-size:13px">Carregando…</div>';
+  window._saImplLoaded = true;
+  const list = await saApi('GET', '/superadmin/proposals/implantacao');
+  if (!list || list.error) {
+    body.innerHTML = `<div style="padding:16px;color:#ef4444;font-size:13px">Erro ao carregar.</div>`;
+    return;
+  }
+  if (!list.length) {
+    body.innerHTML = `<div style="padding:16px;color:var(--text3);font-size:13px">Nenhuma proposta aprovada/convertida encontrada.</div>`;
+    return;
+  }
+  const pending = list.filter(r => !r.tenant_id || !r.contract_id).length;
+  const badge = document.getElementById('sa-impl-badge');
+  if (badge) {
+    if (pending > 0) {
+      badge.textContent = `${pending} pendente${pending > 1 ? 's' : ''}`;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+  const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+  body.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--bg)">
+            <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:600">Marina / Lead</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:600">Proposta</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:600">Status proposta</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:600">Tenant criado?</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:600">Contrato?</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:600">Aprovado em</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map(r => {
+            const hasTenant   = !!r.tenant_id;
+            const tenantActive= hasTenant && r.tenant_active;
+            const hasContract = !!r.contract_id;
+            const tenantIcon  = !hasTenant    ? '<span style="color:#ef4444">❌ Sem tenant</span>'
+                              : !tenantActive ? '<span style="color:#f59e0b">⚠️ Inativo</span>'
+                              : '<span style="color:#22c55e">✅ Ativo</span>';
+            const contractIcon= hasContract   ? '<span style="color:#22c55e">✅ Sim</span>'
+                              : '<span style="color:#f59e0b">⚠️ Pendente</span>';
+            const rowBg = (!hasTenant || !hasContract) ? 'background:#f59e0b08' : '';
+            return `<tr style="border-top:1px solid var(--border);${rowBg}">
+              <td style="padding:8px 12px;font-weight:600">${r.tenant_name || r.lead_name || '—'}</td>
+              <td style="padding:8px 12px">
+                <span onclick="saImplViewProposal(${r.id})" style="cursor:pointer;color:var(--accent);font-weight:700">#${r.id}</span>
+              </td>
+              <td style="padding:8px 12px">${r.status === 'converted' ? '<span class="badge-success">Convertida</span>' : '<span class="badge-warning">Aprovada</span>'}</td>
+              <td style="padding:8px 12px">${tenantIcon}</td>
+              <td style="padding:8px 12px">${contractIcon}</td>
+              <td style="padding:8px 12px;color:var(--text3)">${fmtDate(r.approved_at)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function saImplViewProposal(id) {
+  if (!window._ppList || !window._ppList.length) {
+    const list = await saApi('GET', '/superadmin/proposals');
+    window._ppList = list || [];
+  }
+  ppOpenDetail(id);
+}
+
 async function saViewContract(id) {
   const c = window._saContracts.find(x => x.id == id);
   if (!c) return;
   const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
   const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
-  modal(`
+  const safeSlug = c.tenant_slug.replace(/'/g, "\\'");
+  const safeNm   = (c.tenant_name||c.tenant_slug).replace(/'/g, "\\'");
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:600px">
     <div class="modal-title" style="margin-bottom:4px">📄 Contrato — ${c.tenant_name||c.tenant_slug}</div>
     <div style="margin-bottom:16px">${saContractStatusBadge(c.status)}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+
+    <!-- Dados comerciais -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px">Dados do Contrato</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">
       <div class="settings-info-box" style="margin:0">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Plano</div>
-        <div style="font-weight:700;color:var(--accent)">${SA_PLAN_LABELS[c.plan]||c.plan}</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Plano do Contrato</div>
+        <div style="font-weight:700;color:var(--accent)">${_licLabel(c.plan)}</div>
       </div>
       <div class="settings-info-box" style="margin:0">
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Valor/Mês</div>
@@ -9593,23 +11546,84 @@ async function saViewContract(id) {
     ${c.contract_file_name ? `<div class="settings-info-box" style="margin-bottom:12px">
       📎 <a href="${c.contract_file_data}" download="${c.contract_file_name}" style="color:var(--accent)">${c.contract_file_name}</a>
     </div>` : ''}
+
+    <!-- Licença técnica (carregada via API) -->
+    <div style="border-top:1px solid var(--border);margin:4px 0 14px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3)">Licença Técnica (Acesso a Módulos)</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="licOpenAssignLicense('${safeSlug}')">🔑 Atribuir / Trocar</button>
+        <button class="btn btn-ghost btn-sm" onclick="licOpenAddOverride('${safeSlug}')">⚡ Override</button>
+      </div>
+    </div>
+    <div id="svc-tech-lic-${id}" style="background:var(--bg);border-radius:8px;padding:12px;font-size:12px;color:var(--text3)">Carregando...</div>
+
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap">
       <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
-      ${c.status!=='cancelled'?`<button class="btn btn-danger btn-sm" onclick="closeModal();saCancelContract(${c.id},'${(c.tenant_name||c.tenant_slug).replace(/'/g,"\\'")}')">🚫 Cancelar</button>`:''}
+      ${c.status!=='cancelled'?`<button class="btn btn-danger btn-sm" onclick="closeModal();saCancelContract(${c.id},'${safeNm}')">🚫 Cancelar</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="saGenerateContract(${c.id})">📋 PDF</button>
       <button class="btn btn-primary" onclick="closeModal();saEditContract(${c.id})">✏️ Editar</button>
-    </div>`);
+    </div>
+  </div>`);
+
+  // Carrega licença técnica em background
+  saLoadTechLic(id, c.tenant_slug);
 }
 
-function saEditContract(id) {
+async function saLoadTechLic(contractId, slug) {
+  const el = document.getElementById('svc-tech-lic-' + contractId);
+  if (!el) return;
+  try {
+    const data = await saApi('GET', '/superadmin/tenants/' + slug + '/license');
+    const lic  = data.license;
+    const mods = data.effective_modules || [];
+    const ovrs = data.overrides || [];
+    const safeSlug = slug.replace(/'/g, "\\'");
+    el.innerHTML = lic ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--accent)">${lic.plan_name||'—'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">
+            Desde ${lic.starts_at?.slice(0,10)||'—'}${lic.ends_at ? ' até ' + lic.ends_at.slice(0,10) : ''}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${LIC_STATUS_BADGE[lic.status]||'badge-gray'}">${LIC_STATUS_LABELS[lic.status]||lic.status}</span>
+          <button class="btn btn-danger btn-sm" style="font-size:11px" onclick="licRevokeLicense('${safeSlug}')">🚫 Revogar</button>
+        </div>
+      </div>
+      ${ovrs.length ? `
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:6px">Overrides individuais</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+          ${ovrs.map(o => `
+            <span style="display:flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:100px;background:${o.granted?'#22c55e15':'#ef444415'};border:1px solid ${o.granted?'#22c55e33':'#ef444433'};color:${o.granted?'#22c55e':'#ef4444'}">
+              ${o.granted?'✓':'✗'} ${o.name}
+              <span onclick="licRemoveOverride('${safeSlug}',${o.module_id})" style="cursor:pointer;opacity:.6;font-size:10px;margin-left:2px">✕</span>
+            </span>`).join('')}
+        </div>` : ''}
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:6px">Módulos ativos (${mods.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        ${mods.map(m => `<span style="font-size:10px;padding:2px 8px;border-radius:100px;background:${LIC_CATEGORY_COLORS[m.category]}15;border:1px solid ${LIC_CATEGORY_COLORS[m.category]}33;color:${LIC_CATEGORY_COLORS[m.category]}">${m.name}${m.source==='override_add'?' ✦':''}</span>`).join('')}
+      </div>`
+    : `<div style="color:var(--text3)">Nenhuma licença técnica ativa. Use "Atribuir / Trocar" para vincular um plano.</div>`;
+  } catch(e) { if (el) el.innerHTML = `<div style="color:#ef4444">Erro: ${e.message}</div>`; }
+}
+
+async function saEditContract(id) {
   const c = window._saContracts.find(x => x.id == id);
   if (!c) return;
-  modal(`
+  const licTypes = await _ensureLicTypes();
+  const licOpts  = licTypes.map(lt =>
+    `<option value="${lt.slug}"${c.plan===lt.slug?' selected':''}>${lt.name}</option>`
+  ).join('');
+  const statusLabels = { active:'Ativo', trial:'Trial', expired:'Expirado', cancelled:'Cancelado' };
+  modal(`<div class="modal" onclick="event.stopPropagation()" style="max-width:540px">
     <div class="modal-title" style="margin-bottom:16px">✏️ Editar Contrato — ${c.tenant_name||c.tenant_slug}</div>
     <div style="display:grid;gap:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">PLANO</label>
+        <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">TIPO DE LICENÇA</label>
           <select id="sec-plan" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
-            ${Object.entries(SA_PLAN_LABELS).map(([v,l])=>`<option value="${v}"${c.plan===v?' selected':''}>${l}</option>`).join('')}
+            ${licOpts}
           </select></div>
         <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">VALOR MENSAL (R$)</label>
           <input id="sec-value" type="number" min="0" step="0.01" value="${c.monthly_value}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></div>
@@ -9622,7 +11636,7 @@ function saEditContract(id) {
       </div>
       <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">STATUS</label>
         <select id="sec-status" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
-          ${['active','trial','expired','cancelled'].map(s=>`<option value="${s}"${c.status===s?' selected':''}>${s}</option>`).join('')}
+          ${Object.entries(statusLabels).map(([v,l])=>`<option value="${v}"${c.status===v?' selected':''}>${l}</option>`).join('')}
         </select></div>
       <div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">OBSERVAÇÕES</label>
         <textarea id="sec-notes" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;font-size:13px">${c.notes||''}</textarea></div>
@@ -9632,7 +11646,8 @@ function saEditContract(id) {
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saSaveEditContract(${id})">💾 Salvar</button>
-    </div>`);
+    </div>
+  </div>`);
 }
 
 async function saSaveEditContract(id) {
@@ -9948,7 +11963,7 @@ async function saLoadAnalytics() {
     _anlCharts.plans = new Chart(planCtx, {
       type: 'doughnut',
       data: {
-        labels: d.plan_dist.map(r => (SA_PLAN_LABELS[r.plan]||r.plan) + ' (' + r.count + ')'),
+        labels: d.plan_dist.map(r => _licLabel(r.plan) + ' (' + r.count + ')'),
         datasets: [{ data: d.plan_dist.map(r => r.mrr),
           backgroundColor: d.plan_dist.map(r => planColors[r.plan]||'#94a3b8'), borderWidth: 0 }]
       },
@@ -9981,7 +11996,7 @@ async function saLoadAnalytics() {
       ? d.top_tenants.map((r, i) => `<tr>
           <td style="font-size:12px;color:var(--text3);text-align:center">${i+1}</td>
           <td style="font-weight:600;font-size:13px">${r.tenant_name||r.tenant_slug}</td>
-          <td><span class="badge ${r.active_plan==='enterprise'?'badge-success':r.active_plan==='professional'?'badge-info':'badge-gray'}">${SA_PLAN_LABELS[r.active_plan]||r.active_plan||'—'}</span></td>
+          <td>${_licBadge(r.active_plan)}</td>
           <td style="font-size:13px;font-weight:600;color:var(--success)">${fmtBRL(r.paid_total)}</td>
           <td style="font-size:12px;color:var(--text3)">${fmtBRL(r.pending_total)}</td>
         </tr>`).join('')
@@ -10019,7 +12034,7 @@ async function saLoadAnalytics() {
           const urgColor = daysLeft != null && daysLeft <= 15 ? 'var(--danger)' : daysLeft <= 30 ? 'var(--warning,#f59e0b)' : 'var(--text3)';
           return `<tr>
             <td style="font-weight:600">${c.tenant_name||c.tenant_slug}</td>
-            <td><span class="badge ${c.plan==='enterprise'?'badge-success':c.plan==='professional'?'badge-info':'badge-gray'}">${SA_PLAN_LABELS[c.plan]||c.plan}</span></td>
+            <td>${_licBadge(c.plan)}</td>
             <td style="font-size:12px;font-weight:600;color:${urgColor}">${fmtDate(c.end_date)}${daysLeft!=null?' ('+daysLeft+'d)':''}</td>
             <td style="font-size:13px">${fmtBRL(c.monthly_value)}</td>
             <td>${saContractStatusBadge(c.status)}</td>
@@ -10118,7 +12133,7 @@ async function saLoadAnalytics() {
           const lvlLabel = r.level === 'critical' ? 'Crítico' : r.level === 'warning' ? 'Atenção' : 'OK';
           return `<tr>
             <td style="font-weight:600">${r.name||r.slug}</td>
-            <td><span class="badge ${r.plan==='enterprise'?'badge-success':r.plan==='professional'?'badge-info':'badge-gray'}">${SA_PLAN_LABELS[r.plan]||r.plan||'—'}</span></td>
+            <td>${_licBadge(r.plan)}</td>
             <td><div style="display:flex;align-items:center;gap:8px">
               <div style="width:48px;height:8px;border-radius:4px;background:var(--border);overflow:hidden">
                 <div style="width:${r.score}%;height:100%;background:${scoreBg(r.score)};transition:width .3s"></div>
@@ -10193,17 +12208,9 @@ async function saSaveSettings() {
     const el = document.getElementById('cfg-' + key);
     if (el) payload[key] = el.value;
   });
-  const msg = document.getElementById('sa-cfg-msg');
-  if (msg) { msg.innerHTML = '<div style="color:var(--text3);padding:10px">Salvando...</div>'; msg.style.display=''; }
   const r = await saApi('PUT', '/superadmin/settings', payload);
-  if (!r || r.error) {
-    if (msg) msg.innerHTML = `<div style="color:var(--danger);background:rgba(239,68,68,.1);padding:12px;border-radius:8px">❌ ${r?.error||'Erro ao salvar.'}</div>`;
-    return;
-  }
-  if (msg) {
-    msg.innerHTML = '<div style="color:var(--success);background:rgba(16,185,129,.1);padding:12px;border-radius:8px">✅ Configurações salvas com sucesso!</div>';
-    setTimeout(() => { msg.style.display='none'; }, 3500);
-  }
+  if (!r || r.error) { toast(r?.error || 'Erro ao salvar configurações.', 'error'); return; }
+  toast('Configurações salvas com sucesso!');
 }
 
 async function saTestWeatherApi() {
