@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Marina One SA — Paleta v2</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050505;font-family:'Plus Jakarta Sans',sans-serif;color:#fff;padding:48px 36px;min-height:100vh}
+
+/* ── Capa ── */
+.deck-label{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#3f3f3f;border:1px solid #1a1a1a;padding:5px 16px;border-radius:100px;margin-bottom:32px}
+.deck-title{font-size:54px;font-weight:800;letter-spacing:-.035em;color:#fafafa;line-height:1;margin-bottom:10px}
+.deck-sub{font-size:14px;color:#525252;max-width:560px;line-height:1.7;margin-bottom:56px}
+.rule{height:1px;background:linear-gradient(90deg,#1a1a1a 0%,transparent 100%);margin-bottom:48px}
+
+/* ── Grid de paletas ── */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:1360px;margin:0 auto 56px}
+
+/* ── Cada card de paleta ── */
+.pc{border-radius:20px;overflow:hidden;border:1px solid #141414;position:relative;cursor:pointer;transition:transform .4s cubic-bezier(.32,.72,0,1),box-shadow .4s}
+.pc:hover{transform:translateY(-6px);box-shadow:0 24px 48px rgba(0,0,0,.5)}
+
+/* Cabeçalho do card */
+.pc-head{padding:24px 24px 16px;display:flex;flex-direction:column;gap:4px}
+.pc-num{font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.3;font-weight:600}
+.pc-title{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.pc-desc{font-size:11px;opacity:.4;line-height:1.5}
+
+/* Swatches */
+.sw-row{display:flex;height:40px;margin:0 20px 12px;border-radius:12px;overflow:hidden}
+.sw{flex:1}
+.sw-dots{display:flex;gap:7px;padding:0 20px 16px;align-items:center}
+.dot{width:20px;height:20px;border-radius:6px;position:relative}
+.dot-lbl{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:7px;white-space:nowrap;opacity:.4;letter-spacing:.04em}
+
+/* Mini UI shell */
+.ui-wrap{margin:0 12px 12px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.05)}
+.ui-top{padding:9px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05)}
+.ui-title{font-size:10px;font-weight:600;letter-spacing:-.01em;opacity:.55}
+.ui-flex{display:flex;height:168px}
+.ui-side{width:140px;padding:12px 8px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.04)}
+.ui-logo{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;margin-bottom:14px}
+.ui-nav{padding:5px 9px;border-radius:6px;font-size:9px;font-weight:500;margin-bottom:1px;opacity:.4}
+.ui-nav.on{opacity:1;font-weight:700}
+.ui-main{flex:1;padding:12px;display:flex;flex-direction:column;gap:7px}
+.ui-krow{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.kp{padding:9px 10px;border-radius:9px}
+.kp-l{font-size:7px;letter-spacing:.08em;text-transform:uppercase;opacity:.4;margin-bottom:3px}
+.kp-v{font-size:14px;font-weight:700;line-height:1}
+.kp-bar{height:3px;border-radius:2px;margin-top:6px;opacity:.25}
+
+/* Nota */
+.pc-note{padding:10px 20px 18px;font-size:10px;line-height:1.7;color:#404040;border-top:1px solid rgba(255,255,255,.04)}
+
+/* Badge recomendado */
+.rec{position:absolute;top:14px;right:14px;font-size:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:3px 10px;border-radius:100px;background:#e9b44c;color:#111}
+
+/* ── Painel comparativo ── */
+.cmp{max-width:1360px;margin:0 auto 56px;background:#0a0a0a;border:1px solid #181818;border-radius:20px;padding:32px}
+.cmp-title{font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#333;margin-bottom:24px}
+.cmp-row{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #111}
+.cmp-row:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.cmp-lbl{font-size:9px;color:#3a3a3a;width:100px;flex-shrink:0;font-weight:600;letter-spacing:.04em}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:8px;font-weight:700;padding:3px 10px;border-radius:100px;letter-spacing:.04em}
+.clash{text-decoration:line-through;opacity:.5}
+
+/* ── Footer ── */
+.foot{text-align:center;font-size:10px;color:#262626;padding-bottom:20px}
+.foot span{color:#3a3a3a}
+</style>
+</head>
+<body>
+
+<div class="deck-label">Marina One · Super Admin · Paleta v2 · Resolvendo o conflito Azul × Ouro</div>
+<h1 class="deck-title">Nova Direção de Paleta</h1>
+<p class="deck-sub">O azul-céu vivo <code style="background:#111;padding:1px 6px;border-radius:4px;font-size:11px;color:#38bdf8">#38bdf8</code> conflita termicamente com qualquer ouro quente. Cada opção abaixo resolve isso de uma forma diferente, mantendo Sala de Máquinas como base.</p>
+<div class="rule"></div>
+
+<div class="grid">
+
+<!-- ══ OPÇÃO 1: BRONZE IMPERIAL ══ -->
+<div class="pc" style="background:#080808">
+  <div class="pc-head">
+    <div class="pc-num">01</div>
+    <div class="pc-title" style="color:#f5e6c8">Bronze Imperial</div>
+    <div class="pc-desc">Carbono · Bronze quente · Info → âmbar frio</div>
+  </div>
+
+  <div class="sw-row">
+    <div class="sw" style="background:#080808"></div>
+    <div class="sw" style="background:#131313"></div>
+    <div class="sw" style="background:#1e1a14"></div>
+    <div class="sw" style="background:#b87333"></div>
+    <div class="sw" style="background:#e8c080"></div>
+    <div class="sw" style="background:#f5e6c8"></div>
+  </div>
+  <div class="sw-dots" style="padding-bottom:24px">
+    <div class="dot" style="background:#10b981"><span class="dot-lbl">Sucesso</span></div>
+    <div class="dot" style="background:#ef4444"><span class="dot-lbl">Perigo</span></div>
+    <div class="dot" style="background:#d4a847"><span class="dot-lbl">Info*</span></div>
+    <div class="dot" style="background:#f59e0b"><span class="dot-lbl">Warning</span></div>
+  </div>
+
+  <div class="ui-wrap" style="background:#080808">
+    <div class="ui-top" style="background:#0d0d0d">
+      <div class="ui-title">Visão Operacional</div>
+      <div style="width:40px;height:4px;border-radius:2px;background:#b87333;opacity:.5"></div>
+    </div>
+    <div class="ui-flex">
+      <div class="ui-side" style="background:#060606">
+        <div class="ui-logo" style="background:linear-gradient(135deg,#7a4d1e,#b87333)">⚓</div>
+        <div class="ui-nav on" style="background:rgba(184,115,51,.12);color:#e8c080">Operacional</div>
+        <div class="ui-nav">Analytics</div>
+        <div class="ui-nav">Financeiro</div>
+        <div class="ui-nav">Contratos</div>
+      </div>
+      <div class="ui-main" style="background:#080808">
+        <div class="ui-krow">
+          <div class="kp" style="background:#111111">
+            <div class="kp-l">Tenants</div>
+            <div class="kp-v" style="color:#e8c080">24</div>
+            <div class="kp-bar" style="background:#b87333"></div>
+          </div>
+          <div class="kp" style="background:#111111">
+            <div class="kp-l">MRR</div>
+            <div class="kp-v" style="color:#10b981">R$48k</div>
+            <div class="kp-bar" style="background:#10b981"></div>
+          </div>
+        </div>
+        <div class="ui-krow">
+          <div class="kp" style="background:#111111">
+            <div class="kp-l">Inadimp.</div>
+            <div class="kp-v" style="color:#ef4444">R$2.1k</div>
+            <div class="kp-bar" style="background:#ef4444"></div>
+          </div>
+          <div class="kp" style="background:#111111">
+            <div class="kp-l">A Vencer</div>
+            <div class="kp-v" style="color:#d4a847">R$9k</div>
+            <div class="kp-bar" style="background:#d4a847"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pc-note">Info redefinido para âmbar-dourado frio <code style="background:#1a1a1a;padding:0 4px;border-radius:3px;color:#d4a847">#d4a847</code> dentro do SA. Bronze é mais rico e menos "alerta" que o amarelo puro — cria família coerente com o ouro.</div>
+</div>
+
+<!-- ══ OPÇÃO 2: GRAFITE + COBRE (RECOMENDADO) ══ -->
+<div class="pc" style="background:#080806">
+  <div class="rec">★ Recomendado</div>
+  <div class="pc-head">
+    <div class="pc-num">02</div>
+    <div class="pc-title" style="color:#faf5eb">Grafite + Cobre</div>
+    <div class="pc-desc">Carbono quente · Cobre vivo · Info → prata fria</div>
+  </div>
+
+  <div class="sw-row">
+    <div class="sw" style="background:#080806"></div>
+    <div class="sw" style="background:#141410"></div>
+    <div class="sw" style="background:#1c1c18"></div>
+    <div class="sw" style="background:#c4622d"></div>
+    <div class="sw" style="background:#e8956a"></div>
+    <div class="sw" style="background:#faf5eb"></div>
+  </div>
+  <div class="sw-dots" style="padding-bottom:24px">
+    <div class="dot" style="background:#10b981"><span class="dot-lbl">Sucesso</span></div>
+    <div class="dot" style="background:#ef4444"><span class="dot-lbl">Perigo</span></div>
+    <div class="dot" style="background:#94a3b8"><span class="dot-lbl">Info*</span></div>
+    <div class="dot" style="background:#f59e0b"><span class="dot-lbl">Warning</span></div>
+  </div>
+
+  <div class="ui-wrap" style="background:#080806">
+    <div class="ui-top" style="background:#0f0f0c">
+      <div class="ui-title" style="color:#c8b89a">Visão Operacional</div>
+      <div style="width:40px;height:4px;border-radius:2px;background:#c4622d;opacity:.6"></div>
+    </div>
+    <div class="ui-flex">
+      <div class="ui-side" style="background:#060604">
+        <div class="ui-logo" style="background:linear-gradient(135deg,#8b3a1a,#c4622d)">⚓</div>
+        <div class="ui-nav on" style="background:rgba(196,98,45,.13);color:#e8956a;border-left:2px solid #c4622d">Operacional</div>
+        <div class="ui-nav" style="color:#524e47">Analytics</div>
+        <div class="ui-nav" style="color:#524e47">Financeiro</div>
+        <div class="ui-nav" style="color:#524e47">Contratos</div>
+      </div>
+      <div class="ui-main" style="background:#080806">
+        <div class="ui-krow">
+          <div class="kp" style="background:#111110">
+            <div class="kp-l">Tenants</div>
+            <div class="kp-v" style="color:#e8956a">24</div>
+            <div class="kp-bar" style="background:#c4622d"></div>
+          </div>
+          <div class="kp" style="background:#111110">
+            <div class="kp-l">MRR</div>
+            <div class="kp-v" style="color:#10b981">R$48k</div>
+            <div class="kp-bar" style="background:#10b981"></div>
+          </div>
+        </div>
+        <div class="ui-krow">
+          <div class="kp" style="background:#111110">
+            <div class="kp-l">Inadimp.</div>
+            <div class="kp-v" style="color:#ef4444">R$2.1k</div>
+            <div class="kp-bar" style="background:#ef4444"></div>
+          </div>
+          <div class="kp" style="background:#111110">
+            <div class="kp-l">A Vencer</div>
+            <div class="kp-v" style="color:#94a3b8">R$9k</div>
+            <div class="kp-bar" style="background:#94a3b8"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pc-note">Info redefinido para prata-ardósia <code style="background:#1a1a1a;padding:0 4px;border-radius:3px;color:#94a3b8">#94a3b8</code> — neutro, elegante, não compete com o cobre. Cobre é mais dramático e mais quente que ouro puro — extrema diferenciação do tenant app.</div>
+</div>
+
+<!-- ══ OPÇÃO 3: CARBONO TOTAL ══ -->
+<div class="pc" style="background:#0a0a0a">
+  <div class="pc-head">
+    <div class="pc-num">03</div>
+    <div class="pc-title" style="color:#fafafa">Carbono Total</div>
+    <div class="pc-desc">Preto absoluto · Sem acento · Status como única cor</div>
+  </div>
+
+  <div class="sw-row">
+    <div class="sw" style="background:#0a0a0a"></div>
+    <div class="sw" style="background:#111111"></div>
+    <div class="sw" style="background:#1c1c1c"></div>
+    <div class="sw" style="background:#2a2a2a"></div>
+    <div class="sw" style="background:#737373"></div>
+    <div class="sw" style="background:#fafafa"></div>
+  </div>
+  <div class="sw-dots" style="padding-bottom:24px">
+    <div class="dot" style="background:#10b981"><span class="dot-lbl">Sucesso</span></div>
+    <div class="dot" style="background:#ef4444"><span class="dot-lbl">Perigo</span></div>
+    <div class="dot" style="background:#60a5fa"><span class="dot-lbl">Info</span></div>
+    <div class="dot" style="background:#f59e0b"><span class="dot-lbl">Warning</span></div>
+  </div>
+
+  <div class="ui-wrap" style="background:#0a0a0a">
+    <div class="ui-top" style="background:#0f0f0f">
+      <div class="ui-title" style="color:#737373">Visão Operacional</div>
+      <div style="width:40px;height:4px;border-radius:2px;background:#2a2a2a"></div>
+    </div>
+    <div class="ui-flex">
+      <div class="ui-side" style="background:#080808">
+        <div class="ui-logo" style="background:#1c1c1c;border:1px solid #2a2a2a;font-size:10px;color:#737373">⚓</div>
+        <div class="ui-nav on" style="background:rgba(255,255,255,.07);color:#fafafa">Operacional</div>
+        <div class="ui-nav" style="color:#404040">Analytics</div>
+        <div class="ui-nav" style="color:#404040">Financeiro</div>
+        <div class="ui-nav" style="color:#404040">Contratos</div>
+      </div>
+      <div class="ui-main" style="background:#0a0a0a">
+        <div class="ui-krow">
+          <div class="kp" style="background:#111111">
+            <div class="kp-l" style="color:#404040">Tenants</div>
+            <div class="kp-v" style="color:#fafafa">24</div>
+            <div class="kp-bar" style="background:#404040;opacity:1"></div>
+          </div>
+          <div class="kp" style="background:#111111">
+            <div class="kp-l" style="color:#404040">MRR</div>
+            <div class="kp-v" style="color:#10b981">R$48k</div>
+            <div class="kp-bar" style="background:#10b981"></div>
+          </div>
+        </div>
+        <div class="ui-krow">
+          <div class="kp" style="background:#111111">
+            <div class="kp-l" style="color:#404040">Inadimp.</div>
+            <div class="kp-v" style="color:#ef4444">R$2.1k</div>
+            <div class="kp-bar" style="background:#ef4444"></div>
+          </div>
+          <div class="kp" style="background:#111111">
+            <div class="kp-l" style="color:#404040">A Vencer</div>
+            <div class="kp-v" style="color:#60a5fa">R$9k</div>
+            <div class="kp-bar" style="background:#60a5fa"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pc-note">Sem conflito porque não há acento quente competindo. O azul info original pode permanecer — sobre preto absoluto, qualquer cor semântica é legível. Perda: sem identidade visual própria além do fundo escuro.</div>
+</div>
+
+</div>
+
+<!-- ══ Painel comparativo ══ -->
+<div class="cmp">
+  <div class="cmp-title">Diagnóstico — Por que o azul conflita e como cada opção resolve</div>
+
+  <div class="cmp-row">
+    <div class="cmp-lbl">Problema atual</div>
+    <div class="chips">
+      <div class="chip" style="background:rgba(233,180,76,.15);color:#e9b44c">Ouro quente #e9b44c</div>
+      <div class="chip" style="background:rgba(56,189,248,.15);color:#38bdf8">+ Azul frio #38bdf8</div>
+      <div class="chip" style="background:#1a1212;color:#ef4444;border:1px solid #2a1a1a">= Conflito térmico ✗</div>
+    </div>
+  </div>
+
+  <div class="cmp-row">
+    <div class="cmp-lbl">01 · Bronze</div>
+    <div class="chips">
+      <div class="chip" style="background:rgba(184,115,51,.15);color:#e8c080">Bronze #b87333</div>
+      <div class="chip" style="background:rgba(212,168,71,.15);color:#d4a847">Info → âmbar-ouro</div>
+      <div class="chip" style="background:rgba(16,185,129,.15);color:#10b981">Verde ✓</div>
+      <div class="chip" style="background:rgba(239,68,68,.15);color:#ef4444">Vermelho ✓</div>
+      <div class="chip" style="background:#111;color:#666">Azul eliminado ✓</div>
+    </div>
+  </div>
+
+  <div class="cmp-row">
+    <div class="cmp-lbl">02 · Cobre ★</div>
+    <div class="chips">
+      <div class="chip" style="background:rgba(196,98,45,.15);color:#e8956a">Cobre #c4622d</div>
+      <div class="chip" style="background:rgba(148,163,184,.15);color:#94a3b8">Info → prata #94a3b8</div>
+      <div class="chip" style="background:rgba(16,185,129,.15);color:#10b981">Verde ✓</div>
+      <div class="chip" style="background:rgba(239,68,68,.15);color:#ef4444">Vermelho ✓</div>
+      <div class="chip" style="background:#111;color:#555">Azul neutralizado ✓</div>
+    </div>
+  </div>
+
+  <div class="cmp-row">
+    <div class="cmp-lbl">03 · Carbono</div>
+    <div class="chips">
+      <div class="chip" style="background:rgba(255,255,255,.06);color:#737373">Sem acento</div>
+      <div class="chip" style="background:rgba(56,189,248,.15);color:#38bdf8">Azul original ok</div>
+      <div class="chip" style="background:rgba(16,185,129,.15);color:#10b981">Verde ✓</div>
+      <div class="chip" style="background:rgba(239,68,68,.15);color:#ef4444">Vermelho ✓</div>
+      <div class="chip" style="background:#111;color:#555">Sem conflito (sem ouro) ✓</div>
+    </div>
+  </div>
+</div>
+
+<div class="foot">Marina One · Super Admin Palette v2 · <span>Diga "aplicar opção X" para implementar</span></div>
+
+</body>
+</html>

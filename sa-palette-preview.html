@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marina One — Super Admin Paleta Preview</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#050709;font-family:'Inter',sans-serif;color:#fff;padding:40px 32px;min-height:100vh}
+
+  /* ─── Capa ──────────────────────────────────────── */
+  .cover{text-align:center;padding:72px 0 64px;position:relative}
+  .cover-tag{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#4b5563;border:1px solid #1f2937;padding:5px 14px;border-radius:100px;margin-bottom:28px}
+  .cover-title{font-size:52px;font-weight:700;letter-spacing:-.03em;color:#f9fafb;line-height:1.05;margin-bottom:12px}
+  .cover-sub{font-size:15px;color:#6b7280;max-width:480px;margin:0 auto;line-height:1.6}
+  .divider{width:48px;height:2px;margin:48px auto;background:#1f2937}
+
+  /* ─── Grid de paletas ─────────────────────────────── */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1280px;margin:0 auto}
+
+  /* ─── Card de paleta ─────────────────────────────── */
+  .palette-card{border-radius:16px;overflow:hidden;border:1px solid #111827;position:relative;cursor:pointer;transition:transform .3s cubic-bezier(.32,.72,0,1),border-color .3s}
+  .palette-card:hover{transform:translateY(-4px);border-color:#374151}
+
+  .pal-header{padding:28px 24px 20px;display:flex;align-items:center;gap:14px}
+  .pal-num{font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;opacity:.4}
+  .pal-name{font-size:18px;font-weight:700;letter-spacing:-.02em}
+  .pal-sub{font-size:12px;opacity:.5;margin-top:2px}
+
+  /* Swatches */
+  .swatches{display:flex;gap:0;margin:0 24px 20px;border-radius:10px;overflow:hidden;height:36px}
+  .swatch{flex:1}
+  .swatch-sm{display:flex;gap:8px;padding:0 24px 20px;flex-wrap:wrap}
+  .chip{width:24px;height:24px;border-radius:6px}
+
+  /* Mini UI preview */
+  .mini-ui{margin:0 16px 16px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+  .mini-sidebar{width:160px;padding:14px 10px;flex-shrink:0}
+  .mini-sidebar-item{padding:6px 10px;border-radius:6px;font-size:10px;font-weight:500;margin-bottom:2px;opacity:.5}
+  .mini-sidebar-item.active{opacity:1}
+  .mini-main{flex:1;padding:14px}
+  .mini-row{display:flex;gap:8px;margin-bottom:8px}
+  .mini-kpi{flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.06)}
+  .mini-kpi-lbl{font-size:8px;opacity:.5;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+  .mini-kpi-val{font-size:14px;font-weight:700}
+  .mini-kpi-icon{font-size:14px;float:right;opacity:.7;margin-top:-18px}
+  .mini-bar{height:6px;border-radius:3px;margin-top:8px;opacity:.15}
+  .mini-topbar{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.06)}
+  .mini-topbar-title{font-size:11px;font-weight:600;opacity:.7}
+  .mini-flex{display:flex}
+  .mini-logo{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;margin-bottom:16px;font-weight:700}
+  .mini-nav-lbl{font-size:7px;letter-spacing:.12em;text-transform:uppercase;padding:0 10px;margin-bottom:6px;opacity:.3}
+  .mini-tag{display:inline-block;font-size:8px;font-weight:600;padding:2px 7px;border-radius:100px;margin-bottom:6px}
+
+  /* Badge recomendado */
+  .rec-badge{position:absolute;top:16px;right:16px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 10px;border-radius:100px;background:#10b981;color:#fff}
+
+  /* Nota da paleta */
+  .pal-note{padding:12px 24px 20px;font-size:11px;line-height:1.6;opacity:.5;border-top:1px solid rgba(255,255,255,.05)}
+
+  /* ─── Comparativo de coerência ─────────────────────── */
+  .coherence{max-width:1280px;margin:40px auto 0;padding:28px;background:#0a0d13;border:1px solid #1a1f2e;border-radius:16px}
+  .coherence-title{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#4b5563;margin-bottom:20px}
+  .coh-row{display:flex;gap:12px;margin-bottom:12px;align-items:center}
+  .coh-lbl{font-size:10px;color:#6b7280;width:80px;flex-shrink:0}
+  .coh-chips{display:flex;gap:6px}
+  .coh-chip{font-size:9px;font-weight:700;padding:3px 10px;border-radius:100px}
+
+  /* ─── Footer ──────────────────────────────────────── */
+  .footer{text-align:center;margin-top:56px;padding-bottom:40px;font-size:11px;color:#374151}
+  .footer span{color:#4b5563}
+</style>
+</head>
+<body>
+
+<!-- Capa -->
+<div class="cover">
+  <div class="cover-tag">Marina One · Super Admin · Paleta de Identidade</div>
+  <div class="cover-title">Três Direções de Paleta</div>
+  <div class="cover-sub">Cada opção foi construída para que os blocos de status (sucesso, perigo, info) harmonizem com o acento principal — sem conflito visual.</div>
+</div>
+<div class="divider"></div>
+
+<!-- Grid de opções -->
+<div class="grid">
+
+  <!-- ══════════ OPÇÃO 1 — PONTE DE COMANDO ══════════ -->
+  <div class="palette-card" style="background:#060c12">
+    <div class="pal-header">
+      <div>
+        <div class="pal-num">Opção 01</div>
+        <div class="pal-name" style="color:#e2e8f0">Ponte de Comando</div>
+        <div class="pal-sub">Marinho profundo · Teal frio · Prata</div>
+      </div>
+    </div>
+
+    <!-- Swatches principais -->
+    <div class="swatches">
+      <div class="swatch" style="background:#060c12"></div>
+      <div class="swatch" style="background:#0d1b2a"></div>
+      <div class="swatch" style="background:#0f766e"></div>
+      <div class="swatch" style="background:#14b8a6"></div>
+      <div class="swatch" style="background:#ccfbf1"></div>
+    </div>
+    <div class="swatch-sm">
+      <div class="chip" style="background:#10b981" title="Sucesso"></div>
+      <div class="chip" style="background:#ef4444" title="Perigo"></div>
+      <div class="chip" style="background:#38bdf8" title="Info"></div>
+      <div class="chip" style="background:#f59e0b" title="Warning"></div>
+    </div>
+
+    <!-- Mini UI -->
+    <div class="mini-ui" style="background:#060c12">
+      <div class="mini-topbar" style="background:#060c12">
+        <div class="mini-topbar-title">Visão Operacional</div>
+        <div style="width:48px;height:6px;border-radius:3px;background:#0f766e;opacity:.6"></div>
+      </div>
+      <div class="mini-flex">
+        <div class="mini-sidebar" style="background:#040a10;border-right:1px solid rgba(255,255,255,.05)">
+          <div class="mini-logo" style="background:linear-gradient(135deg,#0f766e,#14b8a6)">⚓</div>
+          <div class="mini-nav-lbl">Principal</div>
+          <div class="mini-sidebar-item active" style="background:rgba(15,118,110,.18);color:#ccfbf1">Operacional</div>
+          <div class="mini-sidebar-item" style="color:#94a3b8">Analytics</div>
+          <div class="mini-sidebar-item" style="color:#94a3b8">Financeiro</div>
+          <div class="mini-sidebar-item" style="color:#94a3b8">Contratos</div>
+        </div>
+        <div class="mini-main" style="background:#060c12">
+          <div class="mini-row">
+            <div class="mini-kpi" style="background:#0d1b2a">
+              <div class="mini-kpi-lbl">Tenants</div>
+              <div class="mini-kpi-val" style="color:#14b8a6">24<div class="mini-kpi-icon">🏢</div></div>
+              <div class="mini-bar" style="background:#14b8a6"></div>
+            </div>
+            <div class="mini-kpi" style="background:#0d1b2a">
+              <div class="mini-kpi-lbl">MRR</div>
+              <div class="mini-kpi-val" style="color:#10b981">R$48k<div class="mini-kpi-icon">📈</div></div>
+              <div class="mini-bar" style="background:#10b981"></div>
+            </div>
+          </div>
+          <div class="mini-row">
+            <div class="mini-kpi" style="background:#0d1b2a">
+              <div class="mini-kpi-lbl">Inadimp.</div>
+              <div class="mini-kpi-val" style="color:#ef4444">R$2.1k<div class="mini-kpi-icon">⚠️</div></div>
+              <div class="mini-bar" style="background:#ef4444"></div>
+            </div>
+            <div class="mini-kpi" style="background:#0d1b2a">
+              <div class="mini-kpi-lbl">A Vencer</div>
+              <div class="mini-kpi-val" style="color:#38bdf8">R$9k<div class="mini-kpi-icon">📅</div></div>
+              <div class="mini-bar" style="background:#38bdf8"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pal-note">Teal harmoniza com o verde de sucesso e azul info. Marinho profundo cria contraste claro com o app de tenant (que usa azul-oceano mais claro). Lembra o visor de navegação de uma embarcação.</div>
+  </div>
+
+  <!-- ══════════ OPÇÃO 2 — SALA DE MÁQUINAS ══════════ -->
+  <div class="palette-card" style="background:#0a0a0a">
+    <div class="rec-badge">★ Recomendado</div>
+    <div class="pal-header">
+      <div>
+        <div class="pal-num">Opção 02</div>
+        <div class="pal-name" style="color:#f9fafb">Sala de Máquinas</div>
+        <div class="pal-sub">Preto carbono · Cinza-aço · Branco puro</div>
+      </div>
+    </div>
+
+    <div class="swatches">
+      <div class="swatch" style="background:#0a0a0a"></div>
+      <div class="swatch" style="background:#111111"></div>
+      <div class="swatch" style="background:#1c1c1c"></div>
+      <div class="swatch" style="background:#737373"></div>
+      <div class="swatch" style="background:#f5f5f5"></div>
+    </div>
+    <div class="swatch-sm">
+      <div class="chip" style="background:#10b981" title="Sucesso"></div>
+      <div class="chip" style="background:#ef4444" title="Perigo"></div>
+      <div class="chip" style="background:#38bdf8" title="Info"></div>
+      <div class="chip" style="background:#f59e0b" title="Warning"></div>
+    </div>
+
+    <div class="mini-ui" style="background:#0a0a0a">
+      <div class="mini-topbar" style="background:#0f0f0f">
+        <div class="mini-topbar-title" style="color:#d4d4d4">Visão Operacional</div>
+        <div style="width:48px;height:6px;border-radius:3px;background:#404040"></div>
+      </div>
+      <div class="mini-flex">
+        <div class="mini-sidebar" style="background:#080808;border-right:1px solid rgba(255,255,255,.06)">
+          <div class="mini-logo" style="background:#1c1c1c;border:1px solid #2a2a2a">⚓</div>
+          <div class="mini-nav-lbl">Principal</div>
+          <div class="mini-sidebar-item active" style="background:rgba(255,255,255,.08);color:#f5f5f5">Operacional</div>
+          <div class="mini-sidebar-item" style="color:#525252">Analytics</div>
+          <div class="mini-sidebar-item" style="color:#525252">Financeiro</div>
+          <div class="mini-sidebar-item" style="color:#525252">Contratos</div>
+        </div>
+        <div class="mini-main" style="background:#0a0a0a">
+          <div class="mini-row">
+            <div class="mini-kpi" style="background:#111111;border-color:#1c1c1c">
+              <div class="mini-kpi-lbl" style="color:#525252">Tenants</div>
+              <div class="mini-kpi-val" style="color:#f5f5f5">24<div class="mini-kpi-icon" style="color:#737373">🏢</div></div>
+              <div class="mini-bar" style="background:#404040;opacity:.5"></div>
+            </div>
+            <div class="mini-kpi" style="background:#111111;border-color:#1c1c1c">
+              <div class="mini-kpi-lbl" style="color:#525252">MRR</div>
+              <div class="mini-kpi-val" style="color:#10b981">R$48k<div class="mini-kpi-icon">📈</div></div>
+              <div class="mini-bar" style="background:#10b981"></div>
+            </div>
+          </div>
+          <div class="mini-row">
+            <div class="mini-kpi" style="background:#111111;border-color:#1c1c1c">
+              <div class="mini-kpi-lbl" style="color:#525252">Inadimp.</div>
+              <div class="mini-kpi-val" style="color:#ef4444">R$2.1k<div class="mini-kpi-icon">⚠️</div></div>
+              <div class="mini-bar" style="background:#ef4444"></div>
+            </div>
+            <div class="mini-kpi" style="background:#111111;border-color:#1c1c1c">
+              <div class="mini-kpi-lbl" style="color:#525252">A Vencer</div>
+              <div class="mini-kpi-val" style="color:#38bdf8">R$9k<div class="mini-kpi-icon">📅</div></div>
+              <div class="mini-bar" style="background:#38bdf8"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pal-note">Carbono puro. Sem cor de acento — a identidade é o fundo preto-absoluto. Os blocos de status (verde, vermelho, azul, amarelo) se destacam naturalmente, sem competir com nenhum acento. Máxima distinção do app de tenant.</div>
+  </div>
+
+  <!-- ══════════ OPÇÃO 3 — FAROL ══════════ -->
+  <div class="palette-card" style="background:#060a14">
+    <div class="pal-header">
+      <div>
+        <div class="pal-num">Opção 03</div>
+        <div class="pal-name" style="color:#e2e8f0">Farol</div>
+        <div class="pal-sub">Marinho profundo · Âmbar só nos acentos de UI</div>
+      </div>
+    </div>
+
+    <div class="swatches">
+      <div class="swatch" style="background:#060a14"></div>
+      <div class="swatch" style="background:#0d1525"></div>
+      <div class="swatch" style="background:#1a2540"></div>
+      <div class="swatch" style="background:#e9b44c"></div>
+      <div class="swatch" style="background:#fff8e6"></div>
+    </div>
+    <div class="swatch-sm">
+      <div class="chip" style="background:#10b981" title="Sucesso"></div>
+      <div class="chip" style="background:#ef4444" title="Perigo"></div>
+      <div class="chip" style="background:#60a5fa" title="Info (azul frio)"></div>
+      <div class="chip" style="background:#e9b44c" title="Âmbar só nav/logo"></div>
+    </div>
+
+    <div class="mini-ui" style="background:#060a14">
+      <div class="mini-topbar" style="background:#060a14">
+        <div class="mini-topbar-title" style="color:#94a3b8">Visão Operacional</div>
+        <div style="width:48px;height:6px;border-radius:3px;background:#e9b44c;opacity:.5"></div>
+      </div>
+      <div class="mini-flex">
+        <div class="mini-sidebar" style="background:#050810;border-right:1px solid rgba(255,255,255,.05)">
+          <div class="mini-logo" style="background:linear-gradient(135deg,#c27c0e,#e9b44c)">⚓</div>
+          <div class="mini-nav-lbl">Principal</div>
+          <div class="mini-sidebar-item active" style="background:rgba(233,180,76,.12);color:#fff8e6;border-left:2px solid #e9b44c">Operacional</div>
+          <div class="mini-sidebar-item" style="color:#64748b">Analytics</div>
+          <div class="mini-sidebar-item" style="color:#64748b">Financeiro</div>
+          <div class="mini-sidebar-item" style="color:#64748b">Contratos</div>
+        </div>
+        <div class="mini-main" style="background:#060a14">
+          <div class="mini-row">
+            <div class="mini-kpi" style="background:#0d1525">
+              <div class="mini-kpi-lbl">Tenants</div>
+              <div class="mini-kpi-val" style="color:#e2e8f0">24<div class="mini-kpi-icon">🏢</div></div>
+              <div class="mini-bar" style="background:#e9b44c"></div>
+            </div>
+            <div class="mini-kpi" style="background:#0d1525">
+              <div class="mini-kpi-lbl">MRR</div>
+              <div class="mini-kpi-val" style="color:#10b981">R$48k<div class="mini-kpi-icon">📈</div></div>
+              <div class="mini-bar" style="background:#10b981"></div>
+            </div>
+          </div>
+          <div class="mini-row">
+            <div class="mini-kpi" style="background:#0d1525">
+              <div class="mini-kpi-lbl">Inadimp.</div>
+              <div class="mini-kpi-val" style="color:#ef4444">R$2.1k<div class="mini-kpi-icon">⚠️</div></div>
+              <div class="mini-bar" style="background:#ef4444"></div>
+            </div>
+            <div class="mini-kpi" style="background:#0d1525">
+              <div class="mini-kpi-lbl">A Vencer</div>
+              <div class="mini-kpi-val" style="color:#60a5fa">R$9k<div class="mini-kpi-icon">📅</div></div>
+              <div class="mini-bar" style="background:#60a5fa"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pal-note">Âmbar restrito à sidebar (logo, nav ativo, indicador). Os blocos de conteúdo usam marinho azulado como superfície — os status ficam nítidos. O âmbar pontua sem invadir.</div>
+  </div>
+
+</div>
+
+<!-- Comparativo de coerência -->
+<div class="coherence">
+  <div class="coherence-title">Coerência dos status em cada paleta</div>
+
+  <div class="coh-row">
+    <div class="coh-lbl" style="color:#6b7280">Opção 01 · Teal</div>
+    <div class="coh-chips">
+      <div class="coh-chip" style="background:rgba(20,184,166,.2);color:#5eead4">Nav ativo: Teal</div>
+      <div class="coh-chip" style="background:rgba(16,185,129,.2);color:#6ee7b7">Sucesso ✓</div>
+      <div class="coh-chip" style="background:rgba(239,68,68,.2);color:#fca5a5">Perigo ✓</div>
+      <div class="coh-chip" style="background:rgba(56,189,248,.2);color:#7dd3fc">Info ✓</div>
+      <div class="coh-chip" style="background:rgba(245,158,11,.2);color:#fde68a">Warning ✓</div>
+    </div>
+  </div>
+
+  <div class="coh-row">
+    <div class="coh-lbl" style="color:#f5f5f5">Opção 02 · Carbono ★</div>
+    <div class="coh-chips">
+      <div class="coh-chip" style="background:rgba(255,255,255,.1);color:#f5f5f5">Nav ativo: Branco</div>
+      <div class="coh-chip" style="background:rgba(16,185,129,.2);color:#6ee7b7">Sucesso ✓</div>
+      <div class="coh-chip" style="background:rgba(239,68,68,.2);color:#fca5a5">Perigo ✓</div>
+      <div class="coh-chip" style="background:rgba(56,189,248,.2);color:#7dd3fc">Info ✓</div>
+      <div class="coh-chip" style="background:rgba(245,158,11,.2);color:#fde68a">Warning ✓</div>
+    </div>
+  </div>
+
+  <div class="coh-row">
+    <div class="coh-lbl" style="color:#e9b44c">Opção 03 · Farol</div>
+    <div class="coh-chips">
+      <div class="coh-chip" style="background:rgba(233,180,76,.18);color:#fde68a">Nav ativo: Âmbar</div>
+      <div class="coh-chip" style="background:rgba(16,185,129,.2);color:#6ee7b7">Sucesso ✓</div>
+      <div class="coh-chip" style="background:rgba(239,68,68,.2);color:#fca5a5">Perigo ✓</div>
+      <div class="coh-chip" style="background:rgba(96,165,250,.2);color:#bfdbfe">Info ✓ (azul frio)</div>
+      <div class="coh-chip" style="background:rgba(233,180,76,.2);color:#fde68a">Warning = Âmbar</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Marina One · Super Admin Design System Preview · <span>Escolha uma opção e diga "aplicar opção X"</span>
+</div>
+
+</body>
+</html>

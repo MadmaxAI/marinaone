@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marina One — Super Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#050505;
+  --surface:rgba(255,255,255,0.04);
+  --surface2:rgba(255,255,255,0.07);
+  --surface3:rgba(255,255,255,0.11);
+  --border:rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.13);
+  --accent:#7c3aed;
+  --accent2:#4f46e5;
+  --accent3:#8b5cf6;
+  --success:#10b981;
+  --warning:#f59e0b;
+  --danger:#ef4444;
+  --info:#3b82f6;
+  --text:#f1f5f9;
+  --text2:#94a3b8;
+  --text3:#475569;
+  --radius:20px;
+  --radius-sm:12px;
+  --ease:cubic-bezier(0.32,0.72,0,1);
+  --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+}
+html,body{height:100%;overflow:hidden;font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+
+/* ── BACKGROUND MESH ── */
+.bg-mesh{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bg-mesh::before{content:'';position:absolute;width:900px;height:900px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,0.18) 0%,transparent 70%);top:-200px;left:-100px;filter:blur(60px)}
+.bg-mesh::after{content:'';position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(79,70,229,0.14) 0%,transparent 70%);bottom:-100px;right:100px;filter:blur(60px)}
+.bg-mesh-3{position:fixed;inset:0;z-index:0;pointer-events:none}
+.bg-mesh-3::after{content:'';position:absolute;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(16,185,129,0.08) 0%,transparent 70%);top:40%;right:-100px;filter:blur(80px)}
+
+/* GRAIN */
+.grain{position:fixed;inset:0;z-index:1;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");opacity:.4}
+
+/* ── LAYOUT ── */
+.shell{position:relative;z-index:2;display:flex;height:100vh;gap:0}
+
+/* ── SIDEBAR ── */
+.sidebar{width:240px;flex-shrink:0;display:flex;flex-direction:column;padding:16px 12px;gap:6px;border-right:1px solid var(--border);background:rgba(5,5,5,0.7);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px)}
+.sidebar-logo{display:flex;align-items:center;gap:10px;padding:10px 12px 18px;border-bottom:1px solid var(--border);margin-bottom:6px}
+.sidebar-logo-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;box-shadow:0 0 20px rgba(124,58,237,0.4)}
+.sidebar-logo-text{display:flex;flex-direction:column;gap:1px}
+.sidebar-logo-name{font-size:13px;font-weight:700;background:linear-gradient(135deg,#c4b5fd,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sidebar-logo-role{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--text3);font-weight:600}
+
+.nav-label{font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:var(--text3);font-weight:700;padding:4px 12px;margin-top:8px}
+.nav-btn{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:10px;border:none;background:none;cursor:pointer;width:100%;text-align:left;font-family:inherit;font-size:12.5px;font-weight:500;color:var(--text2);transition:all 500ms var(--ease);position:relative}
+.nav-btn:hover{background:var(--surface2);color:var(--text)}
+.nav-btn.active{background:rgba(124,58,237,0.15);color:#c4b5fd;font-weight:600}
+.nav-btn.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:18px;background:linear-gradient(to bottom,var(--accent),var(--accent2));border-radius:0 3px 3px 0}
+.nav-btn .nav-icon{width:16px;height:16px;opacity:.7;flex-shrink:0}
+.nav-btn.active .nav-icon{opacity:1}
+.nav-badge{margin-left:auto;font-size:9px;font-weight:700;background:var(--accent);color:#fff;padding:2px 6px;border-radius:100px;min-width:18px;text-align:center}
+
+.sidebar-bottom{margin-top:auto;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:4px}
+.profile-pill{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:10px;cursor:pointer;transition:background 400ms var(--ease)}
+.profile-pill:hover{background:var(--surface2)}
+.profile-avatar{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#4f46e5);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.profile-info{display:flex;flex-direction:column;gap:1px}
+.profile-name{font-size:12px;font-weight:600;color:var(--text)}
+.profile-role{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+
+/* ── TOPBAR ── */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(5,5,5,0.5);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);position:sticky;top:0;z-index:10}
+.topbar-left{display:flex;flex-direction:column;gap:2px}
+.topbar-eyebrow{font-size:9px;text-transform:uppercase;letter-spacing:.16em;color:var(--text3);font-weight:700}
+.topbar-title{font-size:18px;font-weight:700;color:var(--text);line-height:1}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.topbar-stat{display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:0 14px;border-right:1px solid var(--border)}
+.topbar-stat:last-of-type{border-right:none}
+.topbar-stat-val{font-size:15px;font-weight:700;color:var(--text)}
+.topbar-stat-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em}
+.topbar-stat-delta{font-size:10px;font-weight:600;color:var(--success)}
+
+.btn-pill{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:100px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all 400ms var(--ease)}
+.btn-pill:hover{background:var(--surface3);color:var(--text);border-color:rgba(255,255,255,0.2)}
+.btn-pill-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent;box-shadow:0 0 24px rgba(124,58,237,0.3)}
+.btn-pill-primary:hover{box-shadow:0 0 32px rgba(124,58,237,0.5);transform:translateY(-1px)}
+.btn-pill-primary .trail{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:11px;transition:transform 400ms var(--ease-spring)}
+.btn-pill-primary:hover .trail{transform:translate(2px,-1px) scale(1.1)}
+
+/* ── CONTENT ── */
+.content{flex:1;overflow-y:auto;padding:28px;display:flex;flex-direction:column;gap:24px}
+.content::-webkit-scrollbar{width:4px}
+.content::-webkit-scrollbar-track{background:transparent}
+.content::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:4px}
+
+/* ── TAB PANELS ── */
+.tab-panel{display:none;flex-direction:column;gap:24px;animation:fadeUp 500ms var(--ease) both}
+.tab-panel.active{display:flex}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── DOUBLE-BEZEL CARD ── */
+.card-outer{background:rgba(255,255,255,0.03);border:1px solid var(--border);padding:1.5px;border-radius:var(--radius)}
+.card-inner{background:rgba(13,13,20,0.9);border-radius:calc(var(--radius) - 3px);box-shadow:inset 0 1px 1px rgba(255,255,255,0.06);overflow:hidden}
+
+/* ── KPI GRID ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi-card{padding:20px 22px;display:flex;flex-direction:column;gap:14px;transition:transform 600ms var(--ease)}
+.kpi-card:hover{transform:translateY(-2px)}
+.kpi-top{display:flex;align-items:flex-start;justify-content:space-between}
+.kpi-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.kpi-icon-purple{background:rgba(124,58,237,0.15);box-shadow:0 0 16px rgba(124,58,237,0.2)}
+.kpi-icon-green{background:rgba(16,185,129,0.12);box-shadow:0 0 16px rgba(16,185,129,0.15)}
+.kpi-icon-amber{background:rgba(245,158,11,0.12);box-shadow:0 0 16px rgba(245,158,11,0.15)}
+.kpi-icon-blue{background:rgba(59,130,246,0.12);box-shadow:0 0 16px rgba(59,130,246,0.15)}
+.kpi-delta{display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:3px 8px;border-radius:100px}
+.kpi-delta-up{background:rgba(16,185,129,0.12);color:#34d399}
+.kpi-delta-down{background:rgba(239,68,68,0.12);color:#f87171}
+.kpi-value{font-size:28px;font-weight:800;letter-spacing:-.02em;color:var(--text);line-height:1}
+.kpi-label{font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.kpi-sub{font-size:11px;color:var(--text3)}
+
+/* ── BENTO GRID ── */
+.bento{display:grid;grid-template-columns:repeat(12,1fr);grid-auto-rows:auto;gap:14px}
+.b-c8{grid-column:span 8}
+.b-c4{grid-column:span 4}
+.b-c6{grid-column:span 6}
+.b-c5{grid-column:span 5}
+.b-c7{grid-column:span 7}
+.b-c12{grid-column:span 12}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-weight:700;padding:12px 16px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:13px 16px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12.5px;color:var(--text2);transition:background 300ms}
+tr:hover td{background:rgba(255,255,255,0.025)}
+tr:last-child td{border-bottom:none}
+.td-main{color:var(--text)!important;font-weight:600}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.badge-active{background:rgba(16,185,129,0.12);color:#34d399}.badge-active::before{background:#34d399}
+.badge-inactive{background:rgba(100,116,139,0.12);color:#64748b}.badge-inactive::before{background:#64748b}
+.badge-trial{background:rgba(245,158,11,0.12);color:#fbbf24}.badge-trial::before{background:#fbbf24}
+.badge-expired{background:rgba(239,68,68,0.12);color:#f87171}.badge-expired::before{background:#f87171}
+.badge-starter{background:rgba(59,130,246,0.12);color:#60a5fa}
+.badge-pro{background:rgba(124,58,237,0.12);color:#a78bfa}
+.badge-enterprise{background:rgba(16,185,129,0.12);color:#34d399}
+
+/* ── CARD HEADER ── */
+.card-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 0;margin-bottom:16px}
+.card-hd-left{display:flex;flex-direction:column;gap:3px}
+.card-title{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.08em}
+.card-sub{font-size:11px;color:var(--text3)}
+.card-body{padding:0 20px 20px}
+
+/* ── RISK SCORE ── */
+.risk-bar{height:4px;border-radius:100px;background:var(--surface3);overflow:hidden;margin-top:6px}
+.risk-fill{height:100%;border-radius:100px;transition:width 800ms var(--ease)}
+.risk-low{background:linear-gradient(90deg,#10b981,#34d399)}
+.risk-med{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+.risk-high{background:linear-gradient(90deg,#ef4444,#f87171)}
+
+/* ── CHART PLACEHOLDER ── */
+.chart-ph{display:flex;align-items:flex-end;gap:5px;height:120px;padding:0 4px}
+.chart-bar{flex:1;border-radius:6px 6px 0 0;transition:height 800ms var(--ease-spring);position:relative;cursor:pointer}
+.chart-bar:hover::after{content:attr(data-val);position:absolute;top:-24px;left:50%;transform:translateX(-50%);font-size:10px;font-weight:700;color:var(--text);white-space:nowrap;background:var(--surface3);padding:2px 6px;border-radius:4px}
+
+/* ── ACTION BTN ── */
+.act-btn{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:all 300ms var(--ease);color:var(--text2)}
+.act-btn:hover{background:var(--surface2);color:var(--text);border-color:var(--border2)}
+
+/* ── FILTER BAR ── */
+.filter-bar{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.filter-input{flex:1;min-width:180px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:12.5px;font-family:inherit;outline:none;transition:border 300ms}
+.filter-input:focus{border-color:rgba(124,58,237,0.5)}
+.filter-input::placeholder{color:var(--text3)}
+.filter-select{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text2);font-size:12.5px;font-family:inherit;outline:none;cursor:pointer}
+.filter-select:focus{border-color:rgba(124,58,237,0.5)}
+
+/* ── MODULES GRID ── */
+.mod-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.mod-card{padding:14px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;gap:12px;transition:all 300ms var(--ease)}
+.mod-card:hover{border-color:var(--border2);background:var(--surface2)}
+.mod-card.active-mod{border-color:rgba(124,58,237,0.3);background:rgba(124,58,237,0.06)}
+.mod-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;background:var(--surface2)}
+.mod-info{flex:1;min-width:0}
+.mod-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mod-cat{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.toggle{position:relative;width:34px;height:18px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;border-radius:9px;background:var(--surface3);cursor:pointer;transition:background 300ms}
+.toggle input:checked+.toggle-slider{background:var(--accent)}
+.toggle-slider::before{content:'';position:absolute;width:14px;height:14px;left:2px;top:2px;border-radius:50%;background:#fff;transition:transform 300ms var(--ease-spring)}
+.toggle input:checked+.toggle-slider::before{transform:translateX(16px)}
+
+/* ── PLAN CARDS ── */
+.plan-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.plan-card{padding:20px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);position:relative;overflow:hidden;transition:all 400ms var(--ease)}
+.plan-card:hover{border-color:var(--border2)}
+.plan-card.featured{border-color:rgba(124,58,237,0.4);background:rgba(124,58,237,0.06)}
+.plan-card.featured::before{content:'';position:absolute;inset:-1px;border-radius:var(--radius);background:linear-gradient(135deg,rgba(124,58,237,0.3),transparent 60%);pointer-events:none}
+.plan-name{font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:700;color:var(--text2);margin-bottom:8px}
+.plan-price{font-size:30px;font-weight:800;letter-spacing:-.03em;color:var(--text);line-height:1}
+.plan-price span{font-size:13px;font-weight:500;color:var(--text3);letter-spacing:0}
+.plan-features{margin-top:16px;display:flex;flex-direction:column;gap:8px}
+.plan-feat{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)}
+.plan-feat::before{content:'✓';width:16px;height:16px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+/* ── IMPLANTACAO ── */
+.impl-row{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-radius:8px;background:var(--surface);border:1px solid var(--border);font-size:12px}
+.impl-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+/* ── VERTICAL CHART ── */
+.h-bar{display:flex;align-items:center;gap:12px;padding:8px 0}
+.h-bar-label{font-size:11px;color:var(--text2);width:100px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h-bar-track{flex:1;height:6px;background:var(--surface3);border-radius:100px;overflow:hidden}
+.h-bar-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--accent),var(--accent3))}
+.h-bar-val{font-size:11px;font-weight:700;color:var(--text);width:60px;text-align:right;flex-shrink:0}
+
+/* ── ANALYTICS SCORE ── */
+.score-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700}
+.score-chip-low{background:rgba(16,185,129,0.12);color:#34d399}
+.score-chip-med{background:rgba(245,158,11,0.12);color:#fbbf24}
+.score-chip-high{background:rgba(239,68,68,0.12);color:#f87171}
+
+/* ── SCROLLBAR CONTENT ── */
+.tab-scroll{flex:1;overflow-y:auto;padding:28px}
+.tab-scroll::-webkit-scrollbar{width:4px}
+.tab-scroll::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:4px}
+
+/* ── CONFIG FORM ── */
+.cfg-row{display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:start;padding:20px 0;border-bottom:1px solid var(--border)}
+.cfg-row:last-child{border-bottom:none}
+.cfg-label{font-size:12.5px;font-weight:600;color:var(--text)}
+.cfg-desc{font-size:11px;color:var(--text3);margin-top:3px}
+.cfg-input{width:100%;padding:9px 14px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border 300ms}
+.cfg-input:focus{border-color:rgba(124,58,237,0.5)}
+.cfg-input::placeholder{color:var(--text3)}
+
+/* ── PROPOSAL CARD ── */
+.prop-card{padding:18px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);display:grid;grid-template-columns:1fr auto;gap:12px;transition:all 300ms var(--ease)}
+.prop-card:hover{background:var(--surface2);border-color:var(--border2);transform:translateX(2px)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .bento .b-c8,.bento .b-c4,.bento .b-c6,.bento .b-c7,.bento .b-c5{grid-column:1/-1}
+  .mod-grid{grid-template-columns:1fr}
+  .plan-grid{grid-template-columns:1fr}
+  .content{padding:16px}
+}
+</style>
+</head>
+<body>
+<div class="bg-mesh"></div>
+<div class="bg-mesh-3"></div>
+<div class="grain"></div>
+
+<div class="shell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">⚓</div>
+      <div class="sidebar-logo-text">
+        <div class="sidebar-logo-name">Marina One</div>
+        <div class="sidebar-logo-role">Super Admin</div>
+      </div>
+    </div>
+
+    <div class="nav-label">Principal</div>
+    <button class="nav-btn active" onclick="switchTab('operacional',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      Operacional
+    </button>
+    <button class="nav-btn" onclick="switchTab('analytics',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 20h18M5 20V12m4 8V8m4 12V5m4 15v-7"/></svg>
+      Analytics
+    </button>
+
+    <div class="nav-label">Comercial</div>
+    <button class="nav-btn" onclick="switchTab('propostas',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      Propostas
+      <span class="nav-badge">3</span>
+    </button>
+    <button class="nav-btn" onclick="switchTab('contratos',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/><path d="M12 3v6h6"/></svg>
+      Contratos
+    </button>
+    <button class="nav-btn" onclick="switchTab('financeiro',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      Financeiro
+    </button>
+
+    <div class="nav-label">Sistema</div>
+    <button class="nav-btn" onclick="switchTab('licencas',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+      Módulos & Licenças
+    </button>
+    <button class="nav-btn" onclick="switchTab('configuracoes',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+      Configurações
+    </button>
+
+    <div class="sidebar-bottom">
+      <div class="profile-pill">
+        <div class="profile-avatar">SA</div>
+        <div class="profile-info">
+          <div class="profile-name">Super Admin</div>
+          <div class="profile-role">superadmin@marinaone.com.br</div>
+        </div>
+      </div>
+      <button class="nav-btn" style="color:var(--danger);opacity:.7" onclick="">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        Sair
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-eyebrow">Painel SaaS — Marina One</div>
+        <div class="topbar-title" id="topbar-title">Visão Operacional</div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-stat">
+          <div class="topbar-stat-val">R$18.240</div>
+          <div class="topbar-stat-lbl">MRR</div>
+          <div class="topbar-stat-delta">▲ 12%</div>
+        </div>
+        <div class="topbar-stat">
+          <div class="topbar-stat-val">7</div>
+          <div class="topbar-stat-lbl">Tenants Ativos</div>
+        </div>
+        <div class="topbar-stat" style="border-right:none">
+          <div class="topbar-stat-val" style="color:var(--warning)">2</div>
+          <div class="topbar-stat-lbl">Em Risco</div>
+        </div>
+        <button class="btn-pill btn-pill-primary" onclick="openNewMarinaModal()">
+          + Nova Marina
+          <span class="trail">↗</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB CONTENT -->
+    <div class="tab-scroll">
+
+      <!-- ═══ OPERACIONAL ═══ -->
+      <div id="tab-operacional" class="tab-panel active">
+
+        <!-- KPIs -->
+        <div class="kpi-grid">
+          <div class="card-outer">
+            <div class="card-inner kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon kpi-icon-purple">🏖️</div>
+                <div class="kpi-delta kpi-delta-up">▲ 2 este mês</div>
+              </div>
+              <div>
+                <div class="kpi-value" id="kpi-tenants">7</div>
+                <div class="kpi-label">Marinas Ativas</div>
+                <div class="kpi-sub" style="margin-top:6px">1 trial · 0 inadimplentes</div>
+              </div>
+            </div>
+          </div>
+          <div class="card-outer">
+            <div class="card-inner kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon kpi-icon-green">💰</div>
+                <div class="kpi-delta kpi-delta-up">▲ 12% MoM</div>
+              </div>
+              <div>
+                <div class="kpi-value" id="kpi-mrr">R$18.240</div>
+                <div class="kpi-label">MRR Consolidado</div>
+                <div class="kpi-sub" style="margin-top:6px">R$14.800 recebido · R$3.440 pendente</div>
+              </div>
+            </div>
+          </div>
+          <div class="card-outer">
+            <div class="card-inner kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon kpi-icon-amber">⚓</div>
+                <div class="kpi-delta kpi-delta-up">▲ 47 este mês</div>
+              </div>
+              <div>
+                <div class="kpi-value">284</div>
+                <div class="kpi-label">Embarcações Gerenciadas</div>
+                <div class="kpi-sub" style="margin-top:6px">média de 40,6 por marina</div>
+              </div>
+            </div>
+          </div>
+          <div class="card-outer">
+            <div class="card-inner kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon kpi-icon-blue">👤</div>
+                <div class="kpi-delta kpi-delta-up">▲ 31 este mês</div>
+              </div>
+              <div>
+                <div class="kpi-value">521</div>
+                <div class="kpi-label">Clientes Totais</div>
+                <div class="kpi-sub" style="margin-top:6px">média de 74,4 por marina</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BENTO: Tabela + Verificação -->
+        <div class="bento">
+          <!-- TABELA MARINAS -->
+          <div class="b-c8 card-outer">
+            <div class="card-inner">
+              <div class="card-hd">
+                <div class="card-hd-left">
+                  <div class="card-title">Marinas Cadastradas</div>
+                  <div class="card-sub">7 tenants · atualizado agora</div>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <input class="filter-input" style="width:160px;padding:6px 12px;font-size:12px" placeholder="Buscar marina..." type="text">
+                  <select class="filter-select" style="font-size:12px">
+                    <option>Todos planos</option>
+                    <option>Starter</option>
+                    <option>Pro</option>
+                    <option>Enterprise</option>
+                  </select>
+                </div>
+              </div>
+              <div class="card-body" style="padding-top:0">
+                <div class="tbl-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Marina</th>
+                        <th>Licença</th>
+                        <th>Clientes</th>
+                        <th>Receita/mês</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><div class="td-main">Marina Vitória</div><div style="font-size:10px;color:var(--text3)">vitoria · criado há 14 meses</div></td>
+                        <td><span class="badge badge-enterprise" style="font-size:9px">Enterprise</span></td>
+                        <td>142</td>
+                        <td style="color:var(--success);font-weight:600">R$1.299</td>
+                        <td><span class="badge badge-active">Ativa</span></td>
+                        <td><button class="act-btn" title="Editar">✎</button> <button class="act-btn" title="Credenciais">🔑</button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="td-main">Nautic Club SP</div><div style="font-size:10px;color:var(--text3)">nauticsp · criado há 8 meses</div></td>
+                        <td><span class="badge badge-pro" style="font-size:9px">Pro</span></td>
+                        <td>87</td>
+                        <td style="color:var(--success);font-weight:600">R$599</td>
+                        <td><span class="badge badge-active">Ativa</span></td>
+                        <td><button class="act-btn">✎</button> <button class="act-btn">🔑</button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="td-main">Marina Sul Rio</div><div style="font-size:10px;color:var(--text3)">marinasul · criado há 6 meses</div></td>
+                        <td><span class="badge badge-pro" style="font-size:9px">Pro</span></td>
+                        <td>64</td>
+                        <td style="color:var(--success);font-weight:600">R$599</td>
+                        <td><span class="badge badge-active">Ativa</span></td>
+                        <td><button class="act-btn">✎</button> <button class="act-btn">🔑</button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="td-main">Porto Belém</div><div style="font-size:10px;color:var(--text3)">portobelem · criado há 3 meses</div></td>
+                        <td><span class="badge badge-starter" style="font-size:9px">Starter</span></td>
+                        <td>31</td>
+                        <td style="color:var(--warning);font-weight:600">R$299</td>
+                        <td><span class="badge badge-trial">Trial</span></td>
+                        <td><button class="act-btn">✎</button> <button class="act-btn">🔑</button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="td-main">Angra Marina</div><div style="font-size:10px;color:var(--text3)">angramarina · criado há 11 meses</div></td>
+                        <td><span class="badge badge-pro" style="font-size:9px">Pro</span></td>
+                        <td>96</td>
+                        <td style="color:var(--danger);font-weight:600">R$599</td>
+                        <td><span class="badge badge-expired">Inadimplente</span></td>
+                        <td><button class="act-btn">✎</button> <button class="act-btn">🔑</button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="td-main">Mar de Minas</div><div style="font-size:10px;color:var(--text3)">mardeminas · criado há 2 meses</div></td>
+                        <td><span class="badge badge-starter" style="font-size:9px">Starter</span></td>
+                        <td>18</td>
+                        <td style="color:var(--success);font-weight:600">R$299</td>
+                        <td><span class="badge badge-active">Ativa</span></td>
+                        <td><button class="act-btn">✎</button> <button class="act-btn">🔑</button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="td-main">Lagoa Náutica</div><div style="font-size:10px;color:var(--text3)">lagoanautica · criado há 1 mês</div></td>
+                        <td><span class="badge badge-starter" style="font-size:9px">Starter</span></td>
+                        <td>12</td>
+                        <td style="color:var(--warning);font-weight:600">R$299</td>
+                        <td><span class="badge badge-trial">Trial</span></td>
+                        <td><button class="act-btn">✎</button> <button class="act-btn">🔑</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SIDEBAR DIREITA -->
+          <div class="b-c4" style="display:flex;flex-direction:column;gap:14px">
+
+            <!-- DISTRIBUIÇÃO PLANOS -->
+            <div class="card-outer">
+              <div class="card-inner">
+                <div class="card-hd">
+                  <div class="card-hd-left">
+                    <div class="card-title">Distribuição de Planos</div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="h-bar">
+                    <div class="h-bar-label">Enterprise</div>
+                    <div class="h-bar-track"><div class="h-bar-fill" style="width:14%;background:linear-gradient(90deg,#10b981,#34d399)"></div></div>
+                    <div class="h-bar-val">1 marina</div>
+                  </div>
+                  <div class="h-bar">
+                    <div class="h-bar-label">Pro</div>
+                    <div class="h-bar-track"><div class="h-bar-fill" style="width:43%"></div></div>
+                    <div class="h-bar-val">3 marinas</div>
+                  </div>
+                  <div class="h-bar">
+                    <div class="h-bar-label">Starter</div>
+                    <div class="h-bar-track"><div class="h-bar-fill" style="width:43%;background:linear-gradient(90deg,#3b82f6,#60a5fa)"></div></div>
+                    <div class="h-bar-val">3 marinas</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ALERTAS RISCO -->
+            <div class="card-outer">
+              <div class="card-inner">
+                <div class="card-hd">
+                  <div class="card-hd-left">
+                    <div class="card-title">Tenants em Risco</div>
+                    <div class="card-sub">Requer atenção imediata</div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div style="display:flex;flex-direction:column;gap:10px">
+                    <div style="padding:12px;border-radius:10px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2)">
+                      <div style="font-size:12px;font-weight:600;color:var(--text)">Angra Marina</div>
+                      <div style="font-size:10px;color:var(--danger);margin-top:3px">● Inadimplente há 32 dias</div>
+                      <div class="risk-bar"><div class="risk-fill risk-high" style="width:88%"></div></div>
+                    </div>
+                    <div style="padding:12px;border-radius:10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2)">
+                      <div style="font-size:12px;font-weight:600;color:var(--text)">Porto Belém</div>
+                      <div style="font-size:10px;color:var(--warning);margin-top:3px">● Trial expira em 3 dias</div>
+                      <div class="risk-bar"><div class="risk-fill risk-med" style="width:58%"></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- VERIFICAÇÃO IMPLANTAÇÃO -->
+            <div class="card-outer">
+              <div class="card-inner">
+                <div class="card-hd">
+                  <div class="card-hd-left">
+                    <div class="card-title">Verificação de Implantação</div>
+                    <div class="card-sub">Propostas aprovadas pendentes</div>
+                  </div>
+                  <button class="act-btn" title="Verificar">↻</button>
+                </div>
+                <div class="card-body">
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <div class="impl-row">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div class="impl-dot" style="background:#34d399"></div>
+                        <span>Náutic Club SP</span>
+                      </div>
+                      <span class="badge badge-active">OK</span>
+                    </div>
+                    <div class="impl-row">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div class="impl-dot" style="background:#fbbf24"></div>
+                        <span>Lagoa Náutica</span>
+                      </div>
+                      <span class="badge badge-trial">Pendente</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ANALYTICS ═══ -->
+      <div id="tab-analytics" class="tab-panel">
+
+        <div class="kpi-grid">
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-green">📈</div><div class="kpi-delta kpi-delta-up">▲ 8%</div></div>
+            <div><div class="kpi-value">R$18.240</div><div class="kpi-label">MRR</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-purple">🔄</div><div class="kpi-delta kpi-delta-up">▲ 2 meses</div></div>
+            <div><div class="kpi-value">14,3</div><div class="kpi-label">LTV Médio (meses)</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-amber">🚨</div><div class="kpi-delta kpi-delta-down">▼ 1</div></div>
+            <div><div class="kpi-value">2</div><div class="kpi-label">Churn Risk</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-blue">✅</div><div class="kpi-delta kpi-delta-up">▲ 14%</div></div>
+            <div><div class="kpi-value">81%</div><div class="kpi-label">Taxa de Cobrança</div></div>
+          </div></div>
+        </div>
+
+        <div class="bento">
+          <!-- RECEITA POR MÊS -->
+          <div class="b-c8 card-outer">
+            <div class="card-inner">
+              <div class="card-hd">
+                <div class="card-hd-left">
+                  <div class="card-title">Receita Coletada por Mês</div>
+                  <div class="card-sub">Últimos 12 meses</div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="chart-ph" id="revenue-chart">
+                  <!-- bars injected by JS -->
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:8px">
+                  <!-- labels injected by JS -->
+                  <div id="chart-labels" style="display:flex;justify-content:space-between;width:100%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TOP TENANTS -->
+          <div class="b-c4 card-outer">
+            <div class="card-inner">
+              <div class="card-hd">
+                <div class="card-hd-left">
+                  <div class="card-title">Top Marinas por Receita</div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div class="h-bar">
+                    <div class="h-bar-label">Vitória</div>
+                    <div class="h-bar-track"><div class="h-bar-fill" style="width:100%;background:linear-gradient(90deg,#10b981,#34d399)"></div></div>
+                    <div class="h-bar-val">R$1.299</div>
+                  </div>
+                  <div class="h-bar">
+                    <div class="h-bar-label">Angra</div>
+                    <div class="h-bar-track"><div class="h-bar-fill" style="width:46%"></div></div>
+                    <div class="h-bar-val">R$599</div>
+                  </div>
+                  <div class="h-bar">
+                    <div class="h-bar-label">Náutic SP</div>
+                    <div class="h-bar-track"><div class="h-bar-fill" style="width:46%"></div></div>
+                    <div class="h-bar-val">R$599</div>
+                  </div>
+                  <div class="h-bar">
+                    <div class="h-bar-label">Marina Sul</div>
+                    <div class="h-bar-track"><div class="h-bar-fill" style="width:46%"></div></div>
+                    <div class="h-bar-val">R$599</div>
+                  </div>
+                  <div class="h-bar">
+                    <div class="h-bar-label">Porto Belém</div>
+                    <div class="h-bar-track"><div class="h-bar-fill" style="width:23%;background:linear-gradient(90deg,#3b82f6,#60a5fa)"></div></div>
+                    <div class="h-bar-val">R$299</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCORE DE RISCO -->
+          <div class="b-c12 card-outer">
+            <div class="card-inner">
+              <div class="card-hd">
+                <div class="card-hd-left">
+                  <div class="card-title">Score de Risco por Tenant</div>
+                  <div class="card-sub">Calculado com base em inadimplência, atividade e LTV</div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="tbl-wrap">
+                  <table>
+                    <thead><tr><th>Marina</th><th>Plano</th><th>Score</th><th>Nível</th><th>Expira em</th><th>Valor/Mês</th></tr></thead>
+                    <tbody>
+                      <tr><td class="td-main">Angra Marina</td><td><span class="badge badge-pro">Pro</span></td><td style="font-weight:700;color:var(--danger)">88</td><td><span class="score-chip score-chip-high">Alto Risco</span></td><td style="color:var(--danger)">Vencido</td><td>R$599</td></tr>
+                      <tr><td class="td-main">Porto Belém</td><td><span class="badge badge-starter">Starter</span></td><td style="font-weight:700;color:var(--warning)">54</td><td><span class="score-chip score-chip-med">Médio Risco</span></td><td style="color:var(--warning)">3 dias</td><td>R$299</td></tr>
+                      <tr><td class="td-main">Lagoa Náutica</td><td><span class="badge badge-starter">Starter</span></td><td style="font-weight:700;color:var(--warning)">41</td><td><span class="score-chip score-chip-med">Médio Risco</span></td><td>28 dias</td><td>R$299</td></tr>
+                      <tr><td class="td-main">Mar de Minas</td><td><span class="badge badge-starter">Starter</span></td><td style="font-weight:700;color:var(--success)">18</td><td><span class="score-chip score-chip-low">Baixo Risco</span></td><td>58 dias</td><td>R$299</td></tr>
+                      <tr><td class="td-main">Marina Sul Rio</td><td><span class="badge badge-pro">Pro</span></td><td style="font-weight:700;color:var(--success)">12</td><td><span class="score-chip score-chip-low">Baixo Risco</span></td><td>88 dias</td><td>R$599</td></tr>
+                      <tr><td class="td-main">Náutic Club SP</td><td><span class="badge badge-pro">Pro</span></td><td style="font-weight:700;color:var(--success)">8</td><td><span class="score-chip score-chip-low">Baixo Risco</span></td><td>112 dias</td><td>R$599</td></tr>
+                      <tr><td class="td-main">Marina Vitória</td><td><span class="badge badge-enterprise">Enterprise</span></td><td style="font-weight:700;color:var(--success)">3</td><td><span class="score-chip score-chip-low">Baixo Risco</span></td><td>180 dias</td><td>R$1.299</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ PROPOSTAS ═══ -->
+      <div id="tab-propostas" class="tab-panel">
+        <div class="filter-bar" style="margin-bottom:0">
+          <input class="filter-input" placeholder="Buscar proposta..." type="text">
+          <select class="filter-select">
+            <option>Todos os status</option>
+            <option>Rascunho</option>
+            <option>Enviada</option>
+            <option>Aprovada</option>
+            <option>Convertida</option>
+          </select>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn-pill btn-pill-primary">+ Nova Proposta <span class="trail">↗</span></button>
+          </div>
+        </div>
+
+        <div class="bento">
+          <div class="b-c4 card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-blue">📋</div></div>
+            <div><div class="kpi-value">3</div><div class="kpi-label">Em Aberto</div></div>
+          </div></div>
+          <div class="b-c4 card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-green">✅</div></div>
+            <div><div class="kpi-value">R$5.892</div><div class="kpi-label">Volume Total</div></div>
+          </div></div>
+          <div class="b-c4 card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-purple">🔄</div></div>
+            <div><div class="kpi-value">67%</div><div class="kpi-label">Taxa de Conversão</div></div>
+          </div></div>
+
+          <div class="b-c12 card-outer">
+            <div class="card-inner">
+              <div class="card-hd">
+                <div class="card-hd-left"><div class="card-title">Propostas Ativas</div></div>
+              </div>
+              <div class="card-body">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div class="prop-card">
+                    <div>
+                      <div style="font-size:13px;font-weight:700;color:var(--text)">Marina Fortaleza</div>
+                      <div style="font-size:11px;color:var(--text3);margin-top:3px">Plano Enterprise · enviada há 3 dias</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div style="text-align:right">
+                        <div style="font-size:14px;font-weight:700;color:var(--success)">R$1.299/mês</div>
+                        <span class="badge badge-trial" style="font-size:9px">Aguardando</span>
+                      </div>
+                      <div style="display:flex;gap:6px">
+                        <button class="act-btn">👁</button>
+                        <button class="act-btn">✎</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="prop-card">
+                    <div>
+                      <div style="font-size:13px;font-weight:700;color:var(--text)">Náutica Goiânia</div>
+                      <div style="font-size:11px;color:var(--text3);margin-top:3px">Plano Pro · enviada hoje</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div style="text-align:right">
+                        <div style="font-size:14px;font-weight:700;color:var(--success)">R$599/mês</div>
+                        <span class="badge badge-active" style="font-size:9px">Aprovada</span>
+                      </div>
+                      <div style="display:flex;gap:6px">
+                        <button class="act-btn">↗</button>
+                        <button class="act-btn">✎</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="prop-card">
+                    <div>
+                      <div style="font-size:13px;font-weight:700;color:var(--text)">Porto Alegre Náutica</div>
+                      <div style="font-size:11px;color:var(--text3);margin-top:3px">Plano Starter · rascunho</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div style="text-align:right">
+                        <div style="font-size:14px;font-weight:700;color:var(--text2)">R$299/mês</div>
+                        <span class="badge badge-inactive" style="font-size:9px">Rascunho</span>
+                      </div>
+                      <div style="display:flex;gap:6px">
+                        <button class="act-btn">📤</button>
+                        <button class="act-btn">✎</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ CONTRATOS ═══ -->
+      <div id="tab-contratos" class="tab-panel">
+        <div class="filter-bar">
+          <input class="filter-input" placeholder="Buscar marina..." type="text">
+          <select class="filter-select">
+            <option>Todos os status</option>
+            <option>Ativo</option><option>Trial</option><option>Expirado</option><option>Cancelado</option>
+          </select>
+          <select class="filter-select">
+            <option>Todas as licenças</option>
+            <option>Starter</option><option>Pro</option><option>Enterprise</option>
+          </select>
+          <div style="margin-left:auto">
+            <button class="btn-pill btn-pill-primary">+ Novo Contrato <span class="trail">↗</span></button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-green">📄</div></div>
+            <div><div class="kpi-value">5</div><div class="kpi-label">Contratos Ativos</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-amber">⏳</div></div>
+            <div><div class="kpi-value">2</div><div class="kpi-label">Em Trial</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-green">💰</div></div>
+            <div><div class="kpi-value">R$14.800</div><div class="kpi-label">Recebido Total</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-blue">📅</div></div>
+            <div><div class="kpi-value">R$3.440</div><div class="kpi-label">A Receber</div></div>
+          </div></div>
+        </div>
+
+        <div class="card-outer">
+          <div class="card-inner">
+            <div class="card-hd"><div class="card-hd-left"><div class="card-title">Contratos</div></div></div>
+            <div class="card-body">
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>Marina</th><th>Plano</th><th>Licença Técnica</th><th>Início</th><th>Término</th><th>Valor/Mês</th><th>Recebido</th><th>Status</th><th>Ações</th></tr></thead>
+                  <tbody>
+                    <tr><td class="td-main">Marina Vitória</td><td>Enterprise</td><td><span class="badge badge-enterprise">Enterprise</span></td><td>Jan 2024</td><td>Jan 2025</td><td>R$1.299</td><td style="color:var(--success)">R$15.588</td><td><span class="badge badge-active">Ativo</span></td><td><button class="act-btn">👁</button></td></tr>
+                    <tr><td class="td-main">Náutic Club SP</td><td>Pro Anual</td><td><span class="badge badge-pro">Pro</span></td><td>Mai 2024</td><td>Mai 2025</td><td>R$599</td><td style="color:var(--success)">R$5.391</td><td><span class="badge badge-active">Ativo</span></td><td><button class="act-btn">👁</button></td></tr>
+                    <tr><td class="td-main">Porto Belém</td><td>Starter Trial</td><td><span class="badge badge-starter">Starter</span></td><td>Mai 2025</td><td>Jun 2025</td><td>R$0</td><td style="color:var(--text3)">R$0</td><td><span class="badge badge-trial">Trial</span></td><td><button class="act-btn">👁</button></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ FINANCEIRO ═══ -->
+      <div id="tab-financeiro" class="tab-panel">
+        <div class="filter-bar">
+          <select class="filter-select" style="flex:1;min-width:160px"><option>Todas as marinas</option><option>Marina Vitória</option><option>Angra Marina</option></select>
+          <select class="filter-select"><option>Todos os status</option><option>Pendente</option><option>Pago</option><option>Vencido</option></select>
+          <input type="month" class="filter-select">
+          <button class="btn-pill" style="margin-left:auto">↻ Atualizar</button>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-green">💳</div><div class="kpi-delta kpi-delta-up">▲ 14%</div></div>
+            <div><div class="kpi-value">R$14.800</div><div class="kpi-label">Recebido (mês)</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-amber">⏳</div></div>
+            <div><div class="kpi-value">R$3.440</div><div class="kpi-label">Pendente</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon" style="background:rgba(239,68,68,0.12)">🚨</div></div>
+            <div><div class="kpi-value">R$599</div><div class="kpi-label">Vencido</div></div>
+          </div></div>
+          <div class="card-outer"><div class="card-inner kpi-card">
+            <div class="kpi-top"><div class="kpi-icon kpi-icon-blue">📊</div></div>
+            <div><div class="kpi-value">81%</div><div class="kpi-label">Taxa de Adimplência</div></div>
+          </div></div>
+        </div>
+
+        <div class="bento">
+          <div class="b-c8 card-outer">
+            <div class="card-inner">
+              <div class="card-hd"><div class="card-hd-left"><div class="card-title">Receita Coletada — 12 Meses</div></div></div>
+              <div class="card-body">
+                <div class="chart-ph" id="fin-chart"></div>
+              </div>
+            </div>
+          </div>
+          <div class="b-c4 card-outer">
+            <div class="card-inner">
+              <div class="card-hd"><div class="card-hd-left"><div class="card-title">Status das Cobranças</div></div></div>
+              <div class="card-body">
+                <div style="display:flex;flex-direction:column;gap:12px;padding-top:8px">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:3px;background:#34d399"></div><span style="font-size:12px">Pago</span></div>
+                    <span style="font-weight:700;font-size:13px">81%</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:3px;background:#fbbf24"></div><span style="font-size:12px">Pendente</span></div>
+                    <span style="font-weight:700;font-size:13px">13%</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:3px;background:#f87171"></div><span style="font-size:12px">Vencido</span></div>
+                    <span style="font-weight:700;font-size:13px">6%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="b-c12 card-outer">
+            <div class="card-inner">
+              <div class="card-hd"><div class="card-hd-left"><div class="card-title">Cobranças</div></div></div>
+              <div class="card-body">
+                <div class="tbl-wrap">
+                  <table>
+                    <thead><tr><th>Marina</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Pago em</th><th>Ações</th></tr></thead>
+                    <tbody>
+                      <tr><td class="td-main">Marina Vitória</td><td>Mensalidade Mai/25</td><td>01/05/2025</td><td>R$1.299</td><td><span class="badge badge-active">Pago</span></td><td>02/05/2025</td><td><button class="act-btn">👁</button></td></tr>
+                      <tr><td class="td-main">Angra Marina</td><td>Mensalidade Abr/25</td><td>01/04/2025</td><td style="color:var(--danger)">R$599</td><td><span class="badge badge-expired">Vencido</span></td><td>—</td><td><button class="act-btn">✓</button></td></tr>
+                      <tr><td class="td-main">Náutic Club SP</td><td>Mensalidade Mai/25</td><td>01/05/2025</td><td>R$599</td><td><span class="badge badge-trial">Pendente</span></td><td>—</td><td><button class="act-btn">✓</button></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ LICENÇAS ═══ -->
+      <div id="tab-licencas" class="tab-panel">
+
+        <!-- PLANOS -->
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--text)">Tipos de Licença</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">Planos comerciais disponíveis</div>
+            </div>
+            <button class="btn-pill btn-pill-primary">+ Novo Plano <span class="trail">↗</span></button>
+          </div>
+          <div class="plan-grid">
+            <div class="plan-card">
+              <div class="plan-name">Starter</div>
+              <div class="plan-price">R$299<span>/mês</span></div>
+              <div class="plan-features">
+                <div class="plan-feat">Até 50 embarcações</div>
+                <div class="plan-feat">Gestão de vagas</div>
+                <div class="plan-feat">Financeiro básico</div>
+                <div class="plan-feat">Fila de operações</div>
+              </div>
+            </div>
+            <div class="plan-card featured">
+              <div style="position:absolute;top:16px;right:16px;font-size:9px;text-transform:uppercase;letter-spacing:.1em;padding:3px 8px;border-radius:100px;background:rgba(124,58,237,0.2);color:#c4b5fd;font-weight:700">Popular</div>
+              <div class="plan-name">Pro</div>
+              <div class="plan-price">R$599<span>/mês</span></div>
+              <div class="plan-features">
+                <div class="plan-feat">Embarcações ilimitadas</div>
+                <div class="plan-feat">Analytics avançado</div>
+                <div class="plan-feat">Loja / PDV</div>
+                <div class="plan-feat">Totem de autoatendimento</div>
+                <div class="plan-feat">Alertas inteligentes</div>
+              </div>
+            </div>
+            <div class="plan-card">
+              <div class="plan-name">Enterprise</div>
+              <div class="plan-price">R$1.299<span>/mês</span></div>
+              <div class="plan-features">
+                <div class="plan-feat">Tudo do Pro</div>
+                <div class="plan-feat">SLA garantido</div>
+                <div class="plan-feat">Onboarding dedicado</div>
+                <div class="plan-feat">Integrações sob demanda</div>
+                <div class="plan-feat">Suporte prioritário 24/7</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MÓDULOS -->
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--text)">Catálogo de Módulos</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">Módulos gerenciados via código — slug é imutável</div>
+            </div>
+          </div>
+          <div class="mod-grid">
+            <div class="mod-card active-mod"><div class="mod-icon">🏠</div><div class="mod-info"><div class="mod-name">Dashboard</div><div class="mod-cat">core</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">⚓</div><div class="mod-info"><div class="mod-name">Embarcações</div><div class="mod-cat">core</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">📋</div><div class="mod-info"><div class="mod-name">Fila de Operações</div><div class="mod-cat">core</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">👤</div><div class="mod-info"><div class="mod-name">Clientes</div><div class="mod-cat">core</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">🗂️</div><div class="mod-info"><div class="mod-name">Vagas</div><div class="mod-cat">core</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">📄</div><div class="mod-info"><div class="mod-name">Contratos</div><div class="mod-cat">core</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">💰</div><div class="mod-info"><div class="mod-name">Financeiro</div><div class="mod-cat">core</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">🛒</div><div class="mod-info"><div class="mod-name">Loja / PDV</div><div class="mod-cat">premium</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">🛍️</div><div class="mod-info"><div class="mod-name">Conveniência</div><div class="mod-cat">premium</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">📺</div><div class="mod-info"><div class="mod-name">Totem</div><div class="mod-cat">premium</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">🔧</div><div class="mod-info"><div class="mod-name">Manutenção</div><div class="mod-cat">premium</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="mod-card active-mod"><div class="mod-icon">📊</div><div class="mod-info"><div class="mod-name">Analytics</div><div class="mod-cat">premium</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ CONFIGURAÇÕES ═══ -->
+      <div id="tab-configuracoes" class="tab-panel">
+        <div class="bento">
+          <div class="b-c8 card-outer">
+            <div class="card-inner">
+              <div class="card-hd"><div class="card-hd-left"><div class="card-title">Configurações Gerais</div><div class="card-sub">Aplicadas a todos os tenants</div></div></div>
+              <div class="card-body">
+                <div class="cfg-row">
+                  <div><div class="cfg-label">Nome da Plataforma</div><div class="cfg-desc">Exibido em e-mails e na interface</div></div>
+                  <input class="cfg-input" value="Marina One" type="text">
+                </div>
+                <div class="cfg-row">
+                  <div><div class="cfg-label">E-mail de Suporte</div><div class="cfg-desc">Contato exibido para tenants</div></div>
+                  <input class="cfg-input" value="suporte@marinaone.com.br" type="email">
+                </div>
+                <div class="cfg-row">
+                  <div><div class="cfg-label">Plano Padrão</div><div class="cfg-desc">Licença atribuída a novos tenants</div></div>
+                  <select class="cfg-input">
+                    <option>Starter</option><option>Pro</option><option>Enterprise</option>
+                  </select>
+                </div>
+                <div class="cfg-row">
+                  <div><div class="cfg-label">Dias de Trial</div><div class="cfg-desc">Período de avaliação gratuita</div></div>
+                  <input class="cfg-input" value="30" type="number">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="b-c4 card-outer">
+            <div class="card-inner">
+              <div class="card-hd"><div class="card-hd-left"><div class="card-title">Preços dos Planos</div><div class="card-sub">R$/mês</div></div></div>
+              <div class="card-body">
+                <div style="display:flex;flex-direction:column;gap:14px">
+                  <div><div style="font-size:11px;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Starter</div><input class="cfg-input" value="299.00" type="number"></div>
+                  <div><div style="font-size:11px;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Pro</div><input class="cfg-input" value="599.00" type="number"></div>
+                  <div><div style="font-size:11px;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Enterprise</div><input class="cfg-input" value="1299.00" type="number"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="b-c12 card-outer">
+            <div class="card-inner">
+              <div class="card-hd"><div class="card-hd-left"><div class="card-title">API de Clima</div><div class="card-sub">Chave armazenada no servidor — nunca exposta ao navegador</div></div></div>
+              <div class="card-body">
+                <div class="cfg-row" style="padding-top:0">
+                  <div><div class="cfg-label">Provider</div><div class="cfg-desc">OpenWeatherMap ou WeatherAPI.com</div></div>
+                  <select class="cfg-input"><option>OpenWeatherMap</option><option>WeatherAPI.com</option></select>
+                </div>
+                <div class="cfg-row">
+                  <div><div class="cfg-label">API Key</div><div class="cfg-desc">Chave de acesso à API</div></div>
+                  <input class="cfg-input" type="password" placeholder="•••••••••••••••••••••••••">
+                </div>
+                <div style="display:flex;justify-content:flex-end;padding-top:16px">
+                  <button class="btn-pill btn-pill-primary">Salvar Configurações <span class="trail">✓</span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.tab-scroll -->
+  </div><!-- /.main -->
+</div><!-- /.shell -->
+
+<script>
+const TITLES = {
+  operacional:'Visão Operacional',
+  analytics:'Analytics & Insights',
+  propostas:'Propostas Comerciais',
+  contratos:'Contratos',
+  financeiro:'Financeiro',
+  licencas:'Módulos & Licenças',
+  configuracoes:'Configurações SaaS'
+};
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  if(btn) btn.classList.add('active');
+  document.getElementById('topbar-title').textContent = TITLES[id] || id;
+}
+
+// Revenue chart
+function buildChart(elId, data, color1, color2) {
+  const el = document.getElementById(elId);
+  if(!el) return;
+  const max = Math.max(...data.map(d=>d.v));
+  el.innerHTML = data.map(d => {
+    const h = Math.round((d.v/max)*100);
+    const grad = color1||'rgba(124,58,237,0.8)';
+    return `<div class="chart-bar" data-val="R$${d.v.toLocaleString('pt-BR')}" style="height:${h}%;background:linear-gradient(to top,${color1||'rgba(124,58,237,0.6)'},${color2||'rgba(139,92,246,0.9)'});min-height:8px"></div>`;
+  }).join('');
+
+  const lbl = document.getElementById('chart-labels');
+  if(lbl) lbl.innerHTML = data.map(d=>`<span style="font-size:9px;color:var(--text3)">${d.m}</span>`).join('');
+}
+
+const months = [
+  {m:'Jun',v:11200},{m:'Jul',v:12400},{m:'Ago',v:12100},{m:'Set',v:13800},
+  {m:'Out',v:14200},{m:'Nov',v:13900},{m:'Dez',v:15100},{m:'Jan',v:14800},
+  {m:'Fev',v:16200},{m:'Mar',v:17100},{m:'Abr',v:17800},{m:'Mai',v:18240}
+];
+
+buildChart('revenue-chart', months, 'rgba(124,58,237,0.5)','rgba(167,139,250,0.95)');
+buildChart('fin-chart', months, 'rgba(16,185,129,0.4)','rgba(52,211,153,0.9)');
+
+// Animate KPI numbers
+function animateCount(el, target, prefix, suffix, dur) {
+  let start = 0, step = target/80;
+  const timer = setInterval(()=>{
+    start = Math.min(start+step, target);
+    el.textContent = prefix + Math.floor(start).toLocaleString('pt-BR') + suffix;
+    if(start >= target) clearInterval(timer);
+  }, dur/80);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(()=>{
+    const t = document.getElementById('kpi-tenants');
+    const m = document.getElementById('kpi-mrr');
+    if(t) animateCount(t, 7, '', '', 800);
+    if(m) animateCount(m, 18240, 'R$', '', 1000);
+  }, 300);
+});
+</script>
+</body>
+</html>

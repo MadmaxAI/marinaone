@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.120] -- 2026-05-13
+- super admin: paleta Grafite + Cobre com override completo dos tokens do tenant
+
 ## [2.3.110] -- 2026-05-12
 - fix: criação de tenant agora cria tenant_licenses corretamente; corrige plan slug professional→pro; _syncTenantLicense como ponto único; modal Nova Marina pré-preenchida de proposta; saSaveNewContract abre modal tenant ao invés de auto-ativar; pipeline converted idempotente
 
@@ -261,6 +264,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

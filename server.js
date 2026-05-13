@@ -1420,6 +1420,7 @@ addRoute('GET', '/api/superadmin/financial/summary', async (req, res, ctx) => {
   try {
     await saasCheckOverdue();
     const ms = monthStart();
+    const year = parseInt(ctx.qs?.year || new Date().getFullYear(), 10);
     const [mrr, revMonth, revTotal, pending, overdue, tenantCount,
            activeContracts, revenueChart, statusBreakdown] = await Promise.all([
       saasGet(`SELECT COALESCE(SUM(monthly_value),0) AS v FROM saas.license_contracts WHERE status='active'`),
@@ -1432,7 +1433,8 @@ addRoute('GET', '/api/superadmin/financial/summary', async (req, res, ctx) => {
       saasAll(
         `SELECT TO_CHAR(paid_date,'YYYY-MM') AS month, COALESCE(SUM(amount),0) AS total
          FROM saas.license_charges WHERE status='paid' AND paid_date IS NOT NULL
-         GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY month DESC LIMIT 12`
+           AND EXTRACT(YEAR FROM paid_date) = $1
+         GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY month ASC`, [year]
       ),
       saasAll(
         `SELECT status, COUNT(*) AS count, COALESCE(SUM(amount),0) AS total
@@ -1638,13 +1640,14 @@ addRoute('GET', '/api/superadmin/analytics/predict', async (req, res, ctx) => {
       [today]
     );
 
-    // ── 2. HISTÓRICO DOS ÚLTIMOS 12 MESES (base para regressão) ───────
+    // ── 2. HISTÓRICO (período selecionado, base para regressão) ──────
+    const histMonths = Math.max(6, parseInt(ctx.qs?.months || '12', 10));
     const histRows = await saasAll(
       `SELECT TO_CHAR(paid_date,'YYYY-MM') AS month, COALESCE(SUM(amount),0) AS total
        FROM saas.license_charges WHERE status='paid' AND paid_date IS NOT NULL
          AND paid_date >= $1 ${planCond.replace('lc.plan','plan').replace('lc.','')}
-       GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY month ASC LIMIT 12`,
-      [daysAgo(365)]
+       GROUP BY TO_CHAR(paid_date,'YYYY-MM') ORDER BY month ASC`,
+      [daysAgo(histMonths * 31)]
     );
 
     // ── 3. SCORE DE RISCO POR TENANT ──────────────────────────────────
