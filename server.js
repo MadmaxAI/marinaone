@@ -583,6 +583,14 @@ addRoute('GET', '/api/version', (req, res) => {
   });
 });
 
+// Marca da plataforma SA — pública, sem auth (usada na tela de login SA)
+addRoute('GET', '/api/sa-brand', async (req, res) => {
+  const { saasGet: sGet } = createSaasHelpers();
+  const name = (await sGet(`SELECT value FROM saas.settings WHERE key='general_system_name'`))?.value || 'Marina One';
+  const logo = (await sGet(`SELECT value FROM saas.settings WHERE key='general_logo'`))?.value || '';
+  sendJson(res, { name, logo });
+});
+
 // ═════════════════════════════════════════════════════════════════════
 //  ROTAS — SUPER-ADMIN (/api/superadmin/*)
 // ═════════════════════════════════════════════════════════════════════

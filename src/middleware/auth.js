@@ -88,6 +88,7 @@ const PUBLIC_ROUTES = new Set([
   '/api/auth/login',
   '/api/version',
   '/api/brand',
+  '/api/sa-brand',
   '/api/conveniencia/catalog',
   '/api/conveniencia/order',
 ]);

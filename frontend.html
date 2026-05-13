@@ -231,6 +231,17 @@ input.success,select.success{border-color:var(--success);box-shadow:0 0 0 3px rg
 @keyframes login-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.8)}}
 .login-status-text{font-size:11px;color:rgba(255,255,255,.25);letter-spacing:.2px}
 .login-error{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:10px 14px;font-size:13px;color:#f87171;margin-bottom:16px;display:none}
+/* LOGIN — modo Super Admin (Grafite + Cobre) */
+#login-screen.sa-mode{background:#080806}
+#login-screen.sa-mode::before{background:radial-gradient(ellipse 120% 80% at 30% 40%,rgba(139,58,26,.13) 0%,transparent 55%),radial-gradient(ellipse 80% 60% at 75% 70%,rgba(196,98,45,.07) 0%,transparent 50%)}
+#login-screen.sa-mode .login-outer{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.07);box-shadow:0 32px 80px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05)}
+#login-screen.sa-mode .login-card{background:rgba(14,12,8,.95)}
+#login-screen.sa-mode .login-card::before{background:linear-gradient(90deg,#8b3a1a,#c4622d,#e8956a)}
+#login-screen.sa-mode .login-logo h1{background:linear-gradient(135deg,#faf5eb,#e8956a);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#login-screen.sa-mode .login-logo p{color:rgba(232,149,106,.7)}
+#login-screen.sa-mode .login-powered-dot{background:linear-gradient(135deg,#c4622d,#e8956a)}
+#login-screen.sa-mode .login-card .btn-primary{background:linear-gradient(135deg,#8b3a1a 0%,#c4622d 100%);box-shadow:0 4px 20px rgba(196,98,45,.4),0 1px 0 rgba(255,255,255,.12) inset}
+#login-screen.sa-mode .login-card .btn-primary:hover{background:linear-gradient(135deg,#a8441f 0%,#d9723a 100%);box-shadow:0 6px 26px rgba(196,98,45,.55)}
 /* QUEUE */
 .queue-card{background:var(--surface2);border:1px solid rgba(255,255,255,.055);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:14px;transition:var(--t-base);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
 .queue-card:hover{border-color:rgba(37,99,235,.25);background:var(--surface3);transform:translateX(2px)}
@@ -1170,6 +1181,22 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
               <option value="professional">Professional</option>
               <option value="enterprise">Enterprise</option>
             </select>
+          </div>
+          <div class="form-group" style="margin:0;grid-column:1/-1">
+            <label>Logomarca da Plataforma (aparece na tela de login do Super Admin)</label>
+            <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-top:8px">
+              <div id="sa-logo-preview" style="width:200px;height:80px;border:2px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;overflow:hidden">Sem logomarca</div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div class="form-group" style="margin:0">
+                  <label>Arquivo (PNG, JPG, SVG — máx. 500 KB)</label>
+                  <input type="file" id="sa-logo-file" accept="image/*" onchange="saPreviewLogoFile(this)">
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button class="btn btn-primary btn-sm" onclick="saSaveLogo()">💾 Salvar logomarca</button>
+                  <button id="sa-logo-remove-btn" class="btn btn-ghost btn-sm" onclick="saRemoveLogo()" style="display:none">🗑️ Remover</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -8897,15 +8924,19 @@ function toggleSAMode() {
   const emailEl  = document.getElementById('login-email');
   const passEl   = document.getElementById('login-pass');
   const err      = document.getElementById('login-error');
+  const screen   = document.getElementById('login-screen');
   err.style.display = 'none';
+  const nameEl = document.getElementById('login-marina-name');
   if (window._saMode) {
-    icon.textContent      = '🔐';
+    screen.classList.add('sa-mode');
     subtitle.textContent  = 'Acesso Super Admin';
+    _applyLoginSABrand(icon, nameEl);
     emailEl.value         = 'arthur@marinaone.com.br';
     passEl.value          = '';
     passEl.placeholder    = 'Senha do super-admin';
     btn.textContent       = '← Voltar ao login da marina';
   } else {
+    screen.classList.remove('sa-mode');
     subtitle.textContent  = 'Sistema de Gestão de Marina';
     emailEl.value         = 'admin@marina.com';
     passEl.value          = 'marina123';
@@ -12428,6 +12459,53 @@ async function saLoadSettings() {
       el.value = d[key] ?? '';
     }
   });
+  _saApplyLogoPreview(d.general_logo || '');
+}
+
+function _saApplyLogoPreview(logo) {
+  const prev = document.getElementById('sa-logo-preview');
+  const removeBtn = document.getElementById('sa-logo-remove-btn');
+  if (!prev) return;
+  if (logo) {
+    prev.innerHTML = `<img src="${logo}" alt="Logo" style="max-height:78px;max-width:198px;object-fit:contain;border-radius:4px">`;
+    if (removeBtn) removeBtn.style.display = '';
+  } else {
+    prev.innerHTML = 'Sem logomarca';
+    prev.style.display = 'flex';
+    if (removeBtn) removeBtn.style.display = 'none';
+  }
+}
+
+function saPreviewLogoFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 512000) { toast('Arquivo maior que 500 KB', 'error'); input.value = ''; return; }
+  const fr = new FileReader();
+  fr.onload = e => _saApplyLogoPreview(e.target.result);
+  fr.readAsDataURL(file);
+}
+
+async function saSaveLogo() {
+  const fileEl = document.getElementById('sa-logo-file');
+  const file = fileEl?.files?.[0];
+  if (!file) { toast('Selecione um arquivo primeiro', 'error'); return; }
+  if (file.size > 512000) { toast('Arquivo maior que 500 KB', 'error'); return; }
+  const base64 = await new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = e => res(e.target.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+  const r = await saApi('PUT', '/superadmin/settings', { general_logo: base64 });
+  if (r && !r.error) { toast('✅ Logomarca salva!'); _saApplyLogoPreview(base64); }
+  else toast('Erro ao salvar logomarca', 'error');
+}
+
+async function saRemoveLogo() {
+  if (!confirm('Remover a logomarca da plataforma?')) return;
+  const r = await saApi('PUT', '/superadmin/settings', { general_logo: '' });
+  if (r && !r.error) { toast('Logomarca removida'); _saApplyLogoPreview(''); }
+  else toast('Erro ao remover logomarca', 'error');
 }
 
 async function saSaveSettings() {
@@ -13000,6 +13078,23 @@ function _renderTotem() {
 document.addEventListener('keydown', e => {
   if (e.key==='Escape') closeModalForce();
 });
+/** Aplica logo e nome da plataforma na tela de login no modo SA */
+async function _applyLoginSABrand(iconEl, nameEl) {
+  try {
+    const r = await fetch(API + '/sa-brand');
+    if (!r.ok) throw new Error();
+    const b = await r.json();
+    if (iconEl && b.logo) {
+      iconEl.innerHTML = `<img src="${b.logo}" alt="${b.name}" style="max-height:110px;max-width:240px;object-fit:contain;border-radius:8px">`;
+    }
+    // Se não há logo SA configurada, mantém o logo já exibido (_applyLoginBrand carregou)
+    if (nameEl) nameEl.textContent = b.name || 'Marina One';
+  } catch(e) {
+    if (nameEl) nameEl.textContent = 'Marina One';
+    // Em caso de erro, mantém o logo atual também
+  }
+}
+
 /** Aplica logo e nome da marina na tela de login */
 async function _applyLoginBrand() {
   try {

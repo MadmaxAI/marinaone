@@ -70,7 +70,7 @@ function extractSlug(req) {
 async function tenantMiddleware(req, res, next) {
   // Rotas que não precisam de tenant
   const path = (req.url || '').split('?')[0];
-  if (path === '/api/version' || path.startsWith('/api/superadmin')) {
+  if (path === '/api/version' || path === '/api/sa-brand' || path.startsWith('/api/superadmin')) {
     return next();
   }
 

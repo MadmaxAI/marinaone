@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.124] -- 2026-05-13
+- Login SA: logo carregada das configuracoes do super admin; campo de logomarca da plataforma adicionado ao SA
+
 ## [2.3.120] -- 2026-05-13
 - super admin: paleta Grafite + Cobre com override completo dos tokens do tenant
 
@@ -264,6 +267,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

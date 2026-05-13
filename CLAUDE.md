@@ -204,7 +204,7 @@ Toda rota GET deve retornar **todos os campos** que qualquer tela pode precisar.
 | `admin_password_plain` em `saas.tenants` | **Alto** — migrar para entrega segura fora do banco |
 
 ### Rotas públicas (exatamente estas — não adicionar sem deliberação)
-`/api/auth/login`, `/api/version`, `/api/brand`, `/api/conveniencia/catalog`, `/api/conveniencia/order`
+`/api/auth/login`, `/api/version`, `/api/brand`, `/api/sa-brand`, `/api/conveniencia/catalog`, `/api/conveniencia/order`
 
 ---
 
