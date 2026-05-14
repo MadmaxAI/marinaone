@@ -736,7 +736,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
   <!-- ── SIDEBAR ── -->
   <aside class="sa-sidebar">
     <div class="sa-logo">
-      <div class="sa-logo-icon">⚓</div>
+      <div class="sa-logo-icon" id="sa-sidebar-logo-icon">⚓</div>
       <div>
         <div class="sa-logo-name">Marina One</div>
         <div class="sa-logo-sub">Super Admin</div>
@@ -1117,224 +1117,294 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
     </div>
 
     <!-- ═══ TAB: CONFIGURAÇÕES ═══ -->
-    <div id="sa-tab-configuracoes" style="display:none;padding:28px;max-width:900px">
+    <div id="sa-tab-configuracoes" style="display:none;padding:28px;max-width:920px">
 
+      <!-- Cabeçalho -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
         <div>
           <div style="font-size:18px;font-weight:700">⚙️ Configurações do SaaS</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">Configurações globais aplicadas a todos os tenants</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">Configurações globais da plataforma</div>
         </div>
-        <button class="btn btn-primary" onclick="saSaveSettings()">💾 Salvar Todas as Configurações</button>
+        <button class="sa-btn sa-btn-primary" onclick="saSaveSettings()">💾 Salvar</button>
       </div>
 
       <div id="sa-cfg-msg" style="display:none;margin-bottom:16px"></div>
 
-      <!-- DADOS DA EMPRESA (CONTRATANTE) -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header"><div class="card-title">🏛️ Dados da Empresa (Contratante — aparece no contrato)</div></div>
-        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-          <div class="form-group" style="margin:0;grid-column:1/-1">
-            <label>Razão Social *</label>
-            <input id="cfg-company_legal_name" type="text" class="form-control" placeholder="Marina One Tecnologia Ltda.">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label>CNPJ</label>
-            <input id="cfg-company_cnpj" type="text" class="form-control" placeholder="00.000.000/0001-00">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label>E-mail de Suporte</label>
-            <input id="cfg-general_support_email" type="email" class="form-control" placeholder="suporte@marinaone.com.br">
-          </div>
-          <div class="form-group" style="margin:0;grid-column:1/-1">
-            <label>Endereço</label>
-            <input id="cfg-company_address" type="text" class="form-control" placeholder="Rua Exemplo, 123 — Sala 10">
-          </div>
-          <div class="form-group" style="margin:0;grid-column:1/-1">
-            <label>Cidade / Estado / CEP</label>
-            <input id="cfg-company_city_state" type="text" class="form-control" placeholder="São Paulo/SP — 01310-100">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label>Nome do Representante Legal</label>
-            <input id="cfg-company_representative_name" type="text" class="form-control" placeholder="João da Silva">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label>Cargo do Representante</label>
-            <input id="cfg-company_representative_role" type="text" class="form-control" placeholder="Sócio-Administrador">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label>CPF do Representante</label>
-            <input id="cfg-company_representative_cpf" type="text" class="form-control" placeholder="000.000.000-00">
-          </div>
-        </div>
+      <!-- Sub-abas premium -->
+      <div style="display:flex;gap:6px;padding:5px;background:var(--sa-surface);border:1px solid var(--sa-border);border-radius:16px;margin-bottom:28px">
+
+        <button id="cfg-sub-btn-plataforma" onclick="cfgSubTab('plataforma')"
+          style="flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 16px;border:none;border-radius:12px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;transition:all 300ms ease;background:linear-gradient(135deg,var(--sa-purple),var(--sa-indigo));color:#fff;box-shadow:0 0 20px rgba(139,58,26,.4)">
+          <span style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🏢</span>
+          Plataforma
+        </button>
+
+        <button id="cfg-sub-btn-integracoes" onclick="cfgSubTab('integracoes')"
+          style="flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 16px;border:none;border-radius:12px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;transition:all 300ms ease;background:transparent;color:var(--text3)">
+          <span style="width:28px;height:28px;border-radius:8px;background:var(--sa-surface2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🔌</span>
+          Integrações
+        </button>
+
+        <button id="cfg-sub-btn-copiloto" onclick="cfgSubTab('copiloto')"
+          style="flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 16px;border:none;border-radius:12px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;transition:all 300ms ease;background:transparent;color:var(--text3)">
+          <span style="width:28px;height:28px;border-radius:8px;background:var(--sa-surface2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🤖</span>
+          Co-piloto IA
+        </button>
+
       </div>
 
-      <!-- GERAL -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header"><div class="card-title">🏢 Configurações Gerais do Sistema</div></div>
-        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-          <div class="form-group" style="margin:0">
-            <label>Nome do Sistema</label>
-            <input id="cfg-general_system_name" type="text" class="form-control" placeholder="Marina One">
+      <!-- ── PANE: PLATAFORMA ──────────────────────────────────────────── -->
+      <div id="cfg-pane-plataforma">
+
+        <!-- Identidade Visual -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">🎨 Identidade Visual</div>
           </div>
-          <div class="form-group" style="margin:0">
-            <label>Plano Padrão para Novos Tenants</label>
-            <select id="cfg-general_default_plan" class="form-control">
-              <option value="starter">Starter</option>
-              <option value="professional">Professional</option>
-              <option value="enterprise">Enterprise</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin:0;grid-column:1/-1">
-            <label>Logomarca da Plataforma (aparece na tela de login do Super Admin)</label>
-            <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-top:8px">
-              <div id="sa-logo-preview" style="width:200px;height:80px;border:2px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;overflow:hidden">Sem logomarca</div>
-              <div style="display:flex;flex-direction:column;gap:8px">
-                <div class="form-group" style="margin:0">
-                  <label>Arquivo (PNG, JPG, SVG — máx. 500 KB)</label>
-                  <input type="file" id="sa-logo-file" accept="image/*" onchange="saPreviewLogoFile(this)">
-                </div>
-                <div style="display:flex;gap:8px">
-                  <button class="btn btn-primary btn-sm" onclick="saSaveLogo()">💾 Salvar logomarca</button>
-                  <button id="sa-logo-remove-btn" class="btn btn-ghost btn-sm" onclick="saRemoveLogo()" style="display:none">🗑️ Remover</button>
+          <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="form-group" style="margin:0">
+              <label>Nome do Sistema</label>
+              <input id="cfg-general_system_name" type="text" class="form-control" placeholder="Marina One">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>E-mail de Suporte</label>
+              <input id="cfg-general_support_email" type="email" class="form-control" placeholder="suporte@marinaone.com.br">
+            </div>
+            <div class="form-group" style="margin:0;grid-column:1/-1">
+              <label>Logomarca da Plataforma <span style="font-weight:400;color:var(--text3)">(tela de login do Super Admin)</span></label>
+              <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-top:8px">
+                <div id="sa-logo-preview" style="width:200px;height:80px;border:2px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;overflow:hidden">Sem logomarca</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div class="form-group" style="margin:0">
+                    <label style="font-size:11px;color:var(--text3)">PNG, JPG ou SVG — máx. 500 KB</label>
+                    <input type="file" id="sa-logo-file" accept="image/*" onchange="saPreviewLogoFile(this)">
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary btn-sm" onclick="saSaveLogo()">💾 Salvar logomarca</button>
+                    <button id="sa-logo-remove-btn" class="btn btn-ghost btn-sm" onclick="saRemoveLogo()" style="display:none">🗑️ Remover</button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- PREÇOS DOS PLANOS -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header"><div class="card-title">💳 Preços dos Planos (R$/mês)</div></div>
-        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
-          <div class="form-group" style="margin:0">
-            <label>Starter</label>
-            <input id="cfg-plan_price_starter" type="number" min="0" step="0.01" class="form-control" placeholder="299.00">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label>Professional</label>
-            <input id="cfg-plan_price_professional" type="number" min="0" step="0.01" class="form-control" placeholder="599.00">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label>Enterprise</label>
-            <input id="cfg-plan_price_enterprise" type="number" min="0" step="0.01" class="form-control" placeholder="1299.00">
-          </div>
-        </div>
-      </div>
-
-      <!-- INTEGRAÇÃO PREVISÃO DO TEMPO -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header">
-          <div class="card-title">🌤️ Integração — Previsão do Tempo</div>
-        </div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
-            A API de clima é usada pelos tenants para exibir a previsão do tempo na marina. A chave é armazenada com segurança no servidor e nunca exposta ao navegador.
-          </div>
-          <div style="display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:end">
+        <!-- Planos -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">💳 Planos</div></div>
+          <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;align-items:end">
             <div class="form-group" style="margin:0">
-              <label>Provedor</label>
-              <select id="cfg-weather_provider" class="form-control">
-                <option value="openweathermap">OpenWeatherMap</option>
-                <option value="weatherapi">WeatherAPI.com</option>
+              <label>Plano Padrão (novos tenants)</label>
+              <select id="cfg-general_default_plan" class="form-control">
+                <option value="starter">Starter</option>
+                <option value="professional">Professional</option>
+                <option value="enterprise">Enterprise</option>
               </select>
             </div>
             <div class="form-group" style="margin:0">
-              <label>API Key</label>
+              <label>Preço Starter (R$/mês)</label>
+              <input id="cfg-plan_price_starter" type="number" min="0" step="0.01" class="form-control" placeholder="299.00">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Preço Professional (R$/mês)</label>
+              <input id="cfg-plan_price_professional" type="number" min="0" step="0.01" class="form-control" placeholder="599.00">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Preço Enterprise (R$/mês)</label>
+              <input id="cfg-plan_price_enterprise" type="number" min="0" step="0.01" class="form-control" placeholder="1299.00">
+            </div>
+          </div>
+        </div>
+
+        <!-- Dados da Empresa -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">🏛️ Dados da Empresa <span style="font-size:11px;font-weight:400;color:var(--text3)">(aparece nos contratos gerados)</span></div></div>
+          <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="form-group" style="margin:0;grid-column:1/-1">
+              <label>Razão Social *</label>
+              <input id="cfg-company_legal_name" type="text" class="form-control" placeholder="Marina One Tecnologia Ltda.">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>CNPJ</label>
+              <input id="cfg-company_cnpj" type="text" class="form-control" placeholder="00.000.000/0001-00">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Cidade / Estado / CEP</label>
+              <input id="cfg-company_city_state" type="text" class="form-control" placeholder="São Paulo/SP — 01310-100">
+            </div>
+            <div class="form-group" style="margin:0;grid-column:1/-1">
+              <label>Endereço</label>
+              <input id="cfg-company_address" type="text" class="form-control" placeholder="Rua Exemplo, 123 — Sala 10">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Nome do Representante Legal</label>
+              <input id="cfg-company_representative_name" type="text" class="form-control" placeholder="João da Silva">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Cargo do Representante</label>
+              <input id="cfg-company_representative_role" type="text" class="form-control" placeholder="Sócio-Administrador">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>CPF do Representante</label>
+              <input id="cfg-company_representative_cpf" type="text" class="form-control" placeholder="000.000.000-00">
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;padding-top:4px">
+          <button class="sa-btn sa-btn-primary" onclick="saSaveSettings()">💾 Salvar Plataforma</button>
+        </div>
+      </div>
+
+      <!-- ── PANE: INTEGRAÇÕES ─────────────────────────────────────────── -->
+      <div id="cfg-pane-integracoes" style="display:none">
+
+        <!-- Previsão do Tempo -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">🌤️ Previsão do Tempo</div></div>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
+              API de clima exibida nos dashboards dos tenants. Chave armazenada no servidor — nunca exposta ao navegador.
+            </div>
+            <div style="display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:end">
+              <div class="form-group" style="margin:0">
+                <label>Provedor</label>
+                <select id="cfg-weather_provider" class="form-control">
+                  <option value="openweathermap">OpenWeatherMap</option>
+                  <option value="weatherapi">WeatherAPI.com</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label>API Key</label>
+                <div style="display:flex;gap:8px">
+                  <input id="cfg-weather_api_key" type="password" class="form-control" placeholder="Cole sua chave de API aqui" style="flex:1">
+                  <button class="btn btn-ghost btn-sm" type="button"
+                    onclick="document.getElementById('cfg-weather_api_key').type=document.getElementById('cfg-weather_api_key').type==='password'?'text':'password'">👁</button>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:14px;display:flex;align-items:center;gap:12px">
+              <button class="btn btn-ghost btn-sm" onclick="saTestWeatherApi()">🧪 Testar conexão (São Paulo)</button>
+              <span id="sa-weather-test-result" style="font-size:12px;color:var(--text3)"></span>
+            </div>
+            <div style="margin-top:14px;padding:12px;background:rgba(196,98,45,.06);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.7">
+              <strong>Obter chave:</strong>
+              <br>• <strong>OpenWeatherMap:</strong> <code>openweathermap.org/api</code> — gratuito: 1.000 chamadas/dia
+              <br>• <strong>WeatherAPI.com:</strong> <code>weatherapi.com</code> — gratuito: 1.000.000 chamadas/mês
+            </div>
+          </div>
+        </div>
+
+        <!-- Claude / Anthropic -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">🤖 Claude / Anthropic — Co-piloto IA</div></div>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
+              Chave da API Anthropic usada pelo módulo <strong>Co-piloto IA</strong>. Armazenada no servidor — nunca exposta ao navegador.
+            </div>
+            <div class="form-group" style="margin:0 0 12px">
+              <label>Chave de API Anthropic <code style="font-size:11px">sk-ant-...</code></label>
               <div style="display:flex;gap:8px">
-                <input id="cfg-weather_api_key" type="password" class="form-control" placeholder="Cole sua chave de API aqui" style="flex:1">
+                <input id="cfg-claude_api_key" type="password" class="form-control" placeholder="sk-ant-api03-..." style="flex:1;font-family:monospace;font-size:12px">
                 <button class="btn btn-ghost btn-sm" type="button"
-                  onclick="document.getElementById('cfg-weather_api_key').type=document.getElementById('cfg-weather_api_key').type==='password'?'text':'password'">👁</button>
+                  onclick="(function(){var i=document.getElementById('cfg-claude_api_key');i.type=i.type==='password'?'text':'password'})()">👁</button>
+              </div>
+            </div>
+            <div style="padding:12px;background:rgba(37,99,235,.06);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.7">
+              <strong>Obter chave:</strong> <code>console.anthropic.com</code> → API Keys → Create Key
+              <br>• Modelo: <code>claude-haiku-4-5</code> (menor custo por token)
+              <br>• Licença necessária: módulo <code>ai_copilot</code>
+            </div>
+          </div>
+        </div>
+
+        <!-- SMTP -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">📧 SMTP — Envio de E-mails</div></div>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--text3);margin-bottom:14px">
+              Servidor de e-mail para notificações automáticas (cobranças, alertas, etc.)
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 100px;gap:16px;margin-bottom:12px">
+              <div class="form-group" style="margin:0">
+                <label>Servidor SMTP</label>
+                <input id="cfg-smtp_host" type="text" class="form-control" placeholder="smtp.gmail.com">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label>Porta</label>
+                <input id="cfg-smtp_port" type="number" class="form-control" placeholder="587">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px">
+              <div class="form-group" style="margin:0">
+                <label>Usuário SMTP</label>
+                <input id="cfg-smtp_user" type="text" class="form-control" placeholder="usuario@gmail.com">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label>Senha SMTP</label>
+                <div style="display:flex;gap:8px">
+                  <input id="cfg-smtp_pass" type="password" class="form-control" placeholder="Senha ou App Password" style="flex:1">
+                  <button class="btn btn-ghost btn-sm" type="button"
+                    onclick="document.getElementById('cfg-smtp_pass').type=document.getElementById('cfg-smtp_pass').type==='password'?'text':'password'">👁</button>
+                </div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div class="form-group" style="margin:0">
+                <label>E-mail Remetente</label>
+                <input id="cfg-smtp_from_email" type="email" class="form-control" placeholder="noreply@marinaone.com.br">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label>Nome Remetente</label>
+                <input id="cfg-smtp_from_name" type="text" class="form-control" placeholder="Marina One">
               </div>
             </div>
           </div>
-          <div style="margin-top:14px;display:flex;align-items:center;gap:12px">
-            <button class="btn btn-ghost btn-sm" onclick="saTestWeatherApi()">🧪 Testar conexão (São Paulo)</button>
-            <span id="sa-weather-test-result" style="font-size:12px;color:var(--text3)"></span>
-          </div>
-          <div style="margin-top:14px;padding:12px;background:rgba(196,98,45,.06);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.7">
-            <strong>Como obter a chave:</strong><br>
-            • <strong>OpenWeatherMap:</strong> <span style="font-family:monospace">openweathermap.org/api</span> → plano gratuito permite 1.000 chamadas/dia<br>
-            • <strong>WeatherAPI.com:</strong> <span style="font-family:monospace">weatherapi.com</span> → plano gratuito permite 1.000.000 chamadas/mês<br>
-            • Endpoint de uso nos tenants: <span style="font-family:monospace">GET /api/weather?lat=X&amp;lon=Y</span>
-          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;padding-top:4px">
+          <button class="sa-btn sa-btn-primary" onclick="saSaveSettings()">💾 Salvar Integrações</button>
         </div>
       </div>
 
-      <!-- CO-PILOTO IA — CHAVE ANTHROPIC -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header">
-          <div class="card-title">🤖 Integração — Co-piloto IA (Claude / Anthropic)</div>
-        </div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
-            Chave de API da Anthropic usada pelo módulo <strong>Co-piloto IA</strong>. Permite que usuários façam perguntas em linguagem natural sobre os dados da marina. A chave é armazenada com segurança no servidor — nunca exposta ao navegador.
+      <!-- ── PANE: CO-PILOTO IA ────────────────────────────────────────── -->
+      <div id="cfg-pane-copiloto" style="display:none">
+
+        <!-- Regras SA -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">🏛️ Regras do Co-piloto — Super Admin</div>
           </div>
-          <div class="form-group" style="margin:0 0 12px">
-            <label>Chave de API Anthropic (<span style="font-family:monospace;font-size:11px">sk-ant-...</span>)</label>
-            <div style="display:flex;gap:8px">
-              <input id="cfg-claude_api_key" type="password" class="form-control" placeholder="sk-ant-api03-..." style="flex:1;font-family:monospace;font-size:12px">
-              <button class="btn btn-ghost btn-sm" type="button"
-                onclick="(function(){var i=document.getElementById('cfg-claude_api_key');i.type=i.type==='password'?'text':'password'})()">👁</button>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6">
+              Contexto para o Co-piloto do painel SA — acessa <code>saas.*</code> e todos os schemas de tenant. Apenas regras de acesso e comportamento — não descrever dados de registros.
             </div>
+            <textarea id="cfg-copilot_saas_rules" class="form-control" rows="7"
+              placeholder="Ex: Seu universo inclui saas.* e todos os schemas marina_*. Nunca retorne colunas sensíveis: admin_password_plain, password_hash, claude_api_key, smtp_pass."
+              style="font-family:monospace;font-size:12px;resize:vertical"></textarea>
           </div>
-          <div style="padding:12px;background:rgba(37,99,235,.06);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.7">
-            <strong>Como obter a chave:</strong><br>
-            • Acesse <span style="font-family:monospace">console.anthropic.com</span> → API Keys → Create Key<br>
-            • Modelo usado: <span style="font-family:monospace">claude-haiku-4-5</span> (menor custo por token)<br>
-            • Módulo usado por: tenants com licença que inclui <span style="font-family:monospace">ai_copilot</span>
+        </div>
+
+        <!-- Regras Globais Tenants -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">🌐 Regras Globais — Co-piloto de Todos os Tenants</div>
           </div>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6">
+              Regras de acesso e comportamento que valem para o Co-piloto de <strong>todas as marinas</strong>. Regras específicas por marina em <strong>Operacional → ✏️ Editar Marina</strong>.
+            </div>
+            <textarea id="cfg-copilot_global_rules" class="form-control" rows="7"
+              placeholder="Ex: Seu universo é exclusivamente o schema do tenant desta sessão. Nunca acesse saas.* nem schemas de outros tenants. Use SELECT DISTINCT para descobrir valores de campos antes de interpretá-los."
+              style="font-family:monospace;font-size:12px;resize:vertical"></textarea>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;padding-top:4px">
+          <button class="sa-btn sa-btn-primary" onclick="saSaveSettings()">💾 Salvar Regras</button>
         </div>
       </div>
 
-      <!-- SMTP -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header"><div class="card-title">📧 SMTP — Envio de E-mails</div></div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text3);margin-bottom:14px">
-            Configuração do servidor de e-mail para notificações automáticas (cobranças, alertas, etc.)
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 120px;gap:16px;margin-bottom:12px">
-            <div class="form-group" style="margin:0">
-              <label>Servidor SMTP</label>
-              <input id="cfg-smtp_host" type="text" class="form-control" placeholder="smtp.gmail.com">
-            </div>
-            <div class="form-group" style="margin:0">
-              <label>Porta</label>
-              <input id="cfg-smtp_port" type="number" class="form-control" placeholder="587">
-            </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px">
-            <div class="form-group" style="margin:0">
-              <label>Usuário SMTP</label>
-              <input id="cfg-smtp_user" type="text" class="form-control" placeholder="usuario@gmail.com">
-            </div>
-            <div class="form-group" style="margin:0">
-              <label>Senha SMTP</label>
-              <div style="display:flex;gap:8px">
-                <input id="cfg-smtp_pass" type="password" class="form-control" placeholder="Senha ou App Password" style="flex:1">
-                <button class="btn btn-ghost btn-sm" type="button"
-                  onclick="document.getElementById('cfg-smtp_pass').type=document.getElementById('cfg-smtp_pass').type==='password'?'text':'password'">👁</button>
-              </div>
-            </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-            <div class="form-group" style="margin:0">
-              <label>E-mail Remetente</label>
-              <input id="cfg-smtp_from_email" type="email" class="form-control" placeholder="noreply@marinaone.com.br">
-            </div>
-            <div class="form-group" style="margin:0">
-              <label>Nome Remetente</label>
-              <input id="cfg-smtp_from_name" type="text" class="form-control" placeholder="Marina One">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Botão inferior -->
-      <div style="display:flex;justify-content:flex-end;padding-top:8px">
-        <button class="btn btn-primary" onclick="saSaveSettings()">💾 Salvar Todas as Configurações</button>
-      </div>
     </div>
 
     </div><!-- /sa-content -->
@@ -9408,6 +9478,7 @@ function saShowPanel() {
   window._saCfgLoaded       = false;
   saTab('operacional');
   saLoadTenants();
+  fetch(API + '/sa-brand').then(r => r.ok ? r.json() : null).then(b => { if (b) _applySASidebarLogo(b.logo || ''); }).catch(() => {});
 }
 
 function saLogout() {
@@ -9836,6 +9907,21 @@ function saEditTenant(idx) {
 
       <details style="margin-bottom:8px">
         <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);padding:8px 0;user-select:none">
+          🤖 Co-piloto IA — Regras desta Marina
+        </summary>
+        <div style="margin-top:10px;padding:14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">
+            Contexto específico desta marina para o Co-piloto: políticas operacionais, terminologia local, regras de negócio particulares. Não inserir dados de registros — esses estão no banco.
+          </div>
+          <textarea id="se-copilot-rules" rows="6"
+            placeholder="Exemplo:&#10;- Operações prioritárias: clientes tier vip têm prioridade na fila&#10;- Horário de operações: seg-sáb 07h-18h, dom 08h-12h&#10;- operation_type 'atracacao' nesta marina significa atraque temporário no píer de visitantes"
+            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box"
+          >${esc(t.copilot_tenant_rules || '')}</textarea>
+        </div>
+      </details>
+
+      <details style="margin-bottom:8px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);padding:8px 0;user-select:none">
           📋 Dados para Contrato (CNPJ, Representante, Endereço)
         </summary>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding:14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
@@ -9893,10 +9979,12 @@ async function saSaveEdit(slug, idx) {
   const representative_name = document.getElementById('se-rep-name')?.value.trim()|| null;
   const representative_role = document.getElementById('se-rep-role')?.value.trim()|| null;
   const representative_cpf  = document.getElementById('se-rep-cpf')?.value.trim() || null;
+  const copilot_tenant_rules = document.getElementById('se-copilot-rules')?.value ?? null;
   const res = await saApi('PUT', `/superadmin/tenants/${slug}`, {
     name, active,
     cnpj, address, city_state,
     representative_name, representative_role, representative_cpf,
+    copilot_tenant_rules,
   });
   if (!res || (!res.ok && res.error)) {
     btn.disabled = false; btn.textContent = '💾 Salvar';
@@ -12886,9 +12974,31 @@ const SA_CFG_FIELDS = [
   'general_system_name','general_support_email','general_default_plan',
   'plan_price_starter','plan_price_professional','plan_price_enterprise',
   'weather_provider','weather_api_key',
-  'claude_api_key',
+  'claude_api_key','copilot_global_rules','copilot_saas_rules',
   'smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_email','smtp_from_name'
 ];
+
+function cfgSubTab(tab) {
+  const tabs = ['plataforma','integracoes','copiloto'];
+  tabs.forEach(t => {
+    const pane = document.getElementById('cfg-pane-' + t);
+    const btn  = document.getElementById('cfg-sub-btn-' + t);
+    if (!pane || !btn) return;
+    const isActive = t === tab;
+    pane.style.display = isActive ? '' : 'none';
+    if (isActive) {
+      btn.style.background = 'linear-gradient(135deg,var(--sa-purple),var(--sa-indigo))';
+      btn.style.color = '#fff';
+      btn.style.boxShadow = '0 0 20px rgba(139,58,26,.4)';
+      btn.querySelector('span').style.background = 'rgba(255,255,255,.15)';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text3)';
+      btn.style.boxShadow = 'none';
+      btn.querySelector('span').style.background = 'var(--sa-surface2)';
+    }
+  });
+}
 
 async function saLoadSettings() {
   window._saCfgLoaded = true;
@@ -12908,6 +13018,7 @@ async function saLoadSettings() {
     }
   });
   _saApplyLogoPreview(d.general_logo || '');
+  _applySASidebarLogo(d.general_logo || '');
 }
 
 function _saApplyLogoPreview(logo) {
@@ -12921,6 +13032,16 @@ function _saApplyLogoPreview(logo) {
     prev.innerHTML = 'Sem logomarca';
     prev.style.display = 'flex';
     if (removeBtn) removeBtn.style.display = 'none';
+  }
+}
+
+function _applySASidebarLogo(logo) {
+  const iconEl = document.getElementById('sa-sidebar-logo-icon');
+  if (!iconEl) return;
+  if (logo) {
+    iconEl.innerHTML = `<img src="${logo}" alt="Logo" style="max-height:30px;max-width:30px;object-fit:contain;border-radius:2px">`;
+  } else {
+    iconEl.innerHTML = '⚓';
   }
 }
 
@@ -12945,14 +13066,14 @@ async function saSaveLogo() {
     fr.readAsDataURL(file);
   });
   const r = await saApi('PUT', '/superadmin/settings', { general_logo: base64 });
-  if (r && !r.error) { toast('✅ Logomarca salva!'); _saApplyLogoPreview(base64); }
+  if (r && !r.error) { toast('✅ Logomarca salva!'); _saApplyLogoPreview(base64); _applySASidebarLogo(base64); }
   else toast('Erro ao salvar logomarca', 'error');
 }
 
 async function saRemoveLogo() {
   if (!confirm('Remover a logomarca da plataforma?')) return;
   const r = await saApi('PUT', '/superadmin/settings', { general_logo: '' });
-  if (r && !r.error) { toast('Logomarca removida'); _saApplyLogoPreview(''); }
+  if (r && !r.error) { toast('Logomarca removida'); _saApplyLogoPreview(''); _applySASidebarLogo(''); }
   else toast('Erro ao remover logomarca', 'error');
 }
 

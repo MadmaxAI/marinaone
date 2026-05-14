@@ -24,6 +24,7 @@ ALTER TABLE saas.tenants ADD COLUMN IF NOT EXISTS city_state            TEXT;
 ALTER TABLE saas.tenants ADD COLUMN IF NOT EXISTS representative_name   TEXT;
 ALTER TABLE saas.tenants ADD COLUMN IF NOT EXISTS representative_cpf    TEXT;
 ALTER TABLE saas.tenants ADD COLUMN IF NOT EXISTS representative_role   TEXT;
+ALTER TABLE saas.tenants ADD COLUMN IF NOT EXISTS copilot_tenant_rules  TEXT;
 
 CREATE TABLE IF NOT EXISTS saas.super_admins (
   id            BIGSERIAL PRIMARY KEY,

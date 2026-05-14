@@ -783,22 +783,25 @@ addRoute('DELETE', '/api/superadmin/tenants/:slug', async (req, res, ctx) => {
 addRoute('PUT', '/api/superadmin/tenants/:slug', async (req, res, ctx) => {
   if (!requireSuperAdmin(ctx, res)) return;
   const { name, plan, active, cnpj, address, city_state,
-          representative_name, representative_cpf, representative_role } = ctx.body || {};
+          representative_name, representative_cpf, representative_role,
+          copilot_tenant_rules } = ctx.body || {};
   await saasRun(
     `UPDATE saas.tenants SET
-       name                = COALESCE($1, name),
-       plan                = COALESCE($2, plan),
-       active              = COALESCE($3, active),
-       cnpj                = COALESCE($4, cnpj),
-       address             = COALESCE($5, address),
-       city_state          = COALESCE($6, city_state),
-       representative_name = COALESCE($7, representative_name),
-       representative_cpf  = COALESCE($8, representative_cpf),
-       representative_role = COALESCE($9, representative_role)
-     WHERE slug = $10`,
+       name                 = COALESCE($1, name),
+       plan                 = COALESCE($2, plan),
+       active               = COALESCE($3, active),
+       cnpj                 = COALESCE($4, cnpj),
+       address              = COALESCE($5, address),
+       city_state           = COALESCE($6, city_state),
+       representative_name  = COALESCE($7, representative_name),
+       representative_cpf   = COALESCE($8, representative_cpf),
+       representative_role  = COALESCE($9, representative_role),
+       copilot_tenant_rules = CASE WHEN $10::text IS NOT NULL THEN $10 ELSE copilot_tenant_rules END
+     WHERE slug = $11`,
     [name||null, plan||null, active !== undefined ? active : null,
      cnpj||null, address||null, city_state||null,
      representative_name||null, representative_cpf||null, representative_role||null,
+     copilot_tenant_rules !== undefined ? (copilot_tenant_rules || '') : null,
      ctx.params.slug]
   );
   sendJson(res, { ok: true });
@@ -4850,17 +4853,23 @@ addRoute('POST', '/api/ai/query', async (req, res, ctx) => {
   let logStatus = 'ok', logError = null, result = null;
 
   try {
-    // Lê chave de API das configurações do próprio tenant (tabela settings do schema do tenant)
+    // Lê chave de API das configurações do próprio tenant
     const keyRow = await ctx.db.dbGet(`SELECT value FROM settings WHERE key='claude_api_key'`, []);
     const apiKey = (keyRow?.value || '').trim();
     console.log('[AI/query] apiKey configurada:', apiKey ? 'SIM (' + apiKey.slice(0,8) + '...)' : 'NÃO (vazia)');
+
+    // Regras globais (saas.settings) e regras do tenant (saas.tenants)
+    const globalRulesRow  = await saasGet(`SELECT value FROM saas.settings WHERE key='copilot_global_rules'`, []);
+    const tenantRulesRow  = await saasGet(`SELECT copilot_tenant_rules FROM saas.tenants WHERE slug=$1`, [ctx.tenantSlug]);
+    const globalRules     = (globalRulesRow?.value         || '').trim();
+    const tenantRules     = (tenantRulesRow?.copilot_tenant_rules || '').trim();
 
     // Schema do tenant: marina_<slug>
     const schema = `marina_${ctx.tenantSlug}`;
 
     const { runAiQuery } = require('./src/ai/claude');
     console.log('[AI/query] chamando runAiQuery...');
-    result = await runAiQuery({ question, dbAll: ctx.db.dbAll, apiKey, schema });
+    result = await runAiQuery({ question, dbAll: ctx.db.dbAll, apiKey, schema, globalRules, tenantRules });
     console.log('[AI/query] runAiQuery OK — tokens:', result._tokens);
   } catch (e) {
     console.error('[AI/query] erro:', e.message);
