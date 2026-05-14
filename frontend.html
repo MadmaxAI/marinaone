@@ -592,7 +592,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <button class="nav-item" onclick="nav('analytics')" data-page="analytics" data-module="analytics"><span class="icon"><svg><use href="#ic-chart"/></svg></span>Analytics</button>
       <button class="nav-item" onclick="nav('alerts')" data-page="alerts" data-module="alerts"><span class="icon"><svg><use href="#ic-bell"/></svg></span>Alertas<span class="nav-badge" id="alerts-badge" style="display:none"></span></button>
       <div class="nav-section" data-section="IA">IA</div>
-      <button class="nav-item" onclick="nav('copilot')" data-page="copilot" data-module="copilot"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 1 8 8v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V10a8 8 0 0 1 8-8z"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/><path d="M8 16s1.5 2 4 2 4-2 4-2"/></svg></span>Co-piloto IA</button>
+      <button class="nav-item" onclick="nav('copilot')" data-page="copilot" data-module="copilot"><span class="icon"><svg width="20" height="20" viewBox="-60 -80 120 180" xmlns="http://www.w3.org/2000/svg"><path d="M-24,10 C-48,30-52,60-40,82 C-34,93-38,100-42,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><path d="M-13,13 C-24,38-22,65-12,84 C-6,94-8,102-6,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M-4,15 C-6,42-2,68 1,86 C4,96 2,106 4,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M4,15 C6,42 4,68 2,86 C0,96 4,106 6,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M13,13 C24,38 24,65 14,84 C8,94 10,102 8,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M24,10 C48,30 54,60 42,82 C36,93 40,100 44,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><ellipse cx="0" cy="-10" rx="28" ry="24" fill="#0DB7BE"/><circle cx="-10" cy="-14" r="7.5" fill="white"/><circle cx="10" cy="-14" r="7.5" fill="white"/><circle cx="-9" cy="-13" r="4.8" fill="#03070D"/><circle cx="11" cy="-13" r="4.8" fill="#03070D"/><circle cx="-7" cy="-16" r="2" fill="white"/><circle cx="13" cy="-16" r="2" fill="white"/><path d="M-7,-1 Q0,6 7,-1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"/><line x1="0" y1="-34" x2="0" y2="-26" stroke="#0DB7BE" stroke-width="2" opacity=".65"/><circle cx="0" cy="-38" r="4" fill="#0DB7BE" opacity=".9"/><circle cx="0" cy="-38" r="7" fill="none" stroke="#0DB7BE" stroke-width=".8" opacity=".32"/></svg></span>DOKI</button>
       <div class="nav-section" data-section="Sistema">Sistema</div>
       <button class="nav-item" onclick="nav('settings')" data-page="settings" data-module="settings"><span class="icon"><svg><use href="#ic-gear"/></svg></span>Configurações</button>
       <button class="nav-item" onclick="nav('users')" data-page="users" data-module="_admin"><span class="icon"><svg><use href="#ic-users"/></svg></span>Usuários</button>
@@ -8322,101 +8322,102 @@ let _copilotLoading = false;
 pages.copilot = async () => {
   setContent(`
   <style>
-    /* ── Co-piloto IA — Ethereal Glass UI ───────────────────────── */
+    /* ── DOKI Co-piloto IA ────────────────────────────────────────── */
+    :root{--doki-teal:#0DB7BE;--doki-navy:#0E2643;--doki-bg:#030810;--doki-surface:#07122A;--doki-sand:#D9D4C7;--doki-sky:#8EAFC2;--doki-alert:#FF6B35}
     .cp2-root{display:flex;height:calc(100vh - 112px);min-height:520px;gap:14px;position:relative}
 
     /* LEFT PANEL */
-    .cp2-left{width:232px;flex-shrink:0;display:flex;flex-direction:column;background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.065);border-radius:20px;padding:18px 14px 14px;overflow:hidden;position:relative}
-    .cp2-left::after{content:'';position:absolute;top:-80px;left:-80px;width:220px;height:220px;background:radial-gradient(circle,rgba(99,102,241,.12) 0%,transparent 65%);pointer-events:none;z-index:0}
-    .cp2-brand{display:flex;align-items:center;gap:10px;margin-bottom:5px;position:relative;z-index:1}
-    .cp2-brand-icon{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,rgba(99,102,241,.22),rgba(139,92,246,.14));border:1px solid rgba(99,102,241,.28);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
-    .cp2-brand-name{font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.2px;line-height:1.2}
-    .cp2-brand-sub{font-size:9.5px;color:var(--text3);letter-spacing:.2px}
+    .cp2-left{width:232px;flex-shrink:0;display:flex;flex-direction:column;background:#07122A;border:1px solid rgba(13,183,190,.18);border-radius:20px;padding:18px 14px 14px;overflow:hidden;position:relative}
+    .cp2-left::after{content:'';position:absolute;top:-80px;left:-80px;width:220px;height:220px;background:radial-gradient(circle,rgba(13,183,190,.1) 0%,transparent 65%);pointer-events:none;z-index:0}
+    .cp2-brand{display:flex;align-items:center;gap:10px;margin-bottom:8px;position:relative;z-index:1}
+    .cp2-brand-icon{width:44px;height:44px;border-radius:50%;background:#030810;border:2px solid rgba(13,183,190,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+    .cp2-brand-name{font-size:15px;font-weight:800;color:#D9D4C7;letter-spacing:2px;line-height:1.2;text-transform:uppercase}
+    .cp2-brand-sub{font-size:9.5px;color:#8EAFC2;letter-spacing:.3px}
     .cp2-status{display:inline-flex;align-items:center;gap:5px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.16);border-radius:100px;padding:3px 9px 3px 6px;font-size:10px;font-weight:600;color:#10b981;letter-spacing:.15px;margin-bottom:14px;position:relative;z-index:1}
     .cp2-status-dot{width:5px;height:5px;border-radius:50%;background:#10b981;animation:cp2-pulse 2.4s cubic-bezier(.4,0,.6,1) infinite}
     @keyframes cp2-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.65)}}
-    .cp2-divider{height:1px;background:rgba(255,255,255,.055);margin:0 -2px 12px;position:relative;z-index:1}
-    .cp2-hist-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.1px;color:var(--text3);margin-bottom:7px;opacity:.65;position:relative;z-index:1}
+    .cp2-divider{height:1px;background:rgba(13,183,190,.12);margin:0 -2px 12px;position:relative;z-index:1}
+    .cp2-hist-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.1px;color:#8EAFC2;margin-bottom:7px;opacity:.7;position:relative;z-index:1}
     .cp2-hist-scroll{flex:1;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:2px;position:relative;z-index:1}
     .cp2-hist-scroll::-webkit-scrollbar{display:none}
     .cp2-hist-item{background:transparent;border:1px solid transparent;border-radius:10px;padding:8px 10px;cursor:pointer;text-align:left;width:100%;transition:all 480ms cubic-bezier(.32,.72,0,1);position:relative;overflow:hidden}
-    .cp2-hist-item::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%) scaleY(0);width:2px;height:55%;background:var(--accent);border-radius:0 2px 2px 0;transition:transform 380ms cubic-bezier(.32,.72,0,1)}
-    .cp2-hist-item:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.07)}
+    .cp2-hist-item::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%) scaleY(0);width:2px;height:55%;background:#0DB7BE;border-radius:0 2px 2px 0;transition:transform 380ms cubic-bezier(.32,.72,0,1)}
+    .cp2-hist-item:hover{background:rgba(13,183,190,.06);border-color:rgba(13,183,190,.14)}
     .cp2-hist-item:hover::before{transform:translateY(-50%) scaleY(1)}
-    .cp2-hist-q{font-size:11.5px;font-weight:500;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;transition:color 300ms}
-    .cp2-hist-item:hover .cp2-hist-q{color:var(--text)}
-    .cp2-hist-t{font-size:9.5px;color:var(--text3);font-variant-numeric:tabular-nums}
-    .cp2-hist-empty{font-size:11.5px;color:var(--text3);text-align:center;padding:20px 0;line-height:1.6}
+    .cp2-hist-q{font-size:11.5px;font-weight:500;color:#8EAFC2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;transition:color 300ms}
+    .cp2-hist-item:hover .cp2-hist-q{color:#D9D4C7}
+    .cp2-hist-t{font-size:9.5px;color:#8EAFC2;opacity:.6;font-variant-numeric:tabular-nums}
+    .cp2-hist-empty{font-size:11.5px;color:#8EAFC2;text-align:center;padding:20px 0;line-height:1.6;opacity:.6}
 
     /* RIGHT PANEL */
-    .cp2-right{flex:1;display:flex;flex-direction:column;min-height:0;position:relative;overflow:hidden;border-radius:20px;background:rgba(255,255,255,.016);border:1px solid rgba(255,255,255,.052)}
-    .cp2-orb{position:absolute;border-radius:50%;pointer-events:none;filter:blur(55px);z-index:0}
-    .cp2-orb-1{width:340px;height:340px;top:-100px;right:-60px;background:radial-gradient(circle,rgba(99,102,241,.065) 0%,transparent 68%)}
-    .cp2-orb-2{width:260px;height:260px;bottom:60px;left:-70px;background:radial-gradient(circle,rgba(139,92,246,.055) 0%,transparent 68%)}
+    .cp2-right{flex:1;display:flex;flex-direction:column;min-height:0;position:relative;overflow:hidden;border-radius:20px;background:#030810;border:1px solid rgba(13,183,190,.14)}
+    .cp2-orb{position:absolute;border-radius:50%;pointer-events:none;filter:blur(60px);z-index:0}
+    .cp2-orb-1{width:340px;height:340px;top:-100px;right:-60px;background:radial-gradient(circle,rgba(13,183,190,.055) 0%,transparent 68%)}
+    .cp2-orb-2{width:260px;height:260px;bottom:60px;left:-70px;background:radial-gradient(circle,rgba(14,38,67,.18) 0%,transparent 68%)}
 
     /* MESSAGES */
-    .cp2-messages{flex:1;overflow-y:auto;padding:22px 24px 14px;display:flex;flex-direction:column;gap:18px;position:relative;z-index:1;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.07) transparent}
+    .cp2-messages{flex:1;overflow-y:auto;padding:22px 24px 14px;display:flex;flex-direction:column;gap:18px;position:relative;z-index:1;scrollbar-width:thin;scrollbar-color:rgba(13,183,190,.12) transparent}
     .cp2-messages::-webkit-scrollbar{width:3px}
-    .cp2-messages::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:3px}
+    .cp2-messages::-webkit-scrollbar-thumb{background:rgba(13,183,190,.14);border-radius:3px}
 
     /* EMPTY STATE */
-    .cp2-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:20px;padding:24px;animation:cp2-fadeUp 580ms cubic-bezier(.32,.72,0,1) both}
+    .cp2-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:18px;padding:24px;animation:cp2-fadeUp 580ms cubic-bezier(.32,.72,0,1) both}
     @keyframes cp2-fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
-    .cp2-empty-icon{width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg,rgba(99,102,241,.14),rgba(139,92,246,.09));border:1px solid rgba(99,102,241,.2);display:flex;align-items:center;justify-content:center;font-size:28px}
-    .cp2-empty-h{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.3px;margin:0 0 7px;text-align:center}
-    .cp2-empty-p{font-size:13px;color:var(--text2);text-align:center;max-width:360px;line-height:1.65;margin:0}
-    .cp2-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:460px}
-    .cp2-chip{background:rgba(255,255,255,.038);border:1px solid rgba(255,255,255,.075);border-radius:100px;padding:7px 15px;font-size:12px;color:var(--text2);cursor:pointer;font-family:inherit;transition:all 420ms cubic-bezier(.32,.72,0,1);white-space:nowrap}
-    .cp2-chip:hover{background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.26);color:var(--text);transform:translateY(-1px)}
+    .cp2-empty-doki{filter:drop-shadow(0 0 18px rgba(13,183,190,.35))}
+    .cp2-empty-h{font-size:18px;font-weight:800;color:#D9D4C7;letter-spacing:.5px;margin:0 0 6px;text-align:center}
+    .cp2-empty-p{font-size:13px;color:#8EAFC2;text-align:center;max-width:360px;line-height:1.65;margin:0}
+    .cp2-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:480px}
+    .cp2-chip{background:rgba(13,183,190,.06);border:1px solid rgba(13,183,190,.18);border-radius:100px;padding:7px 15px;font-size:12px;color:#8EAFC2;cursor:pointer;font-family:inherit;transition:all 420ms cubic-bezier(.32,.72,0,1);white-space:nowrap}
+    .cp2-chip:hover{background:rgba(13,183,190,.14);border-color:rgba(13,183,190,.4);color:#D9D4C7;transform:translateY(-1px)}
     .cp2-chip:active{transform:scale(.97)}
 
     /* MESSAGE PAIR */
     .cp2-msg{display:flex;flex-direction:column;gap:11px;animation:cp2-fadeUp 460ms cubic-bezier(.32,.72,0,1) both}
     .cp2-q-row{display:flex;justify-content:flex-end}
-    .cp2-question{background:linear-gradient(135deg,rgba(37,99,235,.18),rgba(99,102,241,.13));border:1px solid rgba(37,99,235,.22);border-radius:16px 16px 3px 16px;padding:11px 17px;font-size:13.5px;color:var(--text);font-weight:500;max-width:76%;line-height:1.55}
+    .cp2-question{background:#0E2643;border:1px solid rgba(13,183,190,.2);border-radius:16px 16px 3px 16px;padding:11px 17px;font-size:13.5px;color:#D9D4C7;font-weight:500;max-width:76%;line-height:1.55}
 
-    /* ANSWER — DOUBLE BEZEL */
-    .cp2-answer-shell{background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.068);border-radius:18px;padding:2px}
-    .cp2-answer-core{background:rgba(255,255,255,.018);border-radius:16px;padding:17px 20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);display:flex;flex-direction:column;gap:13px}
+    /* ANSWER — DOKI BUBBLE */
+    .cp2-answer-shell{background:transparent;border:none;border-left:3px solid #0DB7BE;border-radius:0;padding:0}
+    .cp2-answer-core{background:#07122A;border:1px solid rgba(13,183,190,.12);border-radius:0 16px 16px 0;padding:17px 20px;display:flex;flex-direction:column;gap:13px}
     .cp2-answer-head{display:flex;align-items:center;gap:8px}
-    .cp2-answer-avatar{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,rgba(99,102,241,.28),rgba(139,92,246,.18));border:1px solid rgba(99,102,241,.22);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
-    .cp2-answer-lbl{font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px}
-    .cp2-answer-text{font-size:13.5px;color:var(--text);line-height:1.75;white-space:pre-wrap}
-    .cp2-comp-text{font-size:13px;color:var(--text2);line-height:1.65;padding:11px 15px;background:rgba(255,255,255,.022);border-left:2px solid rgba(99,102,241,.38);border-radius:0 10px 10px 0}
-    .cp2-comp-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid rgba(255,255,255,.065)}
-    .cp2-comp-table-wrap h5{font-size:11.5px;font-weight:700;color:var(--text2);margin:0;padding:9px 15px 8px;border-bottom:1px solid rgba(255,255,255,.055)}
+    .cp2-answer-avatar{width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .cp2-answer-lbl{font-size:10.5px;font-weight:800;color:#0DB7BE;text-transform:uppercase;letter-spacing:2px}
+    .cp2-answer-text{font-size:13.5px;color:#D9D4C7;line-height:1.75;white-space:pre-wrap}
+    .cp2-comp-text{font-size:13px;color:#8EAFC2;line-height:1.65;padding:11px 15px;background:rgba(13,183,190,.04);border-left:2px solid rgba(13,183,190,.35);border-radius:0 10px 10px 0}
+    .cp2-comp-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid rgba(13,183,190,.12)}
+    .cp2-comp-table-wrap h5{font-size:11.5px;font-weight:700;color:#8EAFC2;margin:0;padding:9px 15px 8px;border-bottom:1px solid rgba(13,183,190,.1)}
     .cp2-comp-table-wrap table{width:100%;border-collapse:collapse}
-    .cp2-comp-table-wrap th{font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:7px 15px;background:rgba(255,255,255,.018);text-align:left;border-bottom:1px solid rgba(255,255,255,.055)}
-    .cp2-comp-table-wrap td{font-size:12.5px;color:var(--text);padding:8px 15px;border-bottom:1px solid rgba(255,255,255,.03)}
+    .cp2-comp-table-wrap th{font-size:10.5px;font-weight:700;color:#8EAFC2;text-transform:uppercase;letter-spacing:.5px;padding:7px 15px;background:rgba(13,183,190,.05);text-align:left;border-bottom:1px solid rgba(13,183,190,.1)}
+    .cp2-comp-table-wrap td{font-size:12.5px;color:#D9D4C7;padding:8px 15px;border-bottom:1px solid rgba(13,183,190,.05)}
     .cp2-comp-table-wrap tr:last-child td{border-bottom:none}
-    .cp2-comp-table-wrap tr:hover td{background:rgba(255,255,255,.02)}
-    .cp2-comp-chart-wrap{border-radius:12px;border:1px solid rgba(255,255,255,.065);padding:15px;background:rgba(255,255,255,.012)}
-    .cp2-comp-chart-wrap h5{font-size:11.5px;font-weight:700;color:var(--text2);margin:0 0 13px}
-    .cp2-answer-meta{display:flex;align-items:center;gap:12px;font-size:10.5px;color:var(--text3);padding-top:3px;border-top:1px solid rgba(255,255,255,.045)}
+    .cp2-comp-table-wrap tr:hover td{background:rgba(13,183,190,.03)}
+    .cp2-comp-chart-wrap{border-radius:12px;border:1px solid rgba(13,183,190,.12);padding:15px;background:rgba(7,18,42,.6)}
+    .cp2-comp-chart-wrap h5{font-size:11.5px;font-weight:700;color:#8EAFC2;margin:0 0 13px}
+    .cp2-answer-meta{display:flex;align-items:center;gap:12px;font-size:10.5px;color:#8EAFC2;padding-top:8px;border-top:1px solid rgba(13,183,190,.08);opacity:.7}
 
     /* LOADING */
     .cp2-loading-bar{display:none;align-items:center;gap:12px;padding:0 24px 10px;position:relative;z-index:1}
-    .cp2-dots{display:flex;gap:5px;align-items:center}
-    .cp2-dots span{width:5px;height:5px;border-radius:50%;background:rgba(99,102,241,.55);animation:cp2-blink 1.3s cubic-bezier(.32,.72,0,1) infinite}
+    .cp2-dots{display:flex;gap:6px;align-items:center}
+    .cp2-dots span{width:6px;height:6px;border-radius:50%;background:#0DB7BE;animation:cp2-blink 1.3s cubic-bezier(.32,.72,0,1) infinite}
     .cp2-dots span:nth-child(2){animation-delay:.18s}
     .cp2-dots span:nth-child(3){animation-delay:.36s}
-    @keyframes cp2-blink{0%,80%,100%{opacity:.22;transform:scale(.7)}40%{opacity:1;transform:scale(1)}}
-    .cp2-loading-txt{font-size:12.5px;color:var(--text3);letter-spacing:.08px}
+    @keyframes cp2-blink{0%,80%,100%{opacity:.2;transform:scale(.65)}40%{opacity:1;transform:scale(1)}}
+    .cp2-loading-txt{font-size:12.5px;color:#8EAFC2;letter-spacing:.08px}
 
-    /* INPUT ZONE — DOUBLE BEZEL */
+    /* INPUT ZONE */
     .cp2-input-zone{padding:0 18px 18px;position:relative;z-index:1;flex-shrink:0}
-    .cp2-input-shell{background:rgba(255,255,255,.038);border:1px solid rgba(255,255,255,.085);border-radius:18px;padding:3px;transition:border-color 500ms cubic-bezier(.32,.72,0,1),box-shadow 500ms cubic-bezier(.32,.72,0,1)}
-    .cp2-input-shell:focus-within{border-color:rgba(99,102,241,.38);box-shadow:0 0 0 3px rgba(99,102,241,.07),0 0 24px rgba(99,102,241,.07)}
-    .cp2-input-core{background:rgba(255,255,255,.022);border-radius:15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);display:flex;align-items:flex-end;gap:10px;padding:11px 11px 11px 17px}
-    .cp2-textarea{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:inherit;font-size:13.5px;line-height:1.55;resize:none;min-height:22px;max-height:130px;padding:0}
-    .cp2-textarea::placeholder{color:var(--text3);font-size:13px}
-    .cp2-send{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 420ms cubic-bezier(.32,.72,0,1);box-shadow:0 3px 10px rgba(79,70,229,.22);will-change:transform;color:#fff}
-    .cp2-send:hover:not(:disabled){transform:translateY(-1px) scale(1.05);box-shadow:0 6px 16px rgba(79,70,229,.34)}
+    .cp2-input-shell{background:#07122A;border:1px solid rgba(13,183,190,.2);border-radius:18px;padding:3px;transition:border-color 500ms cubic-bezier(.32,.72,0,1),box-shadow 500ms cubic-bezier(.32,.72,0,1)}
+    .cp2-input-shell:focus-within{border-color:rgba(13,183,190,.55);box-shadow:0 0 0 3px rgba(13,183,190,.07),0 0 24px rgba(13,183,190,.07)}
+    .cp2-input-core{background:rgba(13,183,190,.03);border-radius:15px;display:flex;align-items:flex-end;gap:10px;padding:11px 11px 11px 17px}
+    .cp2-textarea{flex:1;background:none;border:none;outline:none;color:#D9D4C7;font-family:inherit;font-size:13.5px;line-height:1.55;resize:none;min-height:22px;max-height:130px;padding:0}
+    .cp2-textarea::placeholder{color:#8EAFC2;font-size:13px;opacity:.7}
+    .cp2-send{width:36px;height:36px;border-radius:11px;background:#0DB7BE;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 420ms cubic-bezier(.32,.72,0,1);box-shadow:0 3px 12px rgba(13,183,190,.28);will-change:transform;color:#03070D}
+    .cp2-send:hover:not(:disabled){transform:translateY(-1px) scale(1.05);box-shadow:0 6px 20px rgba(13,183,190,.42)}
     .cp2-send:active:not(:disabled){transform:scale(.95)}
-    .cp2-send:disabled{opacity:.32;cursor:not-allowed;transform:none;box-shadow:none}
+    .cp2-send:disabled{opacity:.28;cursor:not-allowed;transform:none;box-shadow:none}
     .cp2-send svg{transition:transform 380ms cubic-bezier(.32,.72,0,1)}
     .cp2-send:hover:not(:disabled) svg{transform:translate(1px,-1px)}
-    .cp2-hint{font-size:10px;color:var(--text3);text-align:center;margin-top:7px;letter-spacing:.15px;opacity:.75}
+    .cp2-hint{font-size:10px;color:#8EAFC2;text-align:center;margin-top:7px;letter-spacing:.15px;opacity:.5}
 
     @media(max-width:700px){.cp2-left{display:none}.cp2-messages{padding:14px}.cp2-input-zone{padding:0 10px 12px}.cp2-question{max-width:92%}}
   </style>
@@ -8424,10 +8425,12 @@ pages.copilot = async () => {
   <div class="cp2-root">
     <div class="cp2-left">
       <div class="cp2-brand">
-        <div class="cp2-brand-icon">✦</div>
-        <div><div class="cp2-brand-name">Co-piloto IA</div><div class="cp2-brand-sub">Marina One · Análise</div></div>
+        <div class="cp2-brand-icon">
+          <svg width="36" height="36" viewBox="-60 -80 120 180" xmlns="http://www.w3.org/2000/svg"><path d="M-24,10 C-48,30-52,60-40,82 C-34,93-38,100-42,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><path d="M-13,13 C-24,38-22,65-12,84 C-6,94-8,102-6,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M-4,15 C-6,42-2,68 1,86 C4,96 2,106 4,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M4,15 C6,42 4,68 2,86 C0,96 4,106 6,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M13,13 C24,38 24,65 14,84 C8,94 10,102 8,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M24,10 C48,30 54,60 42,82 C36,93 40,100 44,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><ellipse cx="0" cy="-10" rx="28" ry="24" fill="#0DB7BE"/><circle cx="-10" cy="-14" r="7.5" fill="white"/><circle cx="10" cy="-14" r="7.5" fill="white"/><circle cx="-9" cy="-13" r="4.8" fill="#03070D"/><circle cx="11" cy="-13" r="4.8" fill="#03070D"/><circle cx="-7" cy="-16" r="2" fill="white"/><circle cx="13" cy="-16" r="2" fill="white"/><path d="M-7,-1 Q0,6 7,-1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"/><line x1="0" y1="-34" x2="0" y2="-26" stroke="#0DB7BE" stroke-width="2" opacity=".65"/><circle cx="0" cy="-38" r="4" fill="#0DB7BE" opacity=".9"/><circle cx="0" cy="-38" r="7" fill="none" stroke="#0DB7BE" stroke-width=".8" opacity=".32"/></svg>
+        </div>
+        <div><div class="cp2-brand-name">DOKI</div><div class="cp2-brand-sub">Marina One · Co-piloto IA</div></div>
       </div>
-      <div class="cp2-status"><span class="cp2-status-dot"></span>Modelo ativo</div>
+      <div class="cp2-status"><span class="cp2-status-dot"></span>Online</div>
       <div class="cp2-divider"></div>
       <div class="cp2-hist-label">Histórico</div>
       <div class="cp2-hist-scroll" id="copilot-hist-list">
@@ -8441,10 +8444,12 @@ pages.copilot = async () => {
 
       <div class="cp2-messages" id="copilot-messages">
         <div class="cp2-empty" id="copilot-empty-state">
-          <div class="cp2-empty-icon">✦</div>
+          <div class="cp2-empty-doki">
+            <svg width="80" height="80" viewBox="-60 -80 120 180" xmlns="http://www.w3.org/2000/svg"><path d="M-24,10 C-48,30-52,60-40,82 C-34,93-38,100-42,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><path d="M-13,13 C-24,38-22,65-12,84 C-6,94-8,102-6,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M-4,15 C-6,42-2,68 1,86 C4,96 2,106 4,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M4,15 C6,42 4,68 2,86 C0,96 4,106 6,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M13,13 C24,38 24,65 14,84 C8,94 10,102 8,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M24,10 C48,30 54,60 42,82 C36,93 40,100 44,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><ellipse cx="0" cy="-10" rx="28" ry="24" fill="#0DB7BE"/><circle cx="-10" cy="-14" r="7.5" fill="white"/><circle cx="10" cy="-14" r="7.5" fill="white"/><circle cx="-9" cy="-13" r="4.8" fill="#03070D"/><circle cx="11" cy="-13" r="4.8" fill="#03070D"/><circle cx="-7" cy="-16" r="2" fill="white"/><circle cx="13" cy="-16" r="2" fill="white"/><path d="M-7,-1 Q0,6 7,-1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"/><line x1="0" y1="-34" x2="0" y2="-26" stroke="#0DB7BE" stroke-width="2" opacity=".65"/><circle cx="0" cy="-38" r="4" fill="#0DB7BE" opacity=".9"/><circle cx="0" cy="-38" r="7" fill="none" stroke="#0DB7BE" stroke-width=".8" opacity=".32"/></svg>
+          </div>
           <div>
-            <div class="cp2-empty-h">O que quer saber sobre a marina?</div>
-            <p class="cp2-empty-p">Faça perguntas em português sobre receita, operações, clientes e muito mais. Somente leitura — nenhum dado é alterado.</p>
+            <div class="cp2-empty-h">Olá! Sou o DOKI.</div>
+            <p class="cp2-empty-p">Como posso ajudar com a marina hoje?</p>
           </div>
           <div class="cp2-chips">
             <button class="cp2-chip" onclick="_copilotAsk('Qual a receita do mês e quantas parcelas estão vencidas?')">💰 Receita do mês</button>
@@ -8457,15 +8462,16 @@ pages.copilot = async () => {
       </div>
 
       <div class="cp2-loading-bar" id="copilot-loading">
+        <svg width="24" height="24" viewBox="-60 -80 120 180" xmlns="http://www.w3.org/2000/svg"><path d="M-24,10 C-48,30-52,60-40,82 C-34,93-38,100-42,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><path d="M-13,13 C-24,38-22,65-12,84 C-6,94-8,102-6,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M-4,15 C-6,42-2,68 1,86 C4,96 2,106 4,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M4,15 C6,42 4,68 2,86 C0,96 4,106 6,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M13,13 C24,38 24,65 14,84 C8,94 10,102 8,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M24,10 C48,30 54,60 42,82 C36,93 40,100 44,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><ellipse cx="0" cy="-10" rx="28" ry="24" fill="#0DB7BE"/><circle cx="-10" cy="-14" r="7.5" fill="white"/><circle cx="10" cy="-14" r="7.5" fill="white"/><circle cx="-9" cy="-13" r="4.8" fill="#03070D"/><circle cx="11" cy="-13" r="4.8" fill="#03070D"/><circle cx="-7" cy="-16" r="2" fill="white"/><circle cx="13" cy="-16" r="2" fill="white"/><path d="M-7,-1 Q0,6 7,-1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"/><line x1="0" y1="-34" x2="0" y2="-26" stroke="#0DB7BE" stroke-width="2" opacity=".65"/><circle cx="0" cy="-38" r="4" fill="#0DB7BE" opacity=".9"/><circle cx="0" cy="-38" r="7" fill="none" stroke="#0DB7BE" stroke-width=".8" opacity=".32"/></svg>
         <div class="cp2-dots"><span></span><span></span><span></span></div>
-        <span class="cp2-loading-txt">Co-piloto consultando os dados…</span>
+        <span class="cp2-loading-txt">DOKI consultando os dados…</span>
       </div>
 
       <div class="cp2-input-zone">
         <div class="cp2-input-shell">
           <div class="cp2-input-core">
             <textarea class="cp2-textarea" id="copilot-input"
-              placeholder="Pergunte qualquer coisa sobre os dados da marina…"
+              placeholder="Pergunte algo ao DOKI…"
               rows="1" onkeydown="_copilotKey(event)" oninput="_copilotResize(this)"></textarea>
             <button class="cp2-send" id="copilot-send-btn" onclick="_copilotSend()" title="Enviar">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
@@ -8623,7 +8629,7 @@ function _copilotRenderAnswer(msgEl, result) {
   // Header: avatar + label
   const head = document.createElement('div');
   head.className = 'cp2-answer-head';
-  head.innerHTML = `<div class="cp2-answer-avatar">✦</div><span class="cp2-answer-lbl">Co-piloto IA</span>`;
+  head.innerHTML = `<div class="cp2-answer-avatar"><svg width="24" height="24" viewBox="-60 -80 120 180" xmlns="http://www.w3.org/2000/svg"><path d="M-24,10 C-48,30-52,60-40,82 C-34,93-38,100-42,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><path d="M-13,13 C-24,38-22,65-12,84 C-6,94-8,102-6,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M-4,15 C-6,42-2,68 1,86 C4,96 2,106 4,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M4,15 C6,42 4,68 2,86 C0,96 4,106 6,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M13,13 C24,38 24,65 14,84 C8,94 10,102 8,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M24,10 C48,30 54,60 42,82 C36,93 40,100 44,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><ellipse cx="0" cy="-10" rx="28" ry="24" fill="#0DB7BE"/><circle cx="-10" cy="-14" r="7.5" fill="white"/><circle cx="10" cy="-14" r="7.5" fill="white"/><circle cx="-9" cy="-13" r="4.8" fill="#03070D"/><circle cx="11" cy="-13" r="4.8" fill="#03070D"/><circle cx="-7" cy="-16" r="2" fill="white"/><circle cx="13" cy="-16" r="2" fill="white"/><path d="M-7,-1 Q0,6 7,-1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"/><line x1="0" y1="-34" x2="0" y2="-26" stroke="#0DB7BE" stroke-width="2" opacity=".65"/><circle cx="0" cy="-38" r="4" fill="#0DB7BE" opacity=".9"/><circle cx="0" cy="-38" r="7" fill="none" stroke="#0DB7BE" stroke-width=".8" opacity=".32"/></svg></div><span class="cp2-answer-lbl">DOKI</span>`;
   core.appendChild(head);
 
   // Main answer text
@@ -8665,7 +8671,7 @@ function _copilotRenderAnswer(msgEl, result) {
         if (!canvas || typeof Chart === 'undefined') return;
         const textColor = 'rgba(255,255,255,0.5)';
         const gridColor = 'rgba(255,255,255,0.05)';
-        const PALETTE = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+        const PALETTE = ['#0DB7BE','#10b981','#f59e0b','#ef4444','#8EAFC2','#ec4899','#0E2643','#84cc16'];
         const datasets = (comp.datasets || []).map((ds, di) => ({
           label:           ds.label || '',
           data:            ds.data  || [],

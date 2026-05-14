@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.150] -- 2026-05-14
+- DOKI: redesign completo do Co-piloto IA com mascote, paleta teal/navy e novo layout
+
 ## [2.3.149] -- 2026-05-14
 - Segurança Co-piloto: regras hardcoded para ocultar schema interno e campos sensíveis; remove duplicatas das configurações
 
@@ -276,6 +279,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
