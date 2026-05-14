@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.153] -- 2026-05-14
+- DOKI: entrada de voz via Web Speech API com transcrição pt-BR e envio automático
+
 ## [2.3.152] -- 2026-05-14
 - DOKI: animação global no ícone do nav lateral, CSS movido para escopo global
 
@@ -285,6 +288,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

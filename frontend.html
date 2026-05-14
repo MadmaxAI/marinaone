@@ -8436,6 +8436,13 @@ pages.copilot = async () => {
     .cp2-send:hover:not(:disabled) svg{transform:translate(1px,-1px)}
     .cp2-hint{font-size:10px;color:#8EAFC2;text-align:center;margin-top:7px;letter-spacing:.15px;opacity:.5}
 
+    /* MIC BUTTON */
+    .cp2-mic{width:36px;height:36px;border-radius:11px;background:rgba(13,183,190,.08);border:1px solid rgba(13,183,190,.25);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 380ms cubic-bezier(.32,.72,0,1);color:#8EAFC2}
+    .cp2-mic:hover{background:rgba(13,183,190,.16);border-color:rgba(13,183,190,.5);color:#0DB7BE}
+    .cp2-mic.listening{background:rgba(255,107,53,.14);border-color:#FF6B35;color:#FF6B35;animation:cp2-mic-pulse 1s ease-in-out infinite}
+    .cp2-mic:disabled{opacity:.28;cursor:not-allowed}
+    @keyframes cp2-mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,107,53,.4)}50%{box-shadow:0 0 0 6px rgba(255,107,53,0)}}
+
     @media(max-width:700px){.cp2-left{display:none}.cp2-messages{padding:14px}.cp2-input-zone{padding:0 10px 12px}.cp2-question{max-width:92%}}
   </style>
 
@@ -8490,12 +8497,15 @@ pages.copilot = async () => {
             <textarea class="cp2-textarea" id="copilot-input"
               placeholder="Pergunte algo ao DOKI…"
               rows="1" onkeydown="_copilotKey(event)" oninput="_copilotResize(this)"></textarea>
+            <button class="cp2-mic" id="copilot-mic-btn" onclick="_copilotMic()" title="Falar com o DOKI">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+            </button>
             <button class="cp2-send" id="copilot-send-btn" onclick="_copilotSend()" title="Enviar">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
             </button>
           </div>
         </div>
-        <div class="cp2-hint">Enter para enviar · Shift+Enter para nova linha</div>
+        <div class="cp2-hint">Enter para enviar · Shift+Enter para nova linha · 🎙 microfone para falar</div>
       </div>
     </div>
   </div>`);
@@ -8510,6 +8520,55 @@ function _copilotResize(el) {
 
 function _copilotKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _copilotSend(); }
+}
+
+let _copilotRecognition = null;
+let _copilotListening   = false;
+
+function _copilotMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    toast('Reconhecimento de voz não suportado. Use Chrome ou Edge.', 'error');
+    return;
+  }
+
+  if (_copilotListening) {
+    _copilotRecognition?.stop();
+    return;
+  }
+
+  const rec = new SR();
+  rec.lang            = 'pt-BR';
+  rec.continuous      = false;
+  rec.interimResults  = true;
+  rec.maxAlternatives = 1;
+  _copilotRecognition = rec;
+  _copilotListening   = true;
+
+  const btn = document.getElementById('copilot-mic-btn');
+  const inp = document.getElementById('copilot-input');
+  if (btn) btn.classList.add('listening');
+
+  rec.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+    if (inp) { inp.value = transcript; _copilotResize(inp); }
+  };
+
+  rec.onend = () => {
+    _copilotListening = false;
+    if (btn) btn.classList.remove('listening');
+    if (inp && inp.value.trim()) _copilotSend();
+  };
+
+  rec.onerror = (e) => {
+    _copilotListening = false;
+    if (btn) btn.classList.remove('listening');
+    if (e.error !== 'aborted' && e.error !== 'no-speech') {
+      toast('Erro no microfone: ' + e.error, 'error');
+    }
+  };
+
+  rec.start();
 }
 
 function _copilotAsk(question) {
