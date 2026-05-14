@@ -61,6 +61,23 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:13px;color:var(--text2);transition:var(--t-base);margin-bottom:1px;border:none;border-left:3px solid transparent;background:none;width:100%;text-align:left}
 .nav-item:hover{background:rgba(255,255,255,.05);color:var(--text);border-left-color:rgba(255,255,255,.12)}
 .nav-item.active{background:rgba(37,99,235,.12);color:var(--text);font-weight:600;border-left-color:var(--accent);border:1px solid rgba(37,99,235,.22);box-shadow:0 0 12px rgba(37,99,235,.1),inset 0 1px 0 rgba(255,255,255,.06);padding:8px 11px}
+/* DOKI — global animations (used in nav + copilot page) */
+.doki-float-wrap{display:inline-flex;animation:doki-float 3.2s ease-in-out infinite}
+.doki-glow-wrap{display:inline-flex;animation:doki-glow 4s ease-in-out infinite}
+@keyframes doki-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes doki-glow{0%,100%{filter:drop-shadow(0 0 10px rgba(13,183,190,.28))}50%{filter:drop-shadow(0 0 24px rgba(13,183,190,.68))}}
+.doki-body{transform-box:fill-box;transform-origin:50% 50%;animation:doki-breathe 4s ease-in-out infinite}
+@keyframes doki-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+.doki-t{transform-box:fill-box;transform-origin:50% 0%}
+.doki-t1{animation:doki-sway-l 2.4s ease-in-out infinite;animation-delay:0s}
+.doki-t2{animation:doki-sway-l 2.4s ease-in-out infinite;animation-delay:.15s}
+.doki-t3{animation:doki-sway-l 2.4s ease-in-out infinite;animation-delay:.30s}
+.doki-t4{animation:doki-sway-r 2.4s ease-in-out infinite;animation-delay:.10s}
+.doki-t5{animation:doki-sway-r 2.4s ease-in-out infinite;animation-delay:.25s}
+.doki-t6{animation:doki-sway-r 2.4s ease-in-out infinite;animation-delay:.40s}
+@keyframes doki-sway-l{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-4deg)}}
+@keyframes doki-sway-r{0%,100%{transform:rotate(0deg)}50%{transform:rotate(4deg)}}
+@keyframes doki-float-sm{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 /* Hamburger morph */
 .menu-icon{display:flex;flex-direction:column;gap:5px;width:18px;cursor:pointer}
 .menu-icon span{display:block;width:18px;height:1.5px;background:currentColor;border-radius:2px;transition:transform 300ms var(--t-spring),opacity 200ms var(--t-base),width 200ms var(--t-base)}
@@ -592,7 +609,7 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <button class="nav-item" onclick="nav('analytics')" data-page="analytics" data-module="analytics"><span class="icon"><svg><use href="#ic-chart"/></svg></span>Analytics</button>
       <button class="nav-item" onclick="nav('alerts')" data-page="alerts" data-module="alerts"><span class="icon"><svg><use href="#ic-bell"/></svg></span>Alertas<span class="nav-badge" id="alerts-badge" style="display:none"></span></button>
       <div class="nav-section" data-section="IA">IA</div>
-      <button class="nav-item" onclick="nav('copilot')" data-page="copilot" data-module="copilot"><span class="icon"><svg width="20" height="20" viewBox="-60 -80 120 180" xmlns="http://www.w3.org/2000/svg"><path d="M-24,10 C-48,30-52,60-40,82 C-34,93-38,100-42,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><path d="M-13,13 C-24,38-22,65-12,84 C-6,94-8,102-6,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M-4,15 C-6,42-2,68 1,86 C4,96 2,106 4,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M4,15 C6,42 4,68 2,86 C0,96 4,106 6,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M13,13 C24,38 24,65 14,84 C8,94 10,102 8,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M24,10 C48,30 54,60 42,82 C36,93 40,100 44,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/><ellipse cx="0" cy="-10" rx="28" ry="24" fill="#0DB7BE"/><circle cx="-10" cy="-14" r="7.5" fill="white"/><circle cx="10" cy="-14" r="7.5" fill="white"/><circle cx="-9" cy="-13" r="4.8" fill="#03070D"/><circle cx="11" cy="-13" r="4.8" fill="#03070D"/><circle cx="-7" cy="-16" r="2" fill="white"/><circle cx="13" cy="-16" r="2" fill="white"/><path d="M-7,-1 Q0,6 7,-1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"/><line x1="0" y1="-34" x2="0" y2="-26" stroke="#0DB7BE" stroke-width="2" opacity=".65"/><circle cx="0" cy="-38" r="4" fill="#0DB7BE" opacity=".9"/><circle cx="0" cy="-38" r="7" fill="none" stroke="#0DB7BE" stroke-width=".8" opacity=".32"/></svg></span>DOKI</button>
+      <button class="nav-item" onclick="nav('copilot')" data-page="copilot" data-module="copilot"><span class="icon"><div class="doki-float-wrap" style="animation-name:doki-float-sm"><svg width="20" height="20" viewBox="-60 -80 120 180" xmlns="http://www.w3.org/2000/svg"><g class="doki-t doki-t1"><path d="M-24,10 C-48,30-52,60-40,82 C-34,93-38,100-42,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/></g><g class="doki-t doki-t2"><path d="M-13,13 C-24,38-22,65-12,84 C-6,94-8,102-6,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/></g><g class="doki-t doki-t3"><path d="M-4,15 C-6,42-2,68 1,86 C4,96 2,106 4,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/></g><g class="doki-t doki-t4"><path d="M4,15 C6,42 4,68 2,86 C0,96 4,106 6,114" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/></g><g class="doki-t doki-t5"><path d="M13,13 C24,38 24,65 14,84 C8,94 10,102 8,110" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round"/></g><g class="doki-t doki-t6"><path d="M24,10 C48,30 54,60 42,82 C36,93 40,100 44,108" stroke="#0DB7BE" stroke-width="7" fill="none" stroke-linecap="round" opacity=".85"/></g><g class="doki-body"><ellipse cx="0" cy="-10" rx="28" ry="24" fill="#0DB7BE"/><circle cx="-10" cy="-14" r="7.5" fill="white"/><circle cx="10" cy="-14" r="7.5" fill="white"/><circle cx="-9" cy="-13" r="4.8" fill="#03070D"/><circle cx="11" cy="-13" r="4.8" fill="#03070D"/><circle cx="-7" cy="-16" r="2" fill="white"/><circle cx="13" cy="-16" r="2" fill="white"/><path d="M-7,-1 Q0,6 7,-1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"/></g><line x1="0" y1="-34" x2="0" y2="-26" stroke="#0DB7BE" stroke-width="2" opacity=".65"/><circle cx="0" cy="-38" r="4" fill="#0DB7BE" opacity=".9"/><circle cx="0" cy="-38" r="7" fill="none" stroke="#0DB7BE" stroke-width=".8" opacity=".32"/></svg></div></span>DOKI</button>
       <div class="nav-section" data-section="Sistema">Sistema</div>
       <button class="nav-item" onclick="nav('settings')" data-page="settings" data-module="settings"><span class="icon"><svg><use href="#ic-gear"/></svg></span>Configurações</button>
       <button class="nav-item" onclick="nav('users')" data-page="users" data-module="_admin"><span class="icon"><svg><use href="#ic-users"/></svg></span>Usuários</button>
@@ -8418,23 +8435,6 @@ pages.copilot = async () => {
     .cp2-send svg{transition:transform 380ms cubic-bezier(.32,.72,0,1)}
     .cp2-send:hover:not(:disabled) svg{transform:translate(1px,-1px)}
     .cp2-hint{font-size:10px;color:#8EAFC2;text-align:center;margin-top:7px;letter-spacing:.15px;opacity:.5}
-
-    /* DOKI — animations */
-    .doki-float-wrap{display:inline-flex;animation:doki-float 3.2s ease-in-out infinite}
-    .doki-glow-wrap{display:inline-flex;animation:doki-glow 4s ease-in-out infinite}
-    @keyframes doki-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-    @keyframes doki-glow{0%,100%{filter:drop-shadow(0 0 10px rgba(13,183,190,.28))}50%{filter:drop-shadow(0 0 24px rgba(13,183,190,.68))}}
-    .doki-body{transform-box:fill-box;transform-origin:50% 50%;animation:doki-breathe 4s ease-in-out infinite}
-    @keyframes doki-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
-    .doki-t{transform-box:fill-box;transform-origin:50% 0%}
-    .doki-t1{animation:doki-sway-l 2.4s ease-in-out infinite;animation-delay:0s}
-    .doki-t2{animation:doki-sway-l 2.4s ease-in-out infinite;animation-delay:.15s}
-    .doki-t3{animation:doki-sway-l 2.4s ease-in-out infinite;animation-delay:.30s}
-    .doki-t4{animation:doki-sway-r 2.4s ease-in-out infinite;animation-delay:.10s}
-    .doki-t5{animation:doki-sway-r 2.4s ease-in-out infinite;animation-delay:.25s}
-    .doki-t6{animation:doki-sway-r 2.4s ease-in-out infinite;animation-delay:.40s}
-    @keyframes doki-sway-l{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-4deg)}}
-    @keyframes doki-sway-r{0%,100%{transform:rotate(0deg)}50%{transform:rotate(4deg)}}
 
     @media(max-width:700px){.cp2-left{display:none}.cp2-messages{padding:14px}.cp2-input-zone{padding:0 10px 12px}.cp2-question{max-width:92%}}
   </style>

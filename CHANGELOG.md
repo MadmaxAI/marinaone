@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.152] -- 2026-05-14
+- DOKI: animação global no ícone do nav lateral, CSS movido para escopo global
+
 ## [2.3.151] -- 2026-05-14
 - DOKI: animação orgânica com flutuação, tentáculos escalonados, respiração e glow pulsante
 
@@ -282,6 +285,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
