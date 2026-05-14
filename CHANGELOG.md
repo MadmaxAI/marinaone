@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.149] -- 2026-05-14
+- Segurança Co-piloto: regras hardcoded para ocultar schema interno e campos sensíveis; remove duplicatas das configurações
+
 ## [2.3.144] -- 2026-05-14
 - SA Configuracoes sub-abas premium + Co-piloto schema auto-descoberta + regras configuráveis + correccoes isSaas + sidebar logo dinamica
 
@@ -273,6 +276,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
