@@ -161,7 +161,7 @@ INSERT INTO saas.modules(slug, name, description, category, has_ext_cost, is_fut
   ('premium_multi_marina', 'Multi-Marina',            'Gerenciamento de múltiplas unidades',             'premium',    FALSE, TRUE,  130),
   ('premium_portal',       'Portal do Armador',       'App/portal web exclusivo para armadores',         'premium',    FALSE, TRUE,  140),
   ('climate_radar',        'Radar Climático',         'Alertas meteorológicos automáticos via WhatsApp',  'premium',    FALSE, TRUE,  150),
-  ('ai_copilot',           'Co-piloto IA',            'Chat NL→SQL: perguntas em português sobre dados', 'ai',         TRUE,  TRUE,  160),
+  ('ai_copilot',           'Co-piloto IA',            'Chat NL→SQL: perguntas em português sobre dados', 'ai',         TRUE,  FALSE, 160),
   ('ai_reports',           'Relatório Narrativo IA',  'Relatório mensal gerado automaticamente por IA',  'ai',         TRUE,  TRUE,  170),
   ('ai_scores',            'Score de Risco IA',       'Inadimplência e churn preditivos por armador',    'ai',         FALSE, TRUE,  180),
   ('ai_prediction',        'Previsão de Ocupação',    'Previsão de ocupação 30/60/90 dias com ML',       'ai',         FALSE, TRUE,  190),
@@ -197,11 +197,11 @@ BEGIN
     VALUES(v_starter, v_mod, 14.286) ON CONFLICT DO NOTHING;
   END LOOP;
 
-  -- PRO: core + premium + climate + ai_scores
+  -- PRO: core + premium + climate + ai_scores + ai_copilot
   FOR v_mod IN SELECT id FROM saas.modules WHERE slug IN
     ('core_dashboard','core_queue','core_clients','core_vessels','core_spots','core_contracts','core_financial',
      'premium_store','premium_conveniencia','premium_maintenance','premium_analytics','premium_alerts',
-     'premium_multi_marina','premium_portal','climate_radar','ai_scores')
+     'premium_multi_marina','premium_portal','climate_radar','ai_scores','ai_copilot')
   LOOP
     INSERT INTO saas.license_type_modules(license_type_id, module_id, percent_share)
     VALUES(v_pro, v_mod, 6.25) ON CONFLICT DO NOTHING;
@@ -244,7 +244,8 @@ INSERT INTO saas.settings(key, value) VALUES
   ('smtp_user',                ''),
   ('smtp_pass',                ''),
   ('smtp_from_email',         ''),
-  ('smtp_from_name',          'Marina One')
+  ('smtp_from_name',          'Marina One'),
+  ('claude_api_key',          '')
 ON CONFLICT (key) DO NOTHING;
 
 -- ── Seeds: parâmetros de precificação ─────────────────────────────────

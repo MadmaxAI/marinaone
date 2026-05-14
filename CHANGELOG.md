@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.137] -- 2026-05-14
+- fix: corrige Co-piloto IA - _esc e _fmtDateTime inexistentes causavam loading eterno; cache de modulos saas; logs de diagnostico
+
 ## [2.3.124] -- 2026-05-13
 - Login SA: logo carregada das configuracoes do super admin; campo de logomarca da plataforma adicionado ao SA
 
@@ -267,6 +270,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

@@ -43,6 +43,7 @@ const MODULES = [
   { key: 'maintenance',  label: 'Manutenção',        group: 'Operações' },
   { key: 'analytics',   label: 'Analytics',         group: 'Análise'   },
   { key: 'alerts',      label: 'Alertas',           group: 'Análise'   },
+  { key: 'copilot',     label: 'Co-piloto IA',      group: 'IA'        },
   { key: 'settings',    label: 'Configurações',     group: 'Sistema'   },
 ];
 const MODULE_KEYS  = MODULES.map(m => m.key);
@@ -93,6 +94,9 @@ const SUBMODULES = {
     { key: 'ocupacao',     label: 'Ocupação',          actions: ['view'] },
     { key: 'operacoes',    label: 'Operações',         actions: ['view'] },
     { key: 'clientes',     label: 'Clientes',          actions: ['view'] },
+  ],
+  copilot: [
+    { key: 'chat',         label: 'Chat IA',                 actions: ['view','create'] },
   ],
   settings: [
     { key: 'marina',       label: 'Marina',                  actions: ['view','edit'] },
@@ -1961,6 +1965,7 @@ addRoute('PUT', '/api/superadmin/license-types/:id/modules', async (req, res, ct
        JOIN saas.modules m ON m.id=ltm.module_id
        WHERE ltm.license_type_id=$1 ORDER BY m.sort_order`, [id]
     );
+    _evictModulesCache(); // invalida cache de todos os tenants
     sendJson(res, updated);
   } catch (e) { sendJson(res, { error: e.message }, 500); }
 });
@@ -2101,6 +2106,7 @@ addRoute('POST', '/api/superadmin/tenants/:slug/license/override', async (req, r
        RETURNING *`,
       [tenant.id, module_id, !!granted, reason || null, expires_at || null, ctx.user.super_admin_id]
     );
+    _evictModulesCache(tenant.id);
     sendJson(res, row, 201);
   } catch (e) { sendJson(res, { error: e.message }, 500); }
 });
@@ -2116,6 +2122,7 @@ addRoute('DELETE', '/api/superadmin/tenants/:slug/license/override/:module_id', 
       `DELETE FROM saas.tenant_module_overrides WHERE tenant_id=$1 AND module_id=$2`,
       [tenant.id, module_id]
     );
+    _evictModulesCache(tenant.id);
     sendJson(res, { ok: true });
   } catch (e) { sendJson(res, { error: e.message }, 500); }
 });
@@ -2132,8 +2139,20 @@ addRoute('GET', '/api/superadmin/tenants/:slug/license/effective', async (req, r
   } catch (e) { sendJson(res, { error: e.message }, 500); }
 });
 
+// ── Cache de módulos por tenant (TTL 60s) ─────────────────────────────
+const _modulesCache = new Map(); // tenantId → { mods, expiresAt }
+const MODULES_CACHE_TTL = 60_000;
+
+function _evictModulesCache(tenantId) {
+  if (tenantId != null) _modulesCache.delete(tenantId);
+  else _modulesCache.clear();
+}
+
 // ── Helper: resolve módulos efetivos de um tenant ─────────────────────
 async function _resolveEffectiveModules(tenantId) {
+  const hit = _modulesCache.get(tenantId);
+  if (hit && Date.now() < hit.expiresAt) return hit.mods;
+
   // Módulos do plano ativo
   const planMods = await saasAll(
     `SELECT m.id, m.slug, m.name, m.category, m.has_ext_cost, 'plan' AS source
@@ -2166,7 +2185,9 @@ async function _resolveEffectiveModules(tenantId) {
     }
   }
 
-  return Array.from(result.values());
+  const mods = Array.from(result.values());
+  _modulesCache.set(tenantId, { mods, expiresAt: Date.now() + MODULES_CACHE_TTL });
+  return mods;
 }
 
 // ── Sincroniza tenant_licenses com o plano do contrato/provisionamento ──
@@ -2197,9 +2218,10 @@ async function _syncTenantLicense(tenantSlug, planSlug, contractId) {
 function requireModule(moduleSlug) {
   return async (req, res, ctx, next) => {
     try {
-      const tenant = await saasGet(`SELECT id FROM saas.tenants WHERE slug=$1`, [ctx.tenantSlug]);
-      if (!tenant) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
-      const mods = await _resolveEffectiveModules(tenant.id);
+      // ctx.tenant vem do tenantMiddleware (já em cache) — evita query extra ao saas
+      const tenantId = ctx.tenant?.id;
+      if (!tenantId) return sendJson(res, { error: 'Tenant não encontrado' }, 404);
+      const mods = await _resolveEffectiveModules(tenantId);
       if (!mods.some(m => m.slug === moduleSlug)) {
         return sendJson(res, { error: 'MODULE_NOT_LICENSED', module: moduleSlug }, 403);
       }
@@ -4800,13 +4822,123 @@ addRoute('GET', '/api/system-logs', async (req, res, ctx) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════
+//  ROTAS — CO-PILOTO IA
+// ═════════════════════════════════════════════════════════════════════
+
+// POST /api/ai/query — envia pergunta ao Co-piloto IA
+addRoute('POST', '/api/ai/query', async (req, res, ctx) => {
+  console.log('[AI/query] início — user:', ctx.user?.id, 'tenant:', ctx.tenantSlug);
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  if (!ctx.db)   return sendJson(res, { error: 'Tenant não identificado' }, 400);
+
+  // 1. Gate de módulo licenciado (SaaS)
+  let modulePassed = false;
+  await requireModule('ai_copilot')(req, res, ctx, () => { modulePassed = true; });
+  console.log('[AI/query] module gate:', modulePassed ? 'OK' : 'BLOQUEADO');
+  if (!modulePassed) return;
+
+  // 2. Permissão RBAC do tenant (copilot · create)
+  const permOk = await requirePerm(ctx, res, 'copilot', 'create');
+  console.log('[AI/query] perm gate:', permOk ? 'OK' : 'BLOQUEADO');
+  if (!permOk) return;
+
+  const question = (ctx.body.question || '').trim();
+  if (!question) return sendJson(res, { error: 'Pergunta não pode ser vazia.' }, 400);
+  if (question.length > 2000) return sendJson(res, { error: 'Pergunta muito longa (máximo 2000 caracteres).' }, 400);
+
+  const t0 = Date.now();
+  let logStatus = 'ok', logError = null, result = null;
+
+  try {
+    // Lê chave de API das configurações do próprio tenant (tabela settings do schema do tenant)
+    const keyRow = await ctx.db.dbGet(`SELECT value FROM settings WHERE key='claude_api_key'`, []);
+    const apiKey = (keyRow?.value || '').trim();
+    console.log('[AI/query] apiKey configurada:', apiKey ? 'SIM (' + apiKey.slice(0,8) + '...)' : 'NÃO (vazia)');
+
+    // Schema do tenant: marina_<slug>
+    const schema = `marina_${ctx.tenantSlug}`;
+
+    const { runAiQuery } = require('./src/ai/claude');
+    console.log('[AI/query] chamando runAiQuery...');
+    result = await runAiQuery({ question, dbAll: ctx.db.dbAll, apiKey, schema });
+    console.log('[AI/query] runAiQuery OK — tokens:', result._tokens);
+  } catch (e) {
+    console.error('[AI/query] erro:', e.message);
+    logStatus = 'error';
+    logError  = e.message;
+    result    = { answer: e.message, components: [] };
+  }
+
+  const duration = Date.now() - t0;
+
+  // Persiste no log do tenant (não bloqueia resposta)
+  ctx.db.dbRun(
+    `INSERT INTO ai_usage_log(user_id, user_name, question, answer, components, tokens_in, tokens_out, duration_ms, status, error_msg)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    [
+      ctx.user.id,
+      ctx.user.name || ctx.user.username || '',
+      question,
+      result.answer || '',
+      JSON.stringify(result.components || []),
+      result._tokens?.in  || 0,
+      result._tokens?.out || 0,
+      duration,
+      logStatus,
+      logError,
+    ]
+  ).catch(() => {}); // falha silenciosa no log
+
+  // Remove metadados internos antes de enviar ao frontend
+  const { _tokens, ...clean } = result;
+  sendJson(res, { ok: true, duration_ms: duration, ...clean });
+});
+
+// GET /api/ai/history — histórico das últimas N perguntas do usuário
+addRoute('GET', '/api/ai/history', async (req, res, ctx) => {
+  if (!ctx.user) return sendJson(res, { error: 'Não autorizado' }, 401);
+  if (!ctx.db)   return sendJson(res, { error: 'Tenant não identificado' }, 400);
+
+  // 1. Gate de módulo licenciado (SaaS)
+  let modulePassed = false;
+  await requireModule('ai_copilot')(req, res, ctx, () => { modulePassed = true; });
+  if (!modulePassed) {
+    console.log('[AI/history] MODULE_NOT_LICENSED para tenant:', ctx.tenantSlug);
+    return;
+  }
+
+  // 2. Permissão RBAC do tenant (copilot · view)
+  if (!(await requirePerm(ctx, res, 'copilot', 'view'))) return;
+
+  try {
+    const limit = Math.min(parseInt(ctx.qs.limit || '20', 10), 50);
+    const rows  = await ctx.db.dbAll(
+      `SELECT id, user_name, question, answer, components, tokens_in, tokens_out, duration_ms, status, error_msg, created_at
+       FROM ai_usage_log
+       WHERE user_id=?
+       ORDER BY created_at DESC
+       LIMIT ?`,
+      [ctx.user.id, limit]
+    );
+    sendJson(res, rows.map(r => ({
+      ...r,
+      components: typeof r.components === 'string' ? JSON.parse(r.components || '[]') : (r.components || []),
+    })));
+  } catch (e) {
+    sendJson(res, { error: e.message }, 500);
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
 //  SERVIDOR HTTP
 // ═════════════════════════════════════════════════════════════════════
 const server = http.createServer(async (req, res) => {
+  const urlpath = (req.url || '/').split('?')[0];
+  if (urlpath.startsWith('/api/') && req.method !== 'OPTIONS') {
+    console.log('[HTTP]', req.method, urlpath);
+  }
   setCors(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-
-  const urlpath = (req.url || '/').split('?')[0];
 
   // ── Serve frontend ─────────────────────────────────────────────────
   if (req.method === 'GET' && (urlpath === '/' || urlpath === '/index.html' || urlpath === '/frontend.html')) {

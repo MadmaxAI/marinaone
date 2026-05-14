@@ -591,6 +591,8 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
       <div class="nav-section" data-section="Análise">Análise</div>
       <button class="nav-item" onclick="nav('analytics')" data-page="analytics" data-module="analytics"><span class="icon"><svg><use href="#ic-chart"/></svg></span>Analytics</button>
       <button class="nav-item" onclick="nav('alerts')" data-page="alerts" data-module="alerts"><span class="icon"><svg><use href="#ic-bell"/></svg></span>Alertas<span class="nav-badge" id="alerts-badge" style="display:none"></span></button>
+      <div class="nav-section" data-section="IA">IA</div>
+      <button class="nav-item" onclick="nav('copilot')" data-page="copilot" data-module="copilot"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 1 8 8v1a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V10a8 8 0 0 1 8-8z"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/><path d="M8 16s1.5 2 4 2 4-2 4-2"/></svg></span>Co-piloto IA</button>
       <div class="nav-section" data-section="Sistema">Sistema</div>
       <button class="nav-item" onclick="nav('settings')" data-page="settings" data-module="settings"><span class="icon"><svg><use href="#ic-gear"/></svg></span>Configurações</button>
       <button class="nav-item" onclick="nav('users')" data-page="users" data-module="_admin"><span class="icon"><svg><use href="#ic-users"/></svg></span>Usuários</button>
@@ -1259,6 +1261,32 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
         </div>
       </div>
 
+      <!-- CO-PILOTO IA — CHAVE ANTHROPIC -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="card-title">🤖 Integração — Co-piloto IA (Claude / Anthropic)</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
+            Chave de API da Anthropic usada pelo módulo <strong>Co-piloto IA</strong>. Permite que usuários façam perguntas em linguagem natural sobre os dados da marina. A chave é armazenada com segurança no servidor — nunca exposta ao navegador.
+          </div>
+          <div class="form-group" style="margin:0 0 12px">
+            <label>Chave de API Anthropic (<span style="font-family:monospace;font-size:11px">sk-ant-...</span>)</label>
+            <div style="display:flex;gap:8px">
+              <input id="cfg-claude_api_key" type="password" class="form-control" placeholder="sk-ant-api03-..." style="flex:1;font-family:monospace;font-size:12px">
+              <button class="btn btn-ghost btn-sm" type="button"
+                onclick="(function(){var i=document.getElementById('cfg-claude_api_key');i.type=i.type==='password'?'text':'password'})()">👁</button>
+            </div>
+          </div>
+          <div style="padding:12px;background:rgba(37,99,235,.06);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.7">
+            <strong>Como obter a chave:</strong><br>
+            • Acesse <span style="font-family:monospace">console.anthropic.com</span> → API Keys → Create Key<br>
+            • Modelo usado: <span style="font-family:monospace">claude-haiku-4-5</span> (menor custo por token)<br>
+            • Módulo usado por: tenants com licença que inclui <span style="font-family:monospace">ai_copilot</span>
+          </div>
+        </div>
+      </div>
+
       <!-- SMTP -->
       <div class="card" style="margin-bottom:16px">
         <div class="card-header"><div class="card-title">📧 SMTP — Envio de E-mails</div></div>
@@ -1629,6 +1657,7 @@ const PAGE_MODULE_SLUG = {
   maintenance:  'premium_maintenance',
   analytics:    'premium_analytics',
   alerts:       'premium_alerts',
+  copilot:      'ai_copilot',
   // settings, users, access: sem gate de módulo (controlados por role)
 };
 
@@ -1791,7 +1820,7 @@ async function refreshBadges() {
 }
 
 // ── NAV ──────────────────────────────────────────────
-const pageTitles = {dashboard:'Dashboard',queue:'Fila de Operações',clients:'Clientes',vessels:'Embarcações',spots:'Vagas',contracts:'Contratos',financial:'Financeiro',store:'Loja / PDV',conveniencia:'Conveniência',totem:'Totem',maintenance:'Manutenção',analytics:'Analytics',alerts:'Alertas',settings:'Configurações',users:'Usuários',access:'Controle de Acesso'};
+const pageTitles = {dashboard:'Dashboard',queue:'Fila de Operações',clients:'Clientes',vessels:'Embarcações',spots:'Vagas',contracts:'Contratos',financial:'Financeiro',store:'Loja / PDV',conveniencia:'Conveniência',totem:'Totem',maintenance:'Manutenção',analytics:'Analytics',alerts:'Alertas',copilot:'Co-piloto IA',settings:'Configurações',users:'Usuários',access:'Controle de Acesso'};
 
 // ── Helpers de permissão ──────────────────────────────
 function can(module, action = 'view') {
@@ -8216,6 +8245,403 @@ async function resetPermissions() {
   } else toast((r && r.error) || 'Erro', 'error');
 }
 
+// ── PAGE: CO-PILOTO IA ────────────────────────────────
+let _copilotHistory = [];
+let _copilotLoading = false;
+
+pages.copilot = async () => {
+  setContent(`
+  <style>
+    /* ── Co-piloto IA — Ethereal Glass UI ───────────────────────── */
+    .cp2-root{display:flex;height:calc(100vh - 112px);min-height:520px;gap:14px;position:relative}
+
+    /* LEFT PANEL */
+    .cp2-left{width:232px;flex-shrink:0;display:flex;flex-direction:column;background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.065);border-radius:20px;padding:18px 14px 14px;overflow:hidden;position:relative}
+    .cp2-left::after{content:'';position:absolute;top:-80px;left:-80px;width:220px;height:220px;background:radial-gradient(circle,rgba(99,102,241,.12) 0%,transparent 65%);pointer-events:none;z-index:0}
+    .cp2-brand{display:flex;align-items:center;gap:10px;margin-bottom:5px;position:relative;z-index:1}
+    .cp2-brand-icon{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,rgba(99,102,241,.22),rgba(139,92,246,.14));border:1px solid rgba(99,102,241,.28);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+    .cp2-brand-name{font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.2px;line-height:1.2}
+    .cp2-brand-sub{font-size:9.5px;color:var(--text3);letter-spacing:.2px}
+    .cp2-status{display:inline-flex;align-items:center;gap:5px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.16);border-radius:100px;padding:3px 9px 3px 6px;font-size:10px;font-weight:600;color:#10b981;letter-spacing:.15px;margin-bottom:14px;position:relative;z-index:1}
+    .cp2-status-dot{width:5px;height:5px;border-radius:50%;background:#10b981;animation:cp2-pulse 2.4s cubic-bezier(.4,0,.6,1) infinite}
+    @keyframes cp2-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.65)}}
+    .cp2-divider{height:1px;background:rgba(255,255,255,.055);margin:0 -2px 12px;position:relative;z-index:1}
+    .cp2-hist-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.1px;color:var(--text3);margin-bottom:7px;opacity:.65;position:relative;z-index:1}
+    .cp2-hist-scroll{flex:1;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:2px;position:relative;z-index:1}
+    .cp2-hist-scroll::-webkit-scrollbar{display:none}
+    .cp2-hist-item{background:transparent;border:1px solid transparent;border-radius:10px;padding:8px 10px;cursor:pointer;text-align:left;width:100%;transition:all 480ms cubic-bezier(.32,.72,0,1);position:relative;overflow:hidden}
+    .cp2-hist-item::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%) scaleY(0);width:2px;height:55%;background:var(--accent);border-radius:0 2px 2px 0;transition:transform 380ms cubic-bezier(.32,.72,0,1)}
+    .cp2-hist-item:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.07)}
+    .cp2-hist-item:hover::before{transform:translateY(-50%) scaleY(1)}
+    .cp2-hist-q{font-size:11.5px;font-weight:500;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;transition:color 300ms}
+    .cp2-hist-item:hover .cp2-hist-q{color:var(--text)}
+    .cp2-hist-t{font-size:9.5px;color:var(--text3);font-variant-numeric:tabular-nums}
+    .cp2-hist-empty{font-size:11.5px;color:var(--text3);text-align:center;padding:20px 0;line-height:1.6}
+
+    /* RIGHT PANEL */
+    .cp2-right{flex:1;display:flex;flex-direction:column;min-height:0;position:relative;overflow:hidden;border-radius:20px;background:rgba(255,255,255,.016);border:1px solid rgba(255,255,255,.052)}
+    .cp2-orb{position:absolute;border-radius:50%;pointer-events:none;filter:blur(55px);z-index:0}
+    .cp2-orb-1{width:340px;height:340px;top:-100px;right:-60px;background:radial-gradient(circle,rgba(99,102,241,.065) 0%,transparent 68%)}
+    .cp2-orb-2{width:260px;height:260px;bottom:60px;left:-70px;background:radial-gradient(circle,rgba(139,92,246,.055) 0%,transparent 68%)}
+
+    /* MESSAGES */
+    .cp2-messages{flex:1;overflow-y:auto;padding:22px 24px 14px;display:flex;flex-direction:column;gap:18px;position:relative;z-index:1;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.07) transparent}
+    .cp2-messages::-webkit-scrollbar{width:3px}
+    .cp2-messages::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:3px}
+
+    /* EMPTY STATE */
+    .cp2-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:20px;padding:24px;animation:cp2-fadeUp 580ms cubic-bezier(.32,.72,0,1) both}
+    @keyframes cp2-fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+    .cp2-empty-icon{width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg,rgba(99,102,241,.14),rgba(139,92,246,.09));border:1px solid rgba(99,102,241,.2);display:flex;align-items:center;justify-content:center;font-size:28px}
+    .cp2-empty-h{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.3px;margin:0 0 7px;text-align:center}
+    .cp2-empty-p{font-size:13px;color:var(--text2);text-align:center;max-width:360px;line-height:1.65;margin:0}
+    .cp2-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:460px}
+    .cp2-chip{background:rgba(255,255,255,.038);border:1px solid rgba(255,255,255,.075);border-radius:100px;padding:7px 15px;font-size:12px;color:var(--text2);cursor:pointer;font-family:inherit;transition:all 420ms cubic-bezier(.32,.72,0,1);white-space:nowrap}
+    .cp2-chip:hover{background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.26);color:var(--text);transform:translateY(-1px)}
+    .cp2-chip:active{transform:scale(.97)}
+
+    /* MESSAGE PAIR */
+    .cp2-msg{display:flex;flex-direction:column;gap:11px;animation:cp2-fadeUp 460ms cubic-bezier(.32,.72,0,1) both}
+    .cp2-q-row{display:flex;justify-content:flex-end}
+    .cp2-question{background:linear-gradient(135deg,rgba(37,99,235,.18),rgba(99,102,241,.13));border:1px solid rgba(37,99,235,.22);border-radius:16px 16px 3px 16px;padding:11px 17px;font-size:13.5px;color:var(--text);font-weight:500;max-width:76%;line-height:1.55}
+
+    /* ANSWER — DOUBLE BEZEL */
+    .cp2-answer-shell{background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.068);border-radius:18px;padding:2px}
+    .cp2-answer-core{background:rgba(255,255,255,.018);border-radius:16px;padding:17px 20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);display:flex;flex-direction:column;gap:13px}
+    .cp2-answer-head{display:flex;align-items:center;gap:8px}
+    .cp2-answer-avatar{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,rgba(99,102,241,.28),rgba(139,92,246,.18));border:1px solid rgba(99,102,241,.22);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+    .cp2-answer-lbl{font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px}
+    .cp2-answer-text{font-size:13.5px;color:var(--text);line-height:1.75;white-space:pre-wrap}
+    .cp2-comp-text{font-size:13px;color:var(--text2);line-height:1.65;padding:11px 15px;background:rgba(255,255,255,.022);border-left:2px solid rgba(99,102,241,.38);border-radius:0 10px 10px 0}
+    .cp2-comp-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid rgba(255,255,255,.065)}
+    .cp2-comp-table-wrap h5{font-size:11.5px;font-weight:700;color:var(--text2);margin:0;padding:9px 15px 8px;border-bottom:1px solid rgba(255,255,255,.055)}
+    .cp2-comp-table-wrap table{width:100%;border-collapse:collapse}
+    .cp2-comp-table-wrap th{font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:7px 15px;background:rgba(255,255,255,.018);text-align:left;border-bottom:1px solid rgba(255,255,255,.055)}
+    .cp2-comp-table-wrap td{font-size:12.5px;color:var(--text);padding:8px 15px;border-bottom:1px solid rgba(255,255,255,.03)}
+    .cp2-comp-table-wrap tr:last-child td{border-bottom:none}
+    .cp2-comp-table-wrap tr:hover td{background:rgba(255,255,255,.02)}
+    .cp2-comp-chart-wrap{border-radius:12px;border:1px solid rgba(255,255,255,.065);padding:15px;background:rgba(255,255,255,.012)}
+    .cp2-comp-chart-wrap h5{font-size:11.5px;font-weight:700;color:var(--text2);margin:0 0 13px}
+    .cp2-answer-meta{display:flex;align-items:center;gap:12px;font-size:10.5px;color:var(--text3);padding-top:3px;border-top:1px solid rgba(255,255,255,.045)}
+
+    /* LOADING */
+    .cp2-loading-bar{display:none;align-items:center;gap:12px;padding:0 24px 10px;position:relative;z-index:1}
+    .cp2-dots{display:flex;gap:5px;align-items:center}
+    .cp2-dots span{width:5px;height:5px;border-radius:50%;background:rgba(99,102,241,.55);animation:cp2-blink 1.3s cubic-bezier(.32,.72,0,1) infinite}
+    .cp2-dots span:nth-child(2){animation-delay:.18s}
+    .cp2-dots span:nth-child(3){animation-delay:.36s}
+    @keyframes cp2-blink{0%,80%,100%{opacity:.22;transform:scale(.7)}40%{opacity:1;transform:scale(1)}}
+    .cp2-loading-txt{font-size:12.5px;color:var(--text3);letter-spacing:.08px}
+
+    /* INPUT ZONE — DOUBLE BEZEL */
+    .cp2-input-zone{padding:0 18px 18px;position:relative;z-index:1;flex-shrink:0}
+    .cp2-input-shell{background:rgba(255,255,255,.038);border:1px solid rgba(255,255,255,.085);border-radius:18px;padding:3px;transition:border-color 500ms cubic-bezier(.32,.72,0,1),box-shadow 500ms cubic-bezier(.32,.72,0,1)}
+    .cp2-input-shell:focus-within{border-color:rgba(99,102,241,.38);box-shadow:0 0 0 3px rgba(99,102,241,.07),0 0 24px rgba(99,102,241,.07)}
+    .cp2-input-core{background:rgba(255,255,255,.022);border-radius:15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);display:flex;align-items:flex-end;gap:10px;padding:11px 11px 11px 17px}
+    .cp2-textarea{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:inherit;font-size:13.5px;line-height:1.55;resize:none;min-height:22px;max-height:130px;padding:0}
+    .cp2-textarea::placeholder{color:var(--text3);font-size:13px}
+    .cp2-send{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 420ms cubic-bezier(.32,.72,0,1);box-shadow:0 3px 10px rgba(79,70,229,.22);will-change:transform;color:#fff}
+    .cp2-send:hover:not(:disabled){transform:translateY(-1px) scale(1.05);box-shadow:0 6px 16px rgba(79,70,229,.34)}
+    .cp2-send:active:not(:disabled){transform:scale(.95)}
+    .cp2-send:disabled{opacity:.32;cursor:not-allowed;transform:none;box-shadow:none}
+    .cp2-send svg{transition:transform 380ms cubic-bezier(.32,.72,0,1)}
+    .cp2-send:hover:not(:disabled) svg{transform:translate(1px,-1px)}
+    .cp2-hint{font-size:10px;color:var(--text3);text-align:center;margin-top:7px;letter-spacing:.15px;opacity:.75}
+
+    @media(max-width:700px){.cp2-left{display:none}.cp2-messages{padding:14px}.cp2-input-zone{padding:0 10px 12px}.cp2-question{max-width:92%}}
+  </style>
+
+  <div class="cp2-root">
+    <div class="cp2-left">
+      <div class="cp2-brand">
+        <div class="cp2-brand-icon">✦</div>
+        <div><div class="cp2-brand-name">Co-piloto IA</div><div class="cp2-brand-sub">Marina One · Análise</div></div>
+      </div>
+      <div class="cp2-status"><span class="cp2-status-dot"></span>Modelo ativo</div>
+      <div class="cp2-divider"></div>
+      <div class="cp2-hist-label">Histórico</div>
+      <div class="cp2-hist-scroll" id="copilot-hist-list">
+        <div class="cp2-hist-empty">Nenhuma consulta ainda</div>
+      </div>
+    </div>
+
+    <div class="cp2-right">
+      <div class="cp2-orb cp2-orb-1"></div>
+      <div class="cp2-orb cp2-orb-2"></div>
+
+      <div class="cp2-messages" id="copilot-messages">
+        <div class="cp2-empty" id="copilot-empty-state">
+          <div class="cp2-empty-icon">✦</div>
+          <div>
+            <div class="cp2-empty-h">O que quer saber sobre a marina?</div>
+            <p class="cp2-empty-p">Faça perguntas em português sobre receita, operações, clientes e muito mais. Somente leitura — nenhum dado é alterado.</p>
+          </div>
+          <div class="cp2-chips">
+            <button class="cp2-chip" onclick="_copilotAsk('Qual a receita do mês e quantas parcelas estão vencidas?')">💰 Receita do mês</button>
+            <button class="cp2-chip" onclick="_copilotAsk('Mostre a ocupação atual das vagas secas e molhadas')">⚓ Ocupação de vagas</button>
+            <button class="cp2-chip" onclick="_copilotAsk('Quais os 10 clientes com maior valor de contrato mensal?')">👥 Top clientes</button>
+            <button class="cp2-chip" onclick="_copilotAsk('Quantas operações de descida e subida foram feitas nos últimos 30 dias?')">🚤 Operações recentes</button>
+            <button class="cp2-chip" onclick="_copilotAsk('Quais itens da loja estão com estoque abaixo do mínimo?')">📦 Estoque crítico</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cp2-loading-bar" id="copilot-loading">
+        <div class="cp2-dots"><span></span><span></span><span></span></div>
+        <span class="cp2-loading-txt">Co-piloto consultando os dados…</span>
+      </div>
+
+      <div class="cp2-input-zone">
+        <div class="cp2-input-shell">
+          <div class="cp2-input-core">
+            <textarea class="cp2-textarea" id="copilot-input"
+              placeholder="Pergunte qualquer coisa sobre os dados da marina…"
+              rows="1" onkeydown="_copilotKey(event)" oninput="_copilotResize(this)"></textarea>
+            <button class="cp2-send" id="copilot-send-btn" onclick="_copilotSend()" title="Enviar">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="cp2-hint">Enter para enviar · Shift+Enter para nova linha</div>
+      </div>
+    </div>
+  </div>`);
+
+  _copilotLoadHistory();
+};
+
+function _copilotResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function _copilotKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _copilotSend(); }
+}
+
+function _copilotAsk(question) {
+  const inp = document.getElementById('copilot-input');
+  if (!inp) return;
+  inp.value = question;
+  _copilotResize(inp);
+  _copilotSend();
+}
+
+async function _copilotLoadHistory() {
+  try {
+    const rows = await api('GET', '/ai/history?limit=20');
+    _copilotHistory = Array.isArray(rows) ? rows : [];
+    _copilotRenderHistory();
+  } catch {}
+}
+
+function _copilotRenderHistory() {
+  const el = document.getElementById('copilot-hist-list');
+  if (!el) return;
+  if (!_copilotHistory.length) {
+    el.innerHTML = '<div class="cp2-hist-empty">Nenhuma consulta ainda</div>';
+    return;
+  }
+  el.innerHTML = _copilotHistory.map((h, i) => `
+    <button class="cp2-hist-item" onclick="_copilotShowHistItem(${i})" title="${esc(h.question)}">
+      <div class="cp2-hist-q">${esc(h.question.length > 52 ? h.question.slice(0,49)+'…' : h.question)}</div>
+      <div class="cp2-hist-t">${fmtDT(h.created_at)}</div>
+    </button>`).join('');
+}
+
+function _copilotShowHistItem(idx) {
+  const h = _copilotHistory[idx];
+  if (!h) return;
+  document.getElementById('copilot-empty-state')?.remove();
+  _copilotAppendMessage(h.question, {
+    answer: h.answer,
+    components: typeof h.components === 'string' ? JSON.parse(h.components || '[]') : (h.components || []),
+    duration_ms: h.duration_ms,
+    _fromHistory: true,
+  });
+}
+
+async function _copilotSend() {
+  if (_copilotLoading) return;
+  const inp = document.getElementById('copilot-input');
+  if (!inp) return;
+  const question = inp.value.trim();
+  if (!question) return;
+
+  inp.value = '';
+  _copilotResize(inp);
+  document.getElementById('copilot-empty-state')?.remove();
+
+  _copilotLoading = true;
+  document.getElementById('copilot-send-btn').disabled = true;
+  document.getElementById('copilot-loading').style.display = 'flex';
+
+  // Adiciona a pergunta na tela imediatamente
+  const msgId = 'cp-msg-' + Date.now();
+  const msgEl = document.createElement('div');
+  msgEl.className = 'cp2-msg';
+  msgEl.id = msgId;
+  msgEl.innerHTML = `<div class="cp2-q-row"><div class="cp2-question">${esc(question)}</div></div>`;
+  document.getElementById('copilot-messages').appendChild(msgEl);
+  msgEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+  // Timeout de 120s — evita loading eterno se o servidor não responder
+  const _aiController = new AbortController();
+  const _aiTimeout = setTimeout(() => _aiController.abort(), 120_000);
+
+  try {
+    const headers = tenantHeaders({'Authorization': 'Bearer ' + token});
+    const r = await fetch(API + '/ai/query', {
+      method: 'POST', headers,
+      body: JSON.stringify({ question }),
+      signal: _aiController.signal,
+    });
+    clearTimeout(_aiTimeout);
+    const result = r.status === 401 ? (logout(), null) : await r.json();
+    document.getElementById('copilot-loading').style.display = 'none';
+    if (!result || result.error) {
+      const msg = result?.error === 'MODULE_NOT_LICENSED'
+        ? 'Módulo Co-piloto IA não está disponível no plano atual. Contate o administrador.'
+        : (result?.error || 'Erro ao consultar o Co-piloto. Verifique a chave da API nas configurações.');
+      _copilotRenderAnswer(msgEl, { answer: msg, components: [] });
+    } else {
+      _copilotRenderAnswer(msgEl, result);
+      // Atualiza histórico local sem refetch
+      _copilotHistory.unshift({
+        question,
+        answer:      result.answer,
+        components:  result.components || [],
+        duration_ms: result.duration_ms,
+        created_at:  new Date().toISOString(),
+      });
+      _copilotRenderHistory();
+    }
+  } catch (e) {
+    clearTimeout(_aiTimeout);
+    document.getElementById('copilot-loading').style.display = 'none';
+    const msg = e.name === 'AbortError'
+      ? 'Tempo limite excedido (120s). Verifique a chave da API e a conectividade do servidor.'
+      : (e.message || 'Erro ao consultar o Co-piloto.');
+    _copilotRenderAnswer(msgEl, { answer: msg, components: [] });
+  } finally {
+    _copilotLoading = false;
+    document.getElementById('copilot-send-btn').disabled = false;
+    const inp2 = document.getElementById('copilot-input');
+    if (inp2) inp2.focus();
+  }
+}
+
+function _copilotAppendMessage(question, result) {
+  const msgEl = document.createElement('div');
+  msgEl.className = 'cp2-msg';
+  msgEl.innerHTML = `<div class="cp2-q-row"><div class="cp2-question">${esc(question)}</div></div>`;
+  document.getElementById('copilot-messages').appendChild(msgEl);
+  _copilotRenderAnswer(msgEl, result);
+  msgEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+function _copilotRenderAnswer(msgEl, result) {
+  const { answer, components, duration_ms, _fromHistory } = result;
+  const comps = components || [];
+
+  // Double-bezel wrapper
+  const shell = document.createElement('div');
+  shell.className = 'cp2-answer-shell';
+  const core = document.createElement('div');
+  core.className = 'cp2-answer-core';
+
+  // Header: avatar + label
+  const head = document.createElement('div');
+  head.className = 'cp2-answer-head';
+  head.innerHTML = `<div class="cp2-answer-avatar">✦</div><span class="cp2-answer-lbl">Co-piloto IA</span>`;
+  core.appendChild(head);
+
+  // Main answer text
+  const answerText = document.createElement('div');
+  answerText.className = 'cp2-answer-text';
+  answerText.textContent = answer || '';
+  core.appendChild(answerText);
+
+  // Dynamic components
+  comps.forEach((comp, ci) => {
+    if (comp.type === 'text') {
+      const d = document.createElement('div');
+      d.className = 'cp2-comp-text';
+      d.textContent = comp.content || '';
+      core.appendChild(d);
+
+    } else if (comp.type === 'table') {
+      const wrap = document.createElement('div');
+      wrap.className = 'cp2-comp-table-wrap';
+      const cols = comp.columns || [];
+      const rows = comp.rows   || [];
+      wrap.innerHTML = `
+        ${comp.title ? `<h5>${esc(comp.title)}</h5>` : ''}
+        <table>
+          <thead><tr>${cols.map(c => `<th>${esc(String(c))}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map(r => `<tr>${r.map(v => `<td>${esc(v === null || v === undefined ? '—' : String(v))}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>`;
+      core.appendChild(wrap);
+
+    } else if (comp.type === 'chart') {
+      const wrap = document.createElement('div');
+      wrap.className = 'cp2-comp-chart-wrap';
+      const canvasId = `cp-chart-${Date.now()}-${ci}`;
+      wrap.innerHTML = `${comp.title ? `<h5>${esc(comp.title)}</h5>` : ''}<canvas id="${canvasId}" height="200"></canvas>`;
+      core.appendChild(wrap);
+
+      requestAnimationFrame(() => {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || typeof Chart === 'undefined') return;
+        const textColor = 'rgba(255,255,255,0.5)';
+        const gridColor = 'rgba(255,255,255,0.05)';
+        const PALETTE = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+        const datasets = (comp.datasets || []).map((ds, di) => ({
+          label:           ds.label || '',
+          data:            ds.data  || [],
+          backgroundColor: (comp.chartType === 'pie' || comp.chartType === 'doughnut')
+            ? (ds.data || []).map((_, i) => PALETTE[i % PALETTE.length] + 'CC')
+            : PALETTE[di % PALETTE.length] + (comp.chartType === 'line' ? '28' : 'BB'),
+          borderColor:     PALETTE[di % PALETTE.length],
+          borderWidth:     comp.chartType === 'line' ? 2 : 1,
+          fill:            comp.chartType === 'line',
+          tension:         0.4,
+          pointRadius:     comp.chartType === 'line' ? 4 : 0,
+          pointHoverRadius: comp.chartType === 'line' ? 6 : 0,
+        }));
+        const chart = new Chart(canvas, {
+          type: comp.chartType || 'bar',
+          data: { labels: comp.labels || [], datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: { labels: { color: textColor, font: { size: 11 } } },
+            },
+            scales: (comp.chartType === 'pie' || comp.chartType === 'doughnut') ? {} : {
+              x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+              y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+            },
+          },
+        });
+        pageCharts['cp-' + canvasId] = chart;
+      });
+    }
+  });
+
+  // Meta: timing
+  if (duration_ms && !_fromHistory) {
+    const meta = document.createElement('div');
+    meta.className = 'cp2-answer-meta';
+    meta.innerHTML = `<span>⏱ ${(duration_ms / 1000).toFixed(1)}s</span><span style="opacity:.55">claude-haiku · somente leitura</span>`;
+    core.appendChild(meta);
+  }
+
+  shell.appendChild(core);
+  msgEl.appendChild(shell);
+  msgEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
 // ── PAGE: SETTINGS ────────────────────────────────────
 let _settingsTab = 'marina';
 pages.settings = async () => { renderSettings(_settingsTab); };
@@ -8295,6 +8721,27 @@ async function renderSettings(tab) {
       </div>
       <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
         <button class="btn btn-primary" onclick="saveSettings(['marina_lat','marina_lng'])">💾 Salvar Localização</button>
+      </div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-title">🤖 Co-piloto IA — Chave de API (Anthropic)</div>
+      <div class="settings-info-box">
+        Chave de acesso à API do Claude (Anthropic). Usada exclusivamente pelo Co-piloto IA desta marina para consultas em linguagem natural.<br>
+        Obtenha em <strong>console.anthropic.com</strong> → API Keys → Create Key.
+      </div>
+      <div class="form-group">
+        <label>Chave de API (<span style="font-family:monospace;font-size:11px">sk-ant-...</span>)</label>
+        <div style="display:flex;gap:8px">
+          <input id="s-claude_api_key" type="password" class="form-control"
+            value="${s.claude_api_key||''}"
+            placeholder="sk-ant-api03-..."
+            style="flex:1;font-family:monospace;font-size:12px">
+          <button class="btn btn-ghost btn-sm" type="button"
+            onclick="(function(){var i=document.getElementById('s-claude_api_key');i.type=i.type==='password'?'text':'password'})()">👁</button>
+        </div>
+      </div>
+      <div class="form-actions" style="border-top:none;padding-top:0;margin-top:8px">
+        <button class="btn btn-primary" onclick="saveSettings(['claude_api_key'])">💾 Salvar Chave</button>
       </div>
     </div>`;
 
@@ -12439,6 +12886,7 @@ const SA_CFG_FIELDS = [
   'general_system_name','general_support_email','general_default_plan',
   'plan_price_starter','plan_price_professional','plan_price_enterprise',
   'weather_provider','weather_api_key',
+  'claude_api_key',
   'smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_email','smtp_from_name'
 ];
 

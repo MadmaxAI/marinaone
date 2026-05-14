@@ -1,6 +1,6 @@
 {
   "name": "marina-one",
-  "version": "2.3.124",
+  "version": "2.3.137",
   "description": "Sistema SaaS de gestão integrada de marina — Multi-Tenant PostgreSQL",
   "main": "server.js",
   "scripts": {
@@ -14,6 +14,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "bcryptjs": "^3.0.3",
     "postgres": "^3.4.4"
   },
