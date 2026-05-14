@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.154] -- 2026-05-14
+- DOKI: saudação sonora alienígena via Web Audio API ao abrir o Co-piloto
+
 ## [2.3.153] -- 2026-05-14
 - DOKI: entrada de voz via Web Speech API com transcrição pt-BR e envio automático
 
@@ -288,6 +291,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

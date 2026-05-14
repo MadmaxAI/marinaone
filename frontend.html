@@ -8511,6 +8511,7 @@ pages.copilot = async () => {
   </div>`);
 
   _copilotLoadHistory();
+  _dokiGreet();
 };
 
 function _copilotResize(el) {
@@ -8569,6 +8570,75 @@ function _copilotMic() {
   };
 
   rec.start();
+}
+
+function _dokiGreet() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Bandpass filter — underwater character
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(500, ctx.currentTime);
+    filter.frequency.linearRampToValueAtTime(1400, ctx.currentTime + 1.9);
+    filter.Q.value = 1.8;
+
+    // Master gain with global fade out
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.20, ctx.currentTime);
+    master.gain.linearRampToValueAtTime(0.20, ctx.currentTime + 1.55);
+    master.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.95);
+
+    // Echo
+    const delay = ctx.createDelay(0.3);
+    delay.delayTime.value = 0.11;
+    const echoGain = ctx.createGain();
+    echoGain.gain.value = 0.22;
+
+    filter.connect(master);
+    master.connect(ctx.destination);
+    master.connect(delay);
+    delay.connect(echoGain);
+    echoGain.connect(ctx.destination);
+
+    // FM tone: freqStart glides to freqEnd, with modulator warble
+    function tone(startT, endT, fStart, fEnd, modHz, modDepth, peak) {
+      const t = ctx.currentTime;
+      const mod = ctx.createOscillator();
+      mod.type = 'sine';
+      mod.frequency.value = modHz;
+      const modG = ctx.createGain();
+      modG.gain.value = modDepth;
+      mod.connect(modG);
+
+      const car = ctx.createOscillator();
+      car.type = 'sine';
+      car.frequency.setValueAtTime(fStart, t + startT);
+      car.frequency.linearRampToValueAtTime(fEnd, t + endT);
+      modG.connect(car.frequency);
+
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0,    t + startT);
+      env.gain.linearRampToValueAtTime(peak, t + startT + 0.05);
+      env.gain.setValueAtTime(peak, t + endT - 0.06);
+      env.gain.linearRampToValueAtTime(0,    t + endT);
+
+      car.connect(env);
+      env.connect(filter);
+      mod.start(t + startT); mod.stop(t + endT + 0.1);
+      car.start(t + startT); car.stop(t + endT + 0.1);
+    }
+
+    // DOKI alien greeting: bweeoop — krree — doo-oop — wheee — ooooo
+    //          start  end   fStart  fEnd  modHz modDepth gain
+    tone(0.00, 0.32,   280,   540,    8,    115,  0.70);
+    tone(0.28, 0.52,   760,   420,   14,     65,  0.55);
+    tone(0.48, 0.86,   440,   490,    6,    135,  0.65);
+    tone(0.81, 1.10,   920,  1120,   17,     75,  0.45);
+    tone(1.04, 1.80,   360,   270,    4,    100,  0.55);
+
+    setTimeout(() => ctx.close(), 2300);
+  } catch(e) { /* som decorativo — falha silenciosa */ }
 }
 
 function _copilotAsk(question) {
