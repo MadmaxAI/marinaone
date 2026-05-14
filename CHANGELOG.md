@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.151] -- 2026-05-14
+- DOKI: animação orgânica com flutuação, tentáculos escalonados, respiração e glow pulsante
+
 ## [2.3.150] -- 2026-05-14
 - DOKI: redesign completo do Co-piloto IA com mascote, paleta teal/navy e novo layout
 
@@ -279,6 +282,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
