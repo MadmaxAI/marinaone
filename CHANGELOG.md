@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.157] -- 2026-05-14
+- Splash screen DOKI no pós-login: auto-dismiss 6.8s, sem botão manual, ESC como fallback
+
 ## [2.3.154] -- 2026-05-14
 - DOKI: saudação sonora alienígena via Web Audio API ao abrir o Co-piloto
 
@@ -291,6 +294,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 
