@@ -1,5 +1,8 @@
 ﻿# Changelog â€” Marina One
 
+## [2.3.159] -- 2026-05-19
+- Segurança: bloqueia autofill silencioso no login e valida campos vazios
+
 ## [2.3.157] -- 2026-05-14
 - Splash screen DOKI no pós-login: auto-dismiss 6.8s, sem botão manual, ESC como fallback
 
@@ -294,6 +297,7 @@ git checkout v1.0.0
 # Reiniciar
 pm2 restart marina-one
 ```
+
 
 
 

@@ -551,12 +551,13 @@ tr.row-link:hover td{background:rgba(59,130,246,.08)!important;color:var(--text)
     </div>
     <div class="login-section-label">Acesso à plataforma</div>
     <div id="login-error" class="login-error"></div>
-    <div class="form-group"><label>E-mail</label><input id="login-email" type="email" placeholder="seu@email.com" autocomplete="username"></div>
+    <div class="form-group"><label>E-mail</label><input id="login-email" type="email" placeholder="seu@email.com" autocomplete="off" readonly></div>
     <div class="form-group">
       <label>Senha</label>
       <div style="position:relative">
-        <input id="login-pass" type="password" placeholder="Sua senha" autocomplete="current-password"
+        <input id="login-pass" type="password" placeholder="Sua senha" autocomplete="new-password"
                style="padding-right:40px;width:100%;box-sizing:border-box"
+               readonly
                onkeydown="if(event.key==='Enter')doLogin()">
         <button type="button" tabindex="-1"
                 onclick="togglePasswordVisibility('login-pass', this)"
@@ -1932,6 +1933,11 @@ async function doLogin() {
   const err   = document.getElementById('login-error');
   const btn   = document.getElementById('login-btn');
   err.style.display = 'none';
+  if (!email.trim() || !pass.trim()) {
+    err.textContent = 'Informe e-mail e senha para continuar.';
+    err.style.display = 'block';
+    return;
+  }
 
   // ── Feedback visual imediato no botão ────────────────
   const setLoading = (on) => {
@@ -13977,6 +13983,12 @@ async function _applyLoginBrand() {
 (async () => {
   // Carrega logo da marina na tela de login (sem auth)
   _applyLoginBrand();
+  // Remove readonly dos campos de login ao focar — bloqueia autofill silencioso do navegador
+  // em dispositivos compartilhados sem impedir digitação ou gerenciadores de senha
+  ['login-email','login-pass'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('focus', () => el.removeAttribute('readonly'), { once: true });
+  });
   // Se a URL tem ?tenant= explícito, forçar modo marina (nunca abrir SA)
   const urlHasTenant = new URLSearchParams(window.location.search).has('tenant');
   if (urlHasTenant) {
